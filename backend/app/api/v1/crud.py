@@ -231,25 +231,25 @@ def file_out(f, cover_file_id: int | None) -> FileOut:
     )
 
 
+def node_out(node: CommissionNode, cover_file_id: int | None = None) -> NodeOut:
+    return NodeOut(
+        id=node.id,
+        name=node.name,
+        position=node.position,
+        started_at=node.started_at,
+        is_detached=node.is_detached,
+        files=[file_out(f, cover_file_id) for f in node.files],
+    )
+
+
 def serialize_detail(commission: Commission) -> CommissionDetail:
     base = serialize_list_item(commission).model_dump()
     meta = commission.meta
     cover_file_id = meta.cover_file_id if meta else None
 
-    nodes: list[NodeOut] = []
     # detached pinned first (anomalies surface first), then regular stages by position
     detached = [n for n in commission.nodes if n.is_detached]
-    for n in detached + ordered_nodes(commission):
-        nodes.append(
-            NodeOut(
-                id=n.id,
-                name=n.name,
-                position=n.position,
-                started_at=n.started_at,
-                is_detached=n.is_detached,
-                files=[file_out(f, cover_file_id) for f in n.files],
-            )
-        )
+    nodes = [node_out(n, cover_file_id) for n in detached + ordered_nodes(commission)]
 
     return CommissionDetail(
         **base,

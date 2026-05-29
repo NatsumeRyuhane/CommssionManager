@@ -63,6 +63,18 @@ class NodeOut(BaseModel):
     files: list[FileOut] = []
 
 
+class NodeCreate(BaseModel):
+    name: str
+
+
+class NodeUpdate(BaseModel):
+    name: str
+
+
+class NodeReorder(BaseModel):
+    node_ids: list[int]
+
+
 class CoverOut(BaseModel):
     file_id: int
     url: str
