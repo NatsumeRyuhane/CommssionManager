@@ -1,0 +1,70 @@
+# Commission Manager — Build TODO
+
+> Persistent roadmap across sessions. Source of truth for what's done and what's next.
+> Design inputs: `docs/requirements.xml`, `docs/schema.dbml`, wireframes (Claude Design handoff).
+
+## Decisions (locked)
+
+- **Backend:** Python 3.12 + FastAPI + SQLAlchemy 2.x + Alembic, Postgres 16.
+- **Frontend:** React 18 + Vite + TypeScript. Styling ported from the wireframe `styles.css` (Notion low-fi, warm paper palette). Plain CSS + CSS vars, no UI framework.
+- **Storage:** abstracted layer; `local` filesystem backend first, `s3`/`gcs` later with no schema change.
+- **Auth:** public read; password/session login for admin edit; scoped API keys for machine/agent access.
+- **Deploy:** Docker Compose, single-owner self-host. Dev-first.
+- **Agents:** REST API + scoped API keys now. **MCP server deferred** (see Phase 3).
+
+## Phase 1 — Core MVP (in progress)
+
+### Backend
+- [x] Project scaffold (`backend/app`, config, db session)
+- [ ] SQLAlchemy models for all tables in `docs/schema.dbml`
+- [ ] Alembic baseline migration
+- [ ] Storage abstraction + local backend
+- [ ] Auth: admin password/session + API-key dependency (scopes: read / write)
+- [ ] REST API v1:
+  - [ ] `commissions` CRUD (+ metadata, labels, characters, artists)
+  - [ ] `commissions/{id}/files`, `/images?visibility=`
+  - [ ] `commissions/{id}/copy-json` (the documented agent payload, no credentials)
+  - [ ] list endpoint with search / filter / sort
+  - [ ] `labels`, `characters`, `artists` read
+  - [ ] file upload -> storage object, image dimension probe
+- [ ] Seed script with sample data for dev
+
+### Frontend
+- [x] Vite + React + TS scaffold
+- [ ] Port `styles.css` + fonts
+- [ ] Primitives: Chip, ImgPh, FaGallery, FilterBar, buttons
+- [ ] Pages: Auth gate, Home/Gallery, Detail, Add/Edit
+- [ ] API client + types
+- [ ] Router + public-read / admin-edit gating
+
+### Deploy
+- [x] `deploy/docker-compose.dev.yml` (Postgres for local dev)
+- [ ] `deploy/docker-compose.yml` (full stack: db + api + web)
+- [ ] Backend + frontend Dockerfiles, nginx for web
+
+## Phase 2 — Breadth (deferred)
+- [ ] Settings (admin): API keys UI, webhooks, storage config
+- [ ] Visibility/privacy: global preset -> per-commission -> per-stage -> per-file precedence
+- [ ] Lifecycle: shared component, drag-and-drop files between stages, detached-node handling
+- [ ] Character pages: shareable profile, main ref, curated image "bookshelves" + picker
+- [ ] Artist management: multi-platform handles, paste-to-match, no-match resolve dialog
+- [ ] Mobile views for every section
+- [ ] Focal-point reticle editor on cover image
+- [ ] Export: DB export + file-export `.zip` (`{artists}-{id}/{node}/`, node-dated dirs)
+- [ ] Webhooks delivery (`commission.created/updated/delivered`)
+
+## Phase 3 — Optional / advanced (deferred)
+- [ ] MCP server wrapping the REST API (tools: create_commission, upload_file, search, set_focal_point)
+- [ ] CLIP image2txt accessibility
+- [ ] PSD layer extraction for export
+- [ ] Physical / digital watermarking
+- [ ] "Safe mode"
+- [ ] Pinyin-aware title sort
+- [ ] Species filtering via XML parse at app layer
+
+## Notes / gotchas
+- `commission_labels` enforces exactly one `rating` label per commission at the app layer.
+- Each commission has exactly one system-managed **detached node** (`is_detached=true`), auto-created; deleting a node reparents its files to detached.
+- `cover_file_id` must point to a `commission_files` row with `is_image=true`.
+- Detail page shows public displayable images in **timeline (stage) order**, ignoring detached.
+- API copy-JSON must include internal id + endpoint URLs, never API credentials.

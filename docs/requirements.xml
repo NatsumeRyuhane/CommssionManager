@@ -1,0 +1,318 @@
+<requirements>
+  <background>
+    Currently commissioned arts are organized by folders
+
+    ```
+    .
+    ├── Chibi
+    │ ├── chibi-background-banzhishouza.jpg
+    │ ├── chibi-banzhishouza.png
+    │ ├── chibi-gengzi-1.png
+    │ ├── chibi-gengzi-2.png
+    │ ├── chibi-with-dileselon.png
+    │ ├── qrcode.png
+    │ ├── qrcode.psd
+    │ └── qrcode.sai2
+    ├── Other
+    │ ├── cut-tail.png
+    │ ├── totem.png
+    │ ├── weapon-greatsword-watermark.jpg
+    │ ├── weapon-greatsword.png
+    │ └── ...
+    ├── Monochrome
+    │ └── ...
+    └── ...
+    ```
+
+    As the number of commission art grows, the following problems have emerged
+    1. An image may belong to multiple categories
+    An avatar may be both an avatar and monochrome
+    Since the filesystem is tree-structured, an image can only belong to one category folder, which
+    is
+    clearly unreasonable
+    2. Titles contain irrelevant information
+    Some metadata is mixed into titles, such as whether it has a background, the artist,
+    co-commission
+    partner, etc.
+    Metadata needs to be preserved, but mixing it into titles reduces title readability
+    3. An image may exist in multiple formats
+    4. The way images are added, managed, and previewed is quite primitive
+    A better method for managing commission art is needed, including
+    - Adding and deleting
+    - Metadata
+    - Multi-dimensional filtering and categorization
+    - Preview
+    - Different resolution export
+    - \[Optional\] Extract `psd` layers for export
+    - \[Optional\] Physical watermark / digital watermark
+    - \[Optional\] CLIP - `image2txt` image accessibility
+    - \[Optional\] Safe mode
+  </background>
+
+  <reference>
+    [Project
+    link](https://ryuhane.notion.site/8cc55c3a72c94832983b36bc514a8f7b?v=a4b1ded8480d458297966e7fc3349f02)
+    Notion-based commission management
+    Consists of two parts: settings and commissions. Settings include characters, outfits, weapons,
+    etc. Commissions support preview, search, filtering, and sorting
+</reference>
+
+  <goals>
+    Implement a commission management application that meets Heiyao's needs
+    The core is commission art management; settings and commission inspiration are currently managed
+    with Obsidian and that is sufficient
+
+    Features to implement
+    - Images, metadata
+    - Preview, export
+    - Search, filter, sort
+    - Authentication for edit access
+</goals>
+
+  <design>
+    <entities>
+      <metadata>
+        Title
+        Description
+        Time - the completion time of the commission, precise to the day
+        Labels - multi-select, unified label system covering categories, tags, and rating:
+        - Category - predefined labels for image type, e.g. Chibi, Avatar, etc.
+        - Tag - freely defined labels
+        - Rating - exactly one required per commission; predefined values: General, Mature, Adult
+        - Label types differ only in frontend display semantics; the backend stores all labels
+        identically
+        Characters - multi-select, see Characters
+        Artists - multi-select, see Artists
+        Cover image - small image
+        Files - a commission contains nodes, each node contains files. Files may be any format:
+        rendered images (png, jpg), source files (psd, sai2), design documents, etc.
+        - Each file has a format, an optional label (e.g. "with background", "差分 A"), and a flag
+        indicating whether it is a displayable image
+        - Displayable image files additionally store resolution (width × height) and a focal point
+        for
+        thumbnail cropping
+        - Only displayable image files are eligible to be used as cover art
+      </metadata>
+
+      <character>
+        Name - the character's name; kept as a first-class field to support DB-level search and
+        filtering
+        Settings - an XML blob for all other character attributes (species, appearance, lore, etc.);
+        parsed by the frontend
+        Note: species filtering (see Search, Filter, Sort) is expected to operate on the parsed XML
+        at
+        the application layer, not the DB layer
+      </character>
+
+      <artist>
+        Name - the artist's name; kept as a first-class field to support DB-level search and
+        filtering
+        Info - an XML blob for all other artist attributes (contact links, social handles, notes,
+        etc.); parsed by the frontend
+      </artist>
+
+      <lifecycle>
+        A commission progresses through a series of stages tracked as ordered nodes. Admins can
+        freely
+        define and reorder nodes.
+
+        Nodes are linear and sequential. Each node has:
+        - Name - the stage name, e.g. "Sketching", "Lineart", "Delivered"
+        - Order - explicit integer position to preserve admin-defined ordering
+        - Started at - timestamp recording when this stage began
+        - Files - any files received at this stage (rendered images, source files, design docs,
+        etc.)
+        Each commission also has exactly one system-managed **detached node**:
+        - Automatically created when the commission is created; cannot be deleted or reordered
+        - When a regular node is deleted, all its associated images are reassigned to the detached
+        node
+        - Images in the detached node are considered uncategorized and should be visually
+        distinguished in the UI
+
+        Commission-level lifecycle fields (stored on commission_metadata):
+        - Confirmed at - timestamp when the commission was accepted/confirmed by the admin
+        - Price amount - the agreed commission price as a decimal
+        - Price currency - ISO 4217 currency code, e.g. "USD", "JPY", "CNY"
+      </lifecycle>
+    </entities>
+
+    <storage>
+      All commission metadata is stored uniformly in a single database.
+      Image files are managed through an abstracted storage layer that decouples the database from
+      any
+      specific storage backend.
+      - The initial supported backend is the local filesystem
+      - The design must allow future backends (e.g. S3, GCS) to be added without schema changes
+      - Each image file is represented as a storage object with a backend type, an optional
+      container/bucket, and a backend-specific key
+      - The concept of a "commission folder" is a convention of the local backend, not a
+      database-level constraint
+</storage>
+
+    <export> Both export modes are privileged operations that require edit access. Two export modes
+      are supported. <database-export>
+        Used when migrating between database or application installations.
+        - No physical files are exported
+        - Exports the full database contents (commissions, metadata, nodes, labels, characters,
+      artists,
+        storage object records, etc.)
+        - Storage object records retain their original backend type, bucket, and key, so files
+      remain
+        resolvable after the DB is imported into a new installation provided the storage backend is
+      accessible at the same location
+        - Intended for full application migration, not for end-user file delivery
+      </database-export>
+
+    <file-export>
+      Exports physical files packaged as a `.zip` archive, prompted for download once the archive is
+      ready.
+        - Directory layout inside the zip: `{commission_artists}-{commission_id}/{node_name}/`
+        - `commission_artists` is derived from the names of all artists linked to the commission,
+      e.g.
+        `artistA-artistB-42`
+        - Each node becomes a subdirectory named after the node; the detached node is included if it
+      contains files
+        - File timestamps:
+        - The commission directory's creation time is set to the date of the most recently started
+      node
+        (`started_at`)
+        - Each node directory's creation time is set to that node's `started_at` date
+        - Only physical files are exported; no metadata files are generated
+      </file-export>
+    </export>
+
+    <ux-and-ui>
+      <pages> 
+        Pages Should mainly include: home page, add/edit page, detail page 
+          
+        <home-page>
+          The home page is similar to a photo album app design, mainly used to display the
+        commission
+          list
+          - Can add a commission -> navigates to the add commission page
+          - Can operate on a commission
+          - Can select multiple commissions for batch operations
+          - Can click a commission -> navigates to the commission detail page
+          - Can filter, search, and sort to change the currently displayed commission list
+        </home-page>
+
+        <detail-page>
+        Mainly used to display commission details
+          - Display commission full-size image
+          - Display commission metadata
+          - Can operate on the commission
+          - Can edit or delete the commission -> edit navigates to the edit page, delete navigates
+        to
+          the home page
+        </detail-page>
+
+        <add-edit-page>
+        Similar to the detail page
+          - Can add or remove commission full-size images
+          - Can edit commission metadata
+          - Can cancel or complete -> navigates to the parent page
+          - Should validate data validity
+        </add-edit-page>
+      </pages>
+
+      <image-layout> 
+        The image layout leans toward referencing [FurAffinity](https://www.furaffinity.net) 
+        
+        <standard-layout>
+          All images have the same width and height. Reference: [Natsume Ryuhane](#natsume-ryuhane)
+        Pros
+          - Clean and uniform layout
+          Cons
+          - Thumbnails of extreme aspect ratio images will be heavily cropped
+        </standard-layout>
+
+        <waterfall-layout>
+          Multi-row or multi-column layout; each row has equal height or each column has equal width,
+          extending infinitely in one direction. Reference: [Pinterest](https://www.pinterest.com)
+          Pros
+          - Adapts to images of various sizes without cropping
+          - High space utilization
+
+          Cons
+          - Displayed images are unordered
+          - Portrait images in a horizontal layout or landscape images in a vertical layout will
+        appear
+          smaller
+          - May lose the focal point during preview
+        </waterfall-layout>
+
+      <custom-layout>
+        Manually adjust the size and position of each image based on importance, dimensions, etc.,
+        achieving a photo wall-like effect
+          Pros
+          - Carefully designed layout with good visual effect
+
+          Cons
+          - Displayed images are unordered
+          - Only suitable for a limited number of images; cannot add, delete, or reorder without
+        re-laying out
+        </custom-layout>
+
+      <FurAffinity>
+        1. The layout flows left-to-right, top-to-bottom -> preserves order
+          2. Equal spacing between images; all images within a column have equal height -> the
+        trade-off
+          is that each column's height fluctuates within a certain range
+        </FurAffinity>
+      </image-layout>
+
+      <search-filter-sort> Whether searching, filtering, or sorting, all operate on a proper subset
+        of all commissions <search>
+          Search filters the full set of commissions
+          Search can be exact or fuzzy
+
+          Search types
+          - Search by title
+          - Search by description
+          - \[Optional\] Search by image content
+
+          Search can target a single type or multiple types
+        </search>
+
+      <filter>
+        Filter operates on the full set of commissions or on search results
+          Filtering is exact
+
+          Filter types
+          - Filter by category - categories are searchable
+          - Filter by tag - tags are searchable
+          - Filter by rating
+          - Filter by time range
+          - Filter by character count range
+          - Filter by character species - species are searchable
+          - Filter by character or artist name - names are searchable
+          - Filter by image format
+
+          Filter types can be stacked, and within a specific type multiple values can be selected,
+        e.g.
+          filter by multiple tags
+        </filter>
+
+      <sort>
+        Sort determines the display order of commissions
+
+          Sort has ascending and descending
+          Sort has two dimensions
+          - By commission completion time
+          - By commission title alphabetical order - needs to account for pinyin
+        </sort>
+      </search-filter-sort>
+
+      <other>
+        <thumbnails>
+          Should allow users to specify the main subject area of an image to generate correct
+          thumbnails, ensuring proper cropping
+        </thumbnails>
+
+        <catrgories-and-tags>
+          Categories and tags should only differ semantically, not in implementation
+        </catrgories-and-tags>
+      </other>
+    </ux-and-ui>
+  </design>
+</requirements>

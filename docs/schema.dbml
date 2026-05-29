@@ -1,0 +1,178 @@
+// Commission Manager Database Schema
+// Based on requirements.md
+
+Project commission_manager {
+  database_type: 'PostgreSQL'
+  Note: 'Commission art management application'
+}
+
+//----------------------------------------------------------------------
+// Enums
+//----------------------------------------------------------------------
+
+// Label types differ only in frontend display semantics; the backend treats all labels identically
+Enum label_type {
+  category
+  tag
+  rating
+}
+
+//----------------------------------------------------------------------
+// Core lookup tables
+//----------------------------------------------------------------------
+
+Table labels {
+  id         integer     [pk, increment]
+  name       varchar     [not null, unique]
+  type       label_type  [not null]
+
+  Note: 'Unified table for both categories (predefined) and tags (user-defined). They share the same implementation per spec.'
+}
+
+Table characters {
+  id           integer  [pk, increment]
+  name         varchar  [not null, Note: 'First-class column; used for DB-level search and filtering']
+  settings_xml text     [Note: 'XML blob for all other character attributes (species, appearance, lore, etc.); parsed by the frontend']
+
+  Note: 'Characters that appear in commissions. Species filtering operates at the application layer via XML parsing, not the DB layer.'
+}
+
+Table artists {
+  id           integer  [pk, increment]
+  name         varchar  [not null, Note: 'First-class column; used for DB-level search and filtering']
+  info_xml text     [Note: 'XML blob for all other artist attributes (contact links, social handles, notes, etc.); parsed by the frontend']
+
+  Note: 'Artists who created the commission work.'
+}
+
+//----------------------------------------------------------------------
+// Storage abstraction
+//----------------------------------------------------------------------
+
+Enum storage_backend {
+  local  [Note: 'Local filesystem; key is a relative file path']
+  s3     [Note: 'Amazon S3 or S3-compatible; bucket + key']
+  gcs    [Note: 'Google Cloud Storage; bucket + key']
+}
+
+Table storage_objects {
+  id         integer         [pk, increment]
+  backend    storage_backend [not null]
+  bucket     varchar         [Note: 'Container name (S3/GCS bucket). Null for local backend.']
+  key        varchar         [not null, Note: 'Backend-specific locator: relative path for local, object key for S3/GCS']
+  size_bytes bigint          [Note: 'File size in bytes']
+  checksum   varchar         [Note: 'SHA-256 hex digest for integrity verification']
+  created_at timestamp       [default: `now()`]
+
+  indexes {
+    (backend, bucket, key) [unique]
+  }
+
+  Note: 'Backend-agnostic pointer to a stored file. Adding a new backend requires no schema change — only a new enum value and application-side handler.'
+}
+
+//----------------------------------------------------------------------
+// Commission
+//----------------------------------------------------------------------
+
+Table commissions {
+  id         integer   [pk, increment]
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+
+  Note: 'Physical commission record. Descriptive fields live in commission_metadata. Storage location is managed via storage_objects.'
+}
+
+Table commission_metadata {
+  id              integer        [pk, increment]
+  commission_id   integer        [not null, ref: - commissions.id, Note: 'One-to-one with commissions']
+  title           varchar        [not null]
+  description     text
+  completed_at    date           [Note: 'Completion date of the commission, day-precise']
+  rating          rating         [not null, default: 'general']
+  cover_file_id   integer        [ref: - commission_files.id, Note: 'Nullable; must point to a commission_file where is_image = true']
+  confirmed_at    timestamp      [Note: 'When the commission was accepted/confirmed by the admin']
+  price_amount    numeric(12, 2) [Note: 'Agreed commission price']
+  price_currency  varchar(3)     [Note: 'ISO 4217 currency code, e.g. USD, JPY, CNY']
+
+  Note: 'All descriptive metadata for a commission grouped in one place. Rating is applied via commission_labels using a label of type "rating"; exactly one such label per commission is enforced at the application layer.'
+}
+
+//----------------------------------------------------------------------
+// Commission files (one-to-many with node)
+//----------------------------------------------------------------------
+
+Table commission_files {
+  id                integer   [pk, increment]
+  node_id           integer   [not null, ref: > commission_nodes.id, Note: 'Files belong to a node, not directly to a commission. Use the detached node for uncategorized files.']
+  storage_object_id integer   [not null, ref: - storage_objects.id]
+  format            varchar   [not null, Note: 'File extension: png, jpg, psd, sai2, etc.']
+  label             varchar   [Note: 'Optional human-readable description, e.g. "with background", "no watermark", "差分 A"']
+  // Image-specific fields — null for non-image files (psd, sai2, design files, etc.)
+  is_image          boolean   [not null, default: false, Note: 'True if this file can be rendered as a displayable image (e.g. png, jpg). False for psd, sai2, zip, etc.']
+  width             integer   [Note: 'Pixel width; null when is_image = false']
+  height            integer   [Note: 'Pixel height; null when is_image = false']
+  focal_x           float     [Note: 'Relative X of the main subject center (0.0–1.0) for thumbnail cropping; null when is_image = false']
+  focal_y           float     [Note: 'Relative Y of the main subject center (0.0–1.0) for thumbnail cropping; null when is_image = false']
+  created_at        timestamp [default: `now()`]
+
+  Note: 'Any file received as part of a commission: rendered images, source files, design docs, etc. Only files with is_image = true are eligible as cover art.'
+}
+
+//----------------------------------------------------------------------
+// Commission lifecycle
+//----------------------------------------------------------------------
+
+Table commission_nodes {
+  id            integer   [pk, increment]
+  commission_id integer   [not null, ref: > commissions.id]
+  name          varchar   [not null, Note: 'Stage name, e.g. "Sketching", "Lineart", "Delivered"']
+  position      integer   [Note: 'Admin-defined ordering; lower values come first. NULL for the detached node.']
+  started_at    timestamp [Note: 'When this stage began. NULL for the detached node.']
+  is_detached   boolean   [not null, default: false, Note: 'True for the one system-managed detached node per commission. Detached nodes cannot be deleted or reordered.']
+
+  indexes {
+    (commission_id, position) [unique]
+    // Uniqueness of the detached node per commission must be enforced at the application layer (partial unique index: commission_id WHERE is_detached = true)
+  }
+
+  Note: 'Ordered lifecycle stages for a commission. Each commission has exactly one detached node (is_detached=true), auto-created with the commission and used as a holding area for images whose node was deleted.'
+}
+
+
+//----------------------------------------------------------------------
+// Junction tables
+//----------------------------------------------------------------------
+
+Table commission_labels {
+  commission_id integer [not null, ref: > commissions.id]
+  label_id      integer [not null, ref: > labels.id]
+
+  indexes {
+    (commission_id, label_id) [pk]
+  }
+
+  Note: 'Many-to-many: a commission can have multiple categories and tags.'
+}
+
+Table commission_characters {
+  commission_id integer [not null, ref: > commissions.id]
+  character_id  integer [not null, ref: > characters.id]
+
+  indexes {
+    (commission_id, character_id) [pk]
+  }
+
+  Note: 'Many-to-many: a commission can feature multiple characters.'
+}
+
+Table commission_artists {
+  commission_id integer [not null, ref: > commissions.id]
+  artist_id     integer [not null, ref: > artists.id]
+
+  indexes {
+    (commission_id, artist_id) [pk]
+  }
+
+  Note: 'Many-to-many: a commission can be created by multiple artists (co-commission).'
+}
