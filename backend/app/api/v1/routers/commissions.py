@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
@@ -52,6 +52,7 @@ def _get_one(db: Session, commission_id: int) -> Commission:
 
 @router.get("", response_model=list[CommissionListItem])
 def list_commissions(
+    response: Response,
     db: Session = Depends(get_db),
     q: str | None = None,
     search_in: str = "title,description",
@@ -67,6 +68,8 @@ def list_commissions(
     char_max: int | None = None,
     sort: str = "date",
     order: str = "desc",
+    limit: int = Query(default=60, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
 ):
     items = _load_all(db)
     fields = {s.strip() for s in search_in.split(",") if s.strip()}
@@ -116,7 +119,9 @@ def list_commissions(
         return (meta.completed_at or date.min) if meta else date.min
 
     filtered.sort(key=sort_key, reverse=(order == "desc"))
-    return [crud.serialize_list_item(c) for c in filtered]
+    response.headers["X-Total-Count"] = str(len(filtered))
+    page = filtered[offset : offset + limit]
+    return [crud.serialize_list_item(c) for c in page]
 
 
 @router.post("", response_model=CommissionDetail, status_code=status.HTTP_201_CREATED)
