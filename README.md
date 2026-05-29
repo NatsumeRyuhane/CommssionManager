@@ -1,4 +1,4 @@
-# Commission Manager
+# Ryuhane's Commission Manager
 
 Single-owner commission-art management app — metadata, multi-dimensional filtering,
 lifecycle stages, FurAffinity-style gallery, and a REST API for agent automation.
