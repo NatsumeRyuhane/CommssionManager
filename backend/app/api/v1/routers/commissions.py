@@ -142,6 +142,13 @@ def update_commission(
     _: Principal = Depends(require_edit),
 ):
     commission = _get_one(db, commission_id)
+    if body.cover_file_id is not None:
+        image_file_ids = {f.id for n in commission.nodes for f in n.files if f.is_image}
+        if body.cover_file_id not in image_file_ids:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="cover_file_id must reference an image file belonging to this commission",
+            )
     return crud.serialize_detail(crud.update_commission(db, commission, body))
 
 
