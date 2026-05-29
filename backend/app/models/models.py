@@ -1,0 +1,222 @@
+from __future__ import annotations
+
+import enum
+from datetime import date, datetime
+
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    Date,
+    DateTime,
+    Enum,
+    Float,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.db import Base
+
+
+# ---------------------------------------------------------------- enums
+class LabelType(str, enum.Enum):
+    category = "category"
+    tag = "tag"
+    rating = "rating"
+
+
+class Rating(str, enum.Enum):
+    general = "general"
+    mature = "mature"
+    adult = "adult"
+
+
+class StorageBackend(str, enum.Enum):
+    local = "local"
+    s3 = "s3"
+    gcs = "gcs"
+
+
+# ---------------------------------------------------------------- lookups
+class Label(Base):
+    __tablename__ = "labels"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    type: Mapped[LabelType] = mapped_column(Enum(LabelType, name="label_type"), nullable=False)
+
+
+class Character(Base):
+    __tablename__ = "characters"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    settings_xml: Mapped[str | None] = mapped_column(Text)
+
+
+class Artist(Base):
+    __tablename__ = "artists"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    info_xml: Mapped[str | None] = mapped_column(Text)
+
+
+# ---------------------------------------------------------------- storage
+class StorageObject(Base):
+    __tablename__ = "storage_objects"
+    __table_args__ = (UniqueConstraint("backend", "bucket", "key", name="uq_storage_locator"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    backend: Mapped[StorageBackend] = mapped_column(
+        Enum(StorageBackend, name="storage_backend"), nullable=False
+    )
+    bucket: Mapped[str | None] = mapped_column(String)
+    key: Mapped[str] = mapped_column(String, nullable=False)
+    size_bytes: Mapped[int | None] = mapped_column(BigInteger)
+    checksum: Mapped[str | None] = mapped_column(String)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+# ---------------------------------------------------------------- commission
+class Commission(Base):
+    __tablename__ = "commissions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    meta: Mapped[CommissionMetadata] = relationship(
+        back_populates="commission", uselist=False, cascade="all, delete-orphan"
+    )
+    nodes: Mapped[list[CommissionNode]] = relationship(
+        back_populates="commission", cascade="all, delete-orphan"
+    )
+    labels: Mapped[list[Label]] = relationship(secondary="commission_labels")
+    characters: Mapped[list[Character]] = relationship(secondary="commission_characters")
+    artists: Mapped[list[Artist]] = relationship(secondary="commission_artists")
+
+
+class CommissionMetadata(Base):
+    __tablename__ = "commission_metadata"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    commission_id: Mapped[int] = mapped_column(
+        ForeignKey("commissions.id", ondelete="CASCADE"), nullable=False, unique=True
+    )
+    title: Mapped[str] = mapped_column(String, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    completed_at: Mapped[date | None] = mapped_column(Date)
+    rating: Mapped[Rating] = mapped_column(
+        Enum(Rating, name="rating"), nullable=False, default=Rating.general
+    )
+    cover_file_id: Mapped[int | None] = mapped_column(
+        ForeignKey("commission_files.id", use_alter=True, name="fk_meta_cover_file")
+    )
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    price_amount: Mapped[float | None] = mapped_column(Numeric(12, 2))
+    price_currency: Mapped[str | None] = mapped_column(String(3))
+
+    commission: Mapped[Commission] = relationship(back_populates="meta")
+    cover_file: Mapped[CommissionFile | None] = relationship(foreign_keys=[cover_file_id])
+
+
+class CommissionNode(Base):
+    __tablename__ = "commission_nodes"
+    __table_args__ = (
+        UniqueConstraint("commission_id", "position", name="uq_node_position"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    commission_id: Mapped[int] = mapped_column(
+        ForeignKey("commissions.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    position: Mapped[int | None] = mapped_column(Integer)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    is_detached: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    commission: Mapped[Commission] = relationship(back_populates="nodes")
+    files: Mapped[list[CommissionFile]] = relationship(
+        back_populates="node",
+        cascade="all, delete-orphan",
+        foreign_keys="CommissionFile.node_id",
+    )
+
+
+class CommissionFile(Base):
+    __tablename__ = "commission_files"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    node_id: Mapped[int] = mapped_column(
+        ForeignKey("commission_nodes.id", ondelete="CASCADE"), nullable=False
+    )
+    storage_object_id: Mapped[int] = mapped_column(
+        ForeignKey("storage_objects.id"), nullable=False
+    )
+    format: Mapped[str] = mapped_column(String, nullable=False)
+    label: Mapped[str | None] = mapped_column(String)
+    is_image: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    width: Mapped[int | None] = mapped_column(Integer)
+    height: Mapped[int | None] = mapped_column(Integer)
+    focal_x: Mapped[float | None] = mapped_column(Float)
+    focal_y: Mapped[float | None] = mapped_column(Float)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    node: Mapped[CommissionNode] = relationship(back_populates="files", foreign_keys=[node_id])
+    storage_object: Mapped[StorageObject] = relationship()
+
+
+# ---------------------------------------------------------------- junctions
+class CommissionLabel(Base):
+    __tablename__ = "commission_labels"
+
+    commission_id: Mapped[int] = mapped_column(
+        ForeignKey("commissions.id", ondelete="CASCADE"), primary_key=True
+    )
+    label_id: Mapped[int] = mapped_column(
+        ForeignKey("labels.id", ondelete="CASCADE"), primary_key=True
+    )
+
+
+class CommissionCharacter(Base):
+    __tablename__ = "commission_characters"
+
+    commission_id: Mapped[int] = mapped_column(
+        ForeignKey("commissions.id", ondelete="CASCADE"), primary_key=True
+    )
+    character_id: Mapped[int] = mapped_column(
+        ForeignKey("characters.id", ondelete="CASCADE"), primary_key=True
+    )
+
+
+class CommissionArtist(Base):
+    __tablename__ = "commission_artists"
+
+    commission_id: Mapped[int] = mapped_column(
+        ForeignKey("commissions.id", ondelete="CASCADE"), primary_key=True
+    )
+    artist_id: Mapped[int] = mapped_column(
+        ForeignKey("artists.id", ondelete="CASCADE"), primary_key=True
+    )
+
+
+# ---------------------------------------------------------------- auth
+class ApiKey(Base):
+    __tablename__ = "api_keys"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    prefix: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    key_hash: Mapped[str] = mapped_column(String, nullable=False)
+    scopes: Mapped[str] = mapped_column(String, nullable=False, default="read")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

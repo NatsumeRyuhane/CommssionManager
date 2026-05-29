@@ -1,0 +1,46 @@
+# Full stack: Postgres + API + web (nginx). Single-owner self-host.
+#   docker compose -f deploy/docker-compose.yml up -d --build
+# Build context is the repo root so Dockerfiles can copy backend/ and frontend/.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: cmgr
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cmgr}
+      POSTGRES_DB: commission_manager
+    volumes:
+      - cmgr_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cmgr -d commission_manager"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/backend.Dockerfile
+    environment:
+      CMGR_DATABASE_URL: postgresql+psycopg://cmgr:${POSTGRES_PASSWORD:-cmgr}@postgres:5432/commission_manager
+      CMGR_ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      CMGR_ADMIN_PASSWORD: ${ADMIN_PASSWORD:-changeme}
+      CMGR_SECRET_KEY: ${SECRET_KEY:-please-change-this-in-production}
+      CMGR_STORAGE_LOCAL_ROOT: /data/storage
+    volumes:
+      - cmgr_storage:/data/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/frontend.Dockerfile
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+
+volumes:
+  cmgr_pgdata:
+  cmgr_storage:

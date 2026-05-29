@@ -1,0 +1,22 @@
+# Dev-only: just Postgres. Run backend + frontend on the host with their dev servers.
+#   docker compose -f deploy/docker-compose.dev.yml up -d
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: cmgr-postgres-dev
+    environment:
+      POSTGRES_USER: cmgr
+      POSTGRES_PASSWORD: cmgr
+      POSTGRES_DB: commission_manager
+    ports:
+      - "55432:5432"
+    volumes:
+      - cmgr_pgdata_dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cmgr -d commission_manager"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  cmgr_pgdata_dev:
