@@ -89,4 +89,11 @@ export interface ListParams {
   formats?: string[];
   sort?: "date" | "title";
   order?: "asc" | "desc";
+  limit?: number;
+  offset?: number;
+}
+
+export interface Paged<T> {
+  items: T[];
+  total: number;
 }
