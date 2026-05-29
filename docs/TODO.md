@@ -16,18 +16,24 @@
 
 ### Backend
 - [x] Project scaffold (`backend/app`, config, db session)
-- [ ] SQLAlchemy models for all tables in `docs/schema.dbml`
-- [ ] Alembic baseline migration
-- [ ] Storage abstraction + local backend
-- [ ] Auth: admin password/session + API-key dependency (scopes: read / write)
-- [ ] REST API v1:
-  - [ ] `commissions` CRUD (+ metadata, labels, characters, artists)
-  - [ ] `commissions/{id}/files`, `/images?visibility=`
-  - [ ] `commissions/{id}/copy-json` (the documented agent payload, no credentials)
-  - [ ] list endpoint with search / filter / sort
-  - [ ] `labels`, `characters`, `artists` read
-  - [ ] file upload -> storage object, image dimension probe
-- [ ] Seed script with sample data for dev
+- [x] SQLAlchemy models for all tables in `docs/schema.dbml`
+- [x] Alembic baseline migration
+- [x] Storage abstraction + local backend
+- [x] Auth: admin password/session + API-key dependency (scopes: read / write)
+- [x] REST API v1:
+  - [x] `commissions` CRUD (+ metadata, labels, characters, artists)
+  - [x] `commissions/{id}/files`, `/images?visibility=`
+  - [x] `commissions/{id}/copy-json` (the documented agent payload, no credentials)
+  - [x] list endpoint with search / filter / sort
+  - [x] list pagination (`limit`/`offset`) + `X-Total-Count` header
+  - [x] `labels`, `characters`, `artists` read
+  - [x] file upload -> storage object, image dimension probe
+  - [x] lifecycle node management (add/rename/reorder/delete + detached reparenting)
+  - [x] `cover_file_id` validation (must be an image file of the commission)
+- [x] Seed script with sample data for dev
+- [x] Pytest harness + API coverage (auth, CRUD, nodes, cover, pagination)
+- [ ] Wire frontend gallery to read `X-Total-Count` (paginate beyond 60)
+- [ ] Per-file/stage visibility filtering on `/images?visibility=` (currently a stub)
 
 ### Frontend
 - [x] Vite + React + TS scaffold
