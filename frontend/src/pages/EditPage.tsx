@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 
 import { api } from "../api/client";
 import type { CommissionCreate, Rating } from "../api/types";
+import { StagesEditor } from "../components/StagesEditor";
 import { TopBar } from "../components/TopBar";
 import { useAuth } from "../hooks/useAuth";
 
@@ -77,7 +78,8 @@ export function EditPage() {
         navigate(`/commissions/${id}`);
       } else {
         const created = await api.createCommission({ ...payload, node_names: splitList(nodes) });
-        navigate(`/commissions/${created.id}`);
+        // land in edit mode so the user can immediately add files to the new stages
+        navigate(`/commissions/${created.id}/edit`);
       }
     } catch (err) {
       setError(String(err));
@@ -147,17 +149,30 @@ export function EditPage() {
           <button type="button" className="btn ghost" onClick={() => navigate(-1)}>
             Cancel
           </button>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => isEdit && navigate(`/commissions/${id}`)}
+            disabled={!isEdit}
+          >
+            View
+          </button>
           <button type="submit" className="btn primary" disabled={busy}>
             {busy ? "Saving…" : isEdit ? "Save changes" : "Create"}
           </button>
         </div>
         {!isEdit && (
           <div className="mono-sm muted" style={{ marginTop: 12 }}>
-            Files can be uploaded to each stage after creating the commission (API:
-            POST /api/v1/nodes/{"{node_id}"}/files).
+            After creating, you can add lifecycle stages and upload files below.
           </div>
         )}
       </form>
+
+      {isEdit && id && (
+        <div style={{ maxWidth: 720, margin: "0 auto", padding: "0 24px 40px" }}>
+          <StagesEditor commissionId={Number(id)} />
+        </div>
+      )}
     </div>
   );
 }

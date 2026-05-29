@@ -1,16 +1,20 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { api } from "../api/client";
-import type { CommissionListItem, ListParams } from "../api/types";
+import type { CommissionListItem } from "../api/types";
 import { Chip } from "../components/Chip";
 import { FaGallery } from "../components/FaGallery";
 import { TopBar } from "../components/TopBar";
 import { useAuth } from "../hooks/useAuth";
 
+const PAGE_SIZE = 24;
+
 export function GalleryPage() {
   const { canWrite } = useAuth();
   const [items, setItems] = useState<CommissionListItem[]>([]);
+  const [total, setTotal] = useState(0);
+  const [limit, setLimit] = useState(PAGE_SIZE);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -20,29 +24,46 @@ export function GalleryPage() {
   const [sort, setSort] = useState<"date" | "title">("date");
   const [order, setOrder] = useState<"asc" | "desc">("desc");
   const [filterOpen, setFilterOpen] = useState(false);
+  const [allCats, setAllCats] = useState<string[]>([]);
 
-  const params: ListParams = useMemo(
-    () => ({ q: q || undefined, categories: cats, rating: ratings, sort, order }),
-    [q, cats, ratings, sort, order]
-  );
+  // category options come from the label set, not the current page
+  useEffect(() => {
+    api
+      .labels()
+      .then((ls) => setAllCats(ls.filter((l) => l.type === "category").map((l) => l.name).sort()))
+      .catch(() => undefined);
+  }, []);
+
+  // reset to the first page whenever the query changes
+  useEffect(() => {
+    setLimit(PAGE_SIZE);
+  }, [q, cats, ratings, sort, order]);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     api
-      .listCommissions(params)
-      .then((res) => !cancelled && setItems(res))
+      .listCommissionsPaged({
+        q: q || undefined,
+        categories: cats,
+        rating: ratings,
+        sort,
+        order,
+        limit,
+        offset: 0,
+      })
+      .then((res) => {
+        if (cancelled) return;
+        setItems(res.items);
+        setTotal(res.total);
+      })
       .catch((e) => !cancelled && setError(String(e)))
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
     };
-  }, [params]);
+  }, [q, cats, ratings, sort, order, limit]);
 
-  const allCats = useMemo(
-    () => Array.from(new Set(items.flatMap((i) => i.categories))).sort(),
-    [items]
-  );
   const activeCount = cats.length + ratings.length + (q ? 1 : 0);
 
   function toggle(list: string[], set: (v: string[]) => void, value: string) {
@@ -52,7 +73,7 @@ export function GalleryPage() {
   return (
     <div className="app">
       <TopBar>
-        <span className="mono-sm muted">{items.length} works</span>
+        <span className="mono-sm muted">{total} works</span>
         <div style={{ position: "relative" }}>
           <button className="btn sm" onClick={() => setFilterOpen((v) => !v)}>
             🔍 Search &amp; filter
@@ -116,7 +137,7 @@ export function GalleryPage() {
                 >
                   Reset all
                 </button>
-                <span className="mono-sm">{items.length} results</span>
+                <span className="mono-sm">{total} results</span>
               </div>
             </div>
           )}
@@ -145,7 +166,18 @@ export function GalleryPage() {
           {canWrite && " Click “+ New” to add one."}
         </div>
       )}
-      {!loading && items.length > 0 && <FaGallery items={items} columns={4} />}
+      {items.length > 0 && <FaGallery items={items} columns={4} />}
+      {items.length < total && (
+        <div style={{ textAlign: "center", padding: "8px 0 32px" }}>
+          <button
+            className="btn"
+            disabled={loading}
+            onClick={() => setLimit((l) => l + PAGE_SIZE)}
+          >
+            {loading ? "Loading…" : `Load more (${items.length} of ${total})`}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

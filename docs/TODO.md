@@ -12,7 +12,7 @@
 - **Deploy:** Docker Compose, single-owner self-host. Dev-first.
 - **Agents:** REST API + scoped API keys now. **MCP server deferred** (see Phase 3).
 
-## Phase 1 — Core MVP (in progress)
+## Phase 1 — Core MVP (complete; minor follow-ups noted below)
 
 ### Backend
 - [x] Project scaffold (`backend/app`, config, db session)
@@ -37,16 +37,22 @@
 
 ### Frontend
 - [x] Vite + React + TS scaffold
-- [ ] Port `styles.css` + fonts
-- [ ] Primitives: Chip, ImgPh, FaGallery, FilterBar, buttons
-- [ ] Pages: Auth gate, Home/Gallery, Detail, Add/Edit
-- [ ] API client + types
-- [ ] Router + public-read / admin-edit gating
+- [x] Port `styles.css` + fonts
+- [x] Primitives: Chip, Cover/ImgPh, FaGallery, filter popover, buttons
+- [x] Pages: Auth gate, Home/Gallery, Detail, Add/Edit
+- [x] API client + types (commissions, nodes, files, paged list)
+- [x] Router + public-read / admin-edit gating
+- [x] Edit page: lifecycle stage management (add/rename/reorder/delete)
+- [x] Edit page: per-stage file upload/delete + set cover
+- [x] Gallery: total count (X-Total-Count) + load-more pagination
+- [ ] Focal-point reticle editor on the cover image (Phase 2)
+- [ ] Mobile layouts (Phase 2)
 
 ### Deploy
 - [x] `deploy/docker-compose.dev.yml` (Postgres for local dev)
-- [ ] `deploy/docker-compose.yml` (full stack: db + api + web)
-- [ ] Backend + frontend Dockerfiles, nginx for web
+- [x] `deploy/docker-compose.yml` (full stack: db + api + web)
+- [x] Backend + frontend Dockerfiles, nginx for web
+- [ ] End-to-end verify of the full-stack compose build
 
 ## Phase 2 — Breadth (deferred)
 - [ ] Settings (admin): API keys UI, webhooks, storage config
