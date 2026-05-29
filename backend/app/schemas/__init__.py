@@ -13,7 +13,10 @@ from app.schemas.schemas import (
     FileOut,
     LabelOut,
     LoginRequest,
+    NodeCreate,
     NodeOut,
+    NodeReorder,
+    NodeUpdate,
     TokenResponse,
 )
 
@@ -32,6 +35,9 @@ __all__ = [
     "FileOut",
     "LabelOut",
     "LoginRequest",
+    "NodeCreate",
     "NodeOut",
+    "NodeReorder",
+    "NodeUpdate",
     "TokenResponse",
 ]
