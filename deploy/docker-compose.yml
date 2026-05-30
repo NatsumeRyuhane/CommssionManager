@@ -25,7 +25,10 @@ services:
       CMGR_ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       CMGR_ADMIN_PASSWORD: ${ADMIN_PASSWORD:-changeme}
       CMGR_SECRET_KEY: ${SECRET_KEY:-please-change-this-in-production}
+      CMGR_ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-10080}
+      CMGR_STORAGE_BACKEND: ${STORAGE_BACKEND:-local}
       CMGR_STORAGE_LOCAL_ROOT: /data/storage
+      CMGR_CORS_ORIGINS: ${CORS_ORIGINS:-["http://localhost:8080"]}
     volumes:
       - cmgr_storage:/data/storage
     depends_on:
