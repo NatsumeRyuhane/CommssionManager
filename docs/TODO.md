@@ -14,7 +14,7 @@
 - **Deploy:** Docker Compose, single-owner self-host. Dev-first.
 - **Agents:** REST API + scoped API keys now. **MCP server deferred** (see Phase 3).
 
-## Phase 1 — Core MVP (complete; minor follow-ups noted below)
+## Phase 1 — Core MVP (complete)
 
 ### Backend
 - [x] Project scaffold (`backend/app`, config, db session)
@@ -34,8 +34,10 @@
   - [x] `cover_file_id` validation (must be an image file of the commission; cleared on file delete)
 - [x] Seed script with sample data for dev
 - [x] Pytest harness + API coverage (auth, API keys, CRUD, filters/sort, files, nodes, cover, lookups, pagination)
-- [ ] Wire frontend gallery to read `X-Total-Count` (paginate beyond 60)
-- [ ] Per-file/stage visibility filtering on `/images?visibility=` (currently a stub)
+- [x] Self-contained tests: ephemeral Postgres via `testcontainers` (no dependency on the dev
+  compose stack; `CMGR_TEST_DATABASE_URL` overrides for CI)
+- [x] Config: all settings required from env / `.env` (no in-code defaults); `.env.example` committed
+- [x] Wire frontend gallery to read `X-Total-Count` (paginate beyond 60)
 
 ### Frontend
 - [x] Vite + React + TS scaffold
@@ -54,11 +56,16 @@
 - [x] `deploy/docker-compose.dev.yml` (Postgres for local dev)
 - [x] `deploy/docker-compose.yml` (full stack: db + api + web)
 - [x] Backend + frontend Dockerfiles, nginx for web
-- [ ] End-to-end verify of the full-stack compose build
+- [x] Reproducible frontend image: pin `packageManager` (pnpm) + `.npmrc` so the build doesn't
+  float pnpm versions or fail on the minimum-release-age supply-chain gate
+- [x] End-to-end verify of the full-stack compose build (db migrates + api serves + web/nginx
+  proxies `/api`; verified `X-Total-Count` through the proxy)
 
 ## Phase 2 — Breadth (deferred)
 - [ ] Settings (admin): API keys UI, webhooks, storage config
 - [ ] Visibility/privacy: global preset -> per-commission -> per-stage -> per-file precedence
+  (includes making `/images?visibility=` honor real per-file/stage visibility; currently a stub
+  that always returns public displayable images in stage order)
 - [ ] Lifecycle: shared component, drag-and-drop files between stages, detached-node handling
 - [ ] Character pages: shareable profile, main ref, curated image "bookshelves" + picker
 - [ ] Artist management: multi-platform handles, paste-to-match, no-match resolve dialog
@@ -83,3 +90,8 @@
 - `cover_file_id` must point to a `commission_files` row with `is_image=true`; deleting that file clears the explicit cover so fallback cover selection can run.
 - Detail page shows public displayable images in **timeline (stage) order**, ignoring detached.
 - API copy-JSON must include internal id + endpoint URLs, never API credentials.
+- **Compose projects are isolated by explicit name:** both compose files live in `deploy/`, so
+  without explicit names they'd share the directory-derived project name and the same `postgres`
+  service — bringing up the full stack would recreate the dev container `cmgr-postgres-dev`. Fixed
+  via top-level `name:` — full stack is project `cmgr`, dev is `deploy` (kept so its existing
+  container + `deploy_cmgr_pgdata_dev` volume are preserved). The two now run side by side.

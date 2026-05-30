@@ -4,26 +4,29 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    """All configuration is supplied via the environment (prefixed CMGR_) or a local
+    `.env` file — there are no in-code defaults, so a missing value fails fast at startup
+    rather than silently falling back to insecure dev values. See `.env.example`."""
+
     model_config = SettingsConfigDict(env_file=".env", env_prefix="CMGR_", extra="ignore")
 
-    # Dev default targets the docker-compose.dev.yml Postgres (host port 55432 to avoid
-    # clashing with a system Postgres on 5432). Prod overrides via CMGR_DATABASE_URL.
-    database_url: str = "postgresql+psycopg://cmgr:cmgr@localhost:55432/commission_manager"
+    # Database (SQLAlchemy URL), e.g. postgresql+psycopg://user:pass@host:5432/dbname
+    database_url: str
 
-    # Admin login (single owner). Override in production.
-    admin_username: str = "admin"
-    admin_password: str = "changeme"
+    # Admin login (single owner).
+    admin_username: str
+    admin_password: str
 
-    # Session/JWT signing secret. Override in production.
-    secret_key: str = "dev-insecure-secret-change-me"
-    access_token_expire_minutes: int = 60 * 24 * 7
+    # Session/JWT signing secret + token lifetime (minutes).
+    secret_key: str
+    access_token_expire_minutes: int
 
     # Storage
-    storage_backend: str = "local"
-    storage_local_root: str = "./data/storage"
+    storage_backend: str
+    storage_local_root: str
 
-    # CORS (frontend dev server)
-    cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
+    # CORS allowed origins (JSON array in env, e.g. ["http://localhost:5173"])
+    cors_origins: list[str]
 
 
 @lru_cache
