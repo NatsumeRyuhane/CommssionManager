@@ -5,13 +5,19 @@ import mimetypes
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Response, UploadFile, status
 from PIL import Image
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.api.v1 import crud
 from app.auth.deps import Principal, require_edit
 from app.db import get_db
-from app.models import CommissionFile, CommissionNode, StorageBackend, StorageObject
+from app.models import (
+    CommissionFile,
+    CommissionMetadata,
+    CommissionNode,
+    StorageBackend,
+    StorageObject,
+)
 from app.schemas import FileOut
 from app.storage import get_storage
 
@@ -117,6 +123,11 @@ def delete_file(
     if file is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
     obj = db.get(StorageObject, file.storage_object_id)
+    db.execute(
+        update(CommissionMetadata)
+        .where(CommissionMetadata.cover_file_id == file_id)
+        .values(cover_file_id=None)
+    )
     db.delete(file)
     if obj:
         try:

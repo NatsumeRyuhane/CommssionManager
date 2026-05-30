@@ -1,6 +1,5 @@
 import io
 
-import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
@@ -111,10 +110,6 @@ def test_delete_file_removes_it_from_api_results_and_raw_access(admin_client: Te
     assert admin_client.get(f"/api/v1/commissions/{commission_id}/files").json() == []
 
 
-@pytest.mark.xfail(
-    reason="Deleting a cover file currently violates the cover_file_id FK; fix outside test branch.",
-    strict=True,
-)
 def test_deleting_cover_file_clears_cover_and_uses_next_available_image(
     admin_client: TestClient,
 ):
