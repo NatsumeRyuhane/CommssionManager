@@ -31,6 +31,27 @@ silently falling back to insecure dev values. The full set of variables is docum
 
 ---
 
+## Quick start (managed scripts)
+
+Two stdlib-only Python helpers wrap the whole workflow — no virtualenv needed, just Python 3
+on the host. `CMGR_ENV` in `backend/.env` (`dev` | `test` | `prod`) decides what they do.
+
+```sh
+python3 deploy/setup.py --env dev   # checks tools, installs deps, scaffolds backend/.env
+python3 main.py start               # dev: Postgres + migrate + uvicorn + vite (prints URLs)
+python3 main.py status              # what's running
+python3 main.py logs                # tail the dev server logs
+python3 main.py stop                # stop the dev servers
+python3 main.py test                # run the backend suite (any env)
+```
+
+`main.py` reads config from `backend/.env` and announces where it loaded it from. By mode:
+`start` runs **dev** servers on the host (background, hot reload, tracked in `deploy/.run/`),
+runs the **test** suite, or builds & launches the full **prod** Docker stack. The manual steps
+below are what these scripts automate.
+
+---
+
 ## DEV — run it locally with hot reload
 
 1. **Start the dev Postgres** (compose project `deploy`; host port `55432` to avoid clashing
