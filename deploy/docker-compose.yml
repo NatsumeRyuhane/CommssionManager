@@ -1,6 +1,12 @@
 # Full stack: Postgres + API + web (nginx). Single-owner self-host.
 #   docker compose -f deploy/docker-compose.yml up -d --build
 # Build context is the repo root so Dockerfiles can copy backend/ and frontend/.
+#
+# Explicit project name so this stack never collides with docker-compose.dev.yml. Both files
+# live in deploy/, so without this they would share the directory-derived project name and the
+# same `postgres` service — bringing this up would recreate the dev container `cmgr-postgres-dev`.
+name: cmgr
+
 services:
   postgres:
     image: postgres:16-alpine

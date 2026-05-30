@@ -1,5 +1,10 @@
 # Dev-only: just Postgres. Run backend + frontend on the host with their dev servers.
 #   docker compose -f deploy/docker-compose.dev.yml up -d
+#
+# Explicit project name (kept as `deploy`, the historical directory-derived name, so the existing
+# cmgr-postgres-dev container and its data volume are preserved). The full stack uses project
+# `cmgr`, so the two never collide. See docker-compose.yml.
+name: deploy
 services:
   postgres:
     image: postgres:16-alpine
