@@ -19,6 +19,7 @@ dist/
 data/
 *.sqlite
 *.db
+deploy/.run/
 
 # ---- editor / OS ----
 .DS_Store
