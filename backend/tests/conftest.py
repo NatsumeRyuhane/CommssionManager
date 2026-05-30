@@ -1,3 +1,4 @@
+import os
 from collections.abc import Generator
 
 import pytest
@@ -6,32 +7,48 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
-import app.models  # noqa: F401  (register all tables on Base.metadata)
-from app.core.config import settings
-from app.db import Base, get_db
-from app.main import app
-from app.storage.factory import get_storage
+# The app loads all config from the environment (no in-code defaults), so the suite stays
+# self-contained by providing deterministic values before importing anything under app.*.
+# The real DB connection is supplied separately by the db_url fixture; this placeholder URL
+# only satisfies engine construction at import time (get_db is overridden, so it's unused).
+os.environ.setdefault("CMGR_DATABASE_URL", "postgresql+psycopg://test:test@localhost:5432/test")
+os.environ.setdefault("CMGR_SECRET_KEY", "test-secret-key-not-for-production-use")
+os.environ.setdefault("CMGR_ADMIN_USERNAME", "admin")
+os.environ.setdefault("CMGR_ADMIN_PASSWORD", "changeme")
+os.environ.setdefault("CMGR_ACCESS_TOKEN_EXPIRE_MINUTES", "10080")
+os.environ.setdefault("CMGR_STORAGE_BACKEND", "local")
+os.environ.setdefault("CMGR_STORAGE_LOCAL_ROOT", "./data/storage")
+os.environ.setdefault("CMGR_CORS_ORIGINS", '["http://localhost:5173"]')
 
-TEST_DB = "commission_manager_test"
-
-
-def _swap_db(url: str, name: str) -> str:
-    return url.rsplit("/", 1)[0] + "/" + name
+import app.models  # noqa: E402, F401  (register all tables on Base.metadata)
+from app.core.config import settings  # noqa: E402
+from app.db import Base, get_db  # noqa: E402
+from app.main import app  # noqa: E402
+from app.storage.factory import get_storage  # noqa: E402
 
 
 @pytest.fixture(scope="session")
-def engine() -> Generator[Engine, None, None]:
-    # Create the test database (cmgr is a superuser in the dev Postgres image).
-    admin = create_engine(_swap_db(settings.database_url, "postgres"), isolation_level="AUTOCOMMIT")
-    with admin.connect() as conn:
-        exists = conn.execute(
-            text("SELECT 1 FROM pg_database WHERE datname = :n"), {"n": TEST_DB}
-        ).scalar()
-        if not exists:
-            conn.execute(text(f'CREATE DATABASE "{TEST_DB}"'))
-    admin.dispose()
+def db_url() -> Generator[str, None, None]:
+    """A Postgres for the test session, self-contained by default.
 
-    eng = create_engine(_swap_db(settings.database_url, TEST_DB), future=True)
+    By default this spins up a throwaway Postgres container (via testcontainers) so the
+    suite has no dependency on the dev compose stack being up. Set CMGR_TEST_DATABASE_URL
+    to point at an existing Postgres instead (e.g. a CI service container)."""
+    override = os.getenv("CMGR_TEST_DATABASE_URL")
+    if override:
+        yield override
+        return
+
+    from testcontainers.postgres import PostgresContainer
+
+    # driver="psycopg" so the URL matches the app's psycopg (v3) driver.
+    with PostgresContainer("postgres:16-alpine", driver="psycopg") as pg:
+        yield pg.get_connection_url()
+
+
+@pytest.fixture(scope="session")
+def engine(db_url: str) -> Generator[Engine, None, None]:
+    eng = create_engine(db_url, future=True)
     Base.metadata.drop_all(eng)
     Base.metadata.create_all(eng)
     yield eng
