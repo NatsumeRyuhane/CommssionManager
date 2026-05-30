@@ -1,5 +1,5 @@
 // Commission Manager Database Schema
-// Based on requirements.md
+// Current backend schema. See docs/architecture.md for drift from docs/requirements.xml.
 
 Project commission_manager {
   database_type: 'PostgreSQL'
@@ -11,10 +11,18 @@ Project commission_manager {
 //----------------------------------------------------------------------
 
 // Label types differ only in frontend display semantics; the backend treats all labels identically
+// for categories and tags. `rating` remains in the enum for compatibility with the original
+// requirements draft, but current commission rating is stored on commission_metadata.rating.
 Enum label_type {
   category
   tag
   rating
+}
+
+Enum rating {
+  general
+  mature
+  adult
 }
 
 //----------------------------------------------------------------------
@@ -26,7 +34,7 @@ Table labels {
   name       varchar     [not null, unique]
   type       label_type  [not null]
 
-  Note: 'Unified table for both categories (predefined) and tags (user-defined). They share the same implementation per spec.'
+  Note: 'Unified lookup for categories and tags. label_type.rating exists for compatibility, but the current backend stores each commission rating on commission_metadata.rating.'
 }
 
 Table characters {
@@ -43,6 +51,27 @@ Table artists {
   info_xml text     [Note: 'XML blob for all other artist attributes (contact links, social handles, notes, etc.); parsed by the frontend']
 
   Note: 'Artists who created the commission work.'
+}
+
+//----------------------------------------------------------------------
+// Auth
+//----------------------------------------------------------------------
+
+Table api_keys {
+  id           integer   [pk, increment]
+  name         varchar   [not null]
+  prefix       varchar   [not null]
+  key_hash     varchar   [not null, Note: 'SHA-256 hash of the full API key; the full key is shown only once on creation']
+  scopes       varchar   [not null, default: 'read', Note: 'Space-delimited scopes, currently read/write']
+  created_at   timestamp [default: `now()`]
+  last_used_at timestamp
+  revoked_at   timestamp
+
+  indexes {
+    prefix
+  }
+
+  Note: 'Scoped machine/agent credentials. API keys can read publicly available data and require write scope for edit endpoints; API key management is admin-only.'
 }
 
 //----------------------------------------------------------------------
@@ -95,7 +124,7 @@ Table commission_metadata {
   price_amount    numeric(12, 2) [Note: 'Agreed commission price']
   price_currency  varchar(3)     [Note: 'ISO 4217 currency code, e.g. USD, JPY, CNY']
 
-  Note: 'All descriptive metadata for a commission grouped in one place. Rating is applied via commission_labels using a label of type "rating"; exactly one such label per commission is enforced at the application layer.'
+  Note: 'All descriptive metadata for a commission grouped in one place. Rating is a first-class enum column here; commission_labels currently stores categories and tags.'
 }
 
 //----------------------------------------------------------------------

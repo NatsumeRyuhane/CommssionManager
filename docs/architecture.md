@@ -17,6 +17,23 @@ React SPA (Vite)  ──/api──▶  FastAPI  ──▶  PostgreSQL
 - **deploy/** — Docker Compose. `docker-compose.dev.yml` runs only Postgres for host-based dev;
   `docker-compose.yml` builds the full stack (db + api + web/nginx).
 
+## Source Of Truth
+
+- `docs/requirements.xml` is the original product/design brief. It is useful for intent, but parts
+  have drifted from the implemented MVP.
+- `docs/schema.dbml` is the current schema reference and should track the SQLAlchemy models plus
+  Alembic migrations. When it conflicts with `requirements.xml`, use `schema.dbml` and the backend
+  code as the current truth.
+- `docs/TODO.md` is the roadmap/status ledger for what landed and what remains deferred.
+
+Known drift from `requirements.xml`:
+- Ratings are a first-class `commission_metadata.rating` enum, not a `labels` row linked through
+  `commission_labels`.
+- Settings are limited to character and artist XML blobs in Phase 1; full settings pages, outfits,
+  weapons, webhooks, export flows, and richer visibility/privacy rules are deferred.
+- Public image listing is implemented as stage-ordered image files that ignore detached nodes;
+  per-stage and per-file visibility filtering remains a stub.
+
 ## Auth model
 
 - **Anonymous** — public read of commissions/images.
@@ -40,8 +57,9 @@ enum value, no schema change. The "commission folder" is a local-backend convent
 See `docs/schema.dbml` for the canonical schema. App-layer invariants:
 - Exactly one `rating` per commission (stored on `commission_metadata.rating`).
 - Each commission auto-creates one **detached node** (`is_detached=true`); deleting a regular
-  node reparents its files there (Phase 2).
-- `cover_file_id` must point to an `is_image=true` file.
+  node reparents its files there.
+- `cover_file_id` must point to an `is_image=true` file; deleting that file clears the explicit
+  cover reference.
 - Detail page shows public displayable images in stage (timeline) order, ignoring detached.
 
 ## Agent integration

@@ -2,6 +2,8 @@
 
 > Persistent roadmap across sessions. Source of truth for what's done and what's next.
 > Design inputs: `docs/requirements.xml`, `docs/schema.dbml`, wireframes (Claude Design handoff).
+> `docs/requirements.xml` is the original design brief; `docs/schema.dbml` is the current backend
+> schema reference. See `docs/architecture.md` for documented drift.
 
 ## Decisions (locked)
 
@@ -29,9 +31,9 @@
   - [x] `labels`, `characters`, `artists` read
   - [x] file upload -> storage object, image dimension probe
   - [x] lifecycle node management (add/rename/reorder/delete + detached reparenting)
-  - [x] `cover_file_id` validation (must be an image file of the commission)
+  - [x] `cover_file_id` validation (must be an image file of the commission; cleared on file delete)
 - [x] Seed script with sample data for dev
-- [x] Pytest harness + API coverage (auth, CRUD, nodes, cover, pagination)
+- [x] Pytest harness + API coverage (auth, API keys, CRUD, filters/sort, files, nodes, cover, lookups, pagination)
 - [ ] Wire frontend gallery to read `X-Total-Count` (paginate beyond 60)
 - [ ] Per-file/stage visibility filtering on `/images?visibility=` (currently a stub)
 
@@ -75,8 +77,9 @@
 - [ ] Species filtering via XML parse at app layer
 
 ## Notes / gotchas
-- `commission_labels` enforces exactly one `rating` label per commission at the app layer.
+- `commission_metadata.rating` is the single rating source for a commission; `commission_labels`
+  currently stores categories and tags.
 - Each commission has exactly one system-managed **detached node** (`is_detached=true`), auto-created; deleting a node reparents its files to detached.
-- `cover_file_id` must point to a `commission_files` row with `is_image=true`.
+- `cover_file_id` must point to a `commission_files` row with `is_image=true`; deleting that file clears the explicit cover so fallback cover selection can run.
 - Detail page shows public displayable images in **timeline (stage) order**, ignoring detached.
 - API copy-JSON must include internal id + endpoint URLs, never API credentials.
