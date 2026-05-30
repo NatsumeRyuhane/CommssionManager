@@ -10,6 +10,7 @@ import app.models  # noqa: F401  (register all tables on Base.metadata)
 from app.core.config import settings
 from app.db import Base, get_db
 from app.main import app
+from app.storage.factory import get_storage
 
 TEST_DB = "commission_manager_test"
 
@@ -38,7 +39,15 @@ def engine() -> Generator[Engine, None, None]:
 
 
 @pytest.fixture
-def client(engine: Engine) -> Generator[TestClient, None, None]:
+def storage_root(monkeypatch: pytest.MonkeyPatch, tmp_path) -> Generator[None, None, None]:
+    monkeypatch.setattr(settings, "storage_local_root", str(tmp_path / "storage"))
+    get_storage.cache_clear()
+    yield
+    get_storage.cache_clear()
+
+
+@pytest.fixture
+def client(engine: Engine, storage_root: None) -> Generator[TestClient, None, None]:
     # Clean slate per test.
     with engine.begin() as conn:
         for table in reversed(Base.metadata.sorted_tables):
