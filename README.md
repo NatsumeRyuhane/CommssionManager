@@ -7,9 +7,10 @@ Public read; admin login for editing; scoped API keys for machine/agent access.
 ## Layout
 
 ```
+main.py     Management CLI — start/stop/restart/status/logs/test (reads CMGR_ENV)
 backend/    FastAPI + SQLAlchemy 2 + Alembic, Postgres (Python 3.12, managed with uv)
 frontend/   React 18 + Vite + TypeScript (managed with pnpm)
-deploy/     Docker Compose + Dockerfiles (dev = Postgres only; full stack = db + api + web)
+deploy/     Docker Compose + Dockerfiles, plus setup.py + helpers used by main.py
 docs/       requirements.xml, schema.dbml, architecture.md, TODO.md, commit-convention.md
 ```
 
@@ -19,6 +20,8 @@ docs/       requirements.xml, schema.dbml, architecture.md, TODO.md, commit-conv
 - **[uv](https://docs.astral.sh/uv/)** — backend Python toolchain (pins Python 3.12 itself).
 - **[pnpm](https://pnpm.io/)** + **Node 22** — frontend. The repo pins `pnpm@10.23.0` via
   `packageManager`, so `corepack enable` will use the right version automatically.
+- **Python 3** on the host — only to run the `deploy/setup.py` / `main.py` management scripts
+  (stdlib only, no virtualenv of their own).
 
 ## Configuration
 
