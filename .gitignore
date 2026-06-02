@@ -30,5 +30,6 @@ deploy/.run/
 # ---- logs ----
 *.log
 
-# ---- Claude Code ----
+# ---- coding agents ----
 CLAUDE.md
+AGENTS.md
