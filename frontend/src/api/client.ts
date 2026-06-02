@@ -2,6 +2,9 @@ import type {
   ApiKey,
   ApiKeyCreate,
   ApiKeyCreated,
+  Artist,
+  ArtistCreate,
+  ArtistUpdate,
   CommissionCreate,
   CommissionDetail,
   CommissionFile,
@@ -171,5 +174,10 @@ export const api = {
 
   labels: () => request<{ id: number; name: string; type: string }[]>("/labels"),
   characters: () => request<{ id: number; name: string }[]>("/characters"),
-  artists: () => request<{ id: number; name: string }[]>("/artists"),
+  artists: () => request<Artist[]>("/artists"),
+  createArtist: (body: ArtistCreate) =>
+    request<Artist>("/artists", { method: "POST", body: JSON.stringify(body) }),
+  updateArtist: (id: number, body: ArtistUpdate) =>
+    request<Artist>(`/artists/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteArtist: (id: number) => request<void>(`/artists/${id}`, { method: "DELETE" }),
 };

@@ -139,6 +139,22 @@ export interface ApiKeyCreate {
   scopes: string[];
 }
 
+export interface Artist {
+  id: number;
+  name: string;
+  info_xml: string | null;
+}
+
+export interface ArtistCreate {
+  name: string;
+  info_xml?: string | null;
+}
+
+export interface ArtistUpdate {
+  name?: string | null;
+  info_xml?: string | null;
+}
+
 export type VisibilityFields = Record<VisibilityFieldKey, boolean>;
 export type VisibilityFieldPatch = Partial<Record<VisibilityFieldKey, boolean | null>>;
 

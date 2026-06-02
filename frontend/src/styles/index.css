@@ -685,3 +685,161 @@ a { color: inherit; text-decoration: none; }
   right: -7px;
   height: 1px;
 }
+
+/* ---- artists ---- */
+.artists-page {
+  max-width: 1120px;
+  padding: 28px 36px 48px;
+}
+.artist-search-panel {
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--paper-2);
+  padding: 16px;
+  margin-bottom: 22px;
+}
+.artist-search {
+  display: grid;
+  grid-template-columns: minmax(260px, 520px) auto;
+  gap: 8px;
+  align-items: center;
+}
+.artist-match-list {
+  max-width: 680px;
+  margin-top: 8px;
+  border: 1px solid var(--rule-2);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--paper);
+  box-shadow: var(--shadow-1);
+}
+.artist-match-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 26px minmax(120px, 1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 9px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+}
+.artist-match-row:last-child { border-bottom: 0; }
+.artist-match-row:hover { background: var(--paper-2); }
+.artist-no-match {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  font-size: 13px;
+}
+.artist-card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.artist-card {
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--paper);
+  padding: 14px;
+}
+.artist-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.artist-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: var(--artist-bg);
+  color: var(--artist-fg);
+  font-weight: 700;
+}
+.artist-handle-list {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.artist-handle-row {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  border-radius: 6px;
+  background: var(--paper-2);
+  padding: 6px 8px;
+}
+.artist-handle-row .mono {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.platform-badge {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--artist-bg);
+  color: var(--artist-fg);
+  font: 700 9px "IBM Plex Mono", monospace;
+}
+.artist-resolve-modal {
+  width: min(560px, 92vw);
+  background: var(--paper);
+  border: 1px solid var(--rule-2);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-2);
+  padding: 18px;
+}
+.artist-resolve-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--rule);
+  margin-bottom: 14px;
+}
+.resolve-mode-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.resolve-mode {
+  min-height: 80px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--paper-2);
+  color: var(--ink);
+  padding: 10px;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+.resolve-mode.active {
+  border-color: var(--accent);
+  background: rgba(47, 106, 85, 0.06);
+}
+.resolve-mode span {
+  display: block;
+  margin-top: 4px;
+  color: var(--ink-2);
+  font-size: 12px;
+  line-height: 1.4;
+}
