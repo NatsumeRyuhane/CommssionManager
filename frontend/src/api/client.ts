@@ -1,13 +1,21 @@
 import type {
+  ApiKey,
+  ApiKeyCreate,
+  ApiKeyCreated,
   CommissionCreate,
   CommissionDetail,
   CommissionFile,
   CommissionListItem,
   CommissionNode,
   CommissionUpdate,
+  CommissionVisibility,
+  CommissionVisibilityUpdate,
   ListParams,
   MeResponse,
   Paged,
+  StorageSettings,
+  VisibilitySettings,
+  VisibilitySettingsUpdate,
 } from "./types";
 
 const BASE = "/api/v1";
@@ -99,6 +107,27 @@ export const api = {
   deleteCommission: (id: number) =>
     request<void>(`/commissions/${id}`, { method: "DELETE" }),
   copyJson: (id: number) => request<Record<string, unknown>>(`/commissions/${id}/copy-json`),
+  getCommissionVisibility: (id: number) =>
+    request<CommissionVisibility>(`/commissions/${id}/visibility`),
+  updateCommissionVisibility: (id: number, body: CommissionVisibilityUpdate) =>
+    request<CommissionVisibility>(`/commissions/${id}/visibility`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+
+  // settings
+  listApiKeys: () => request<ApiKey[]>("/api-keys"),
+  createApiKey: (body: ApiKeyCreate) =>
+    request<ApiKeyCreated>("/api-keys", { method: "POST", body: JSON.stringify(body) }),
+  revokeApiKey: (id: number) =>
+    request<ApiKey>(`/api-keys/${id}/revoke`, { method: "POST" }),
+  getVisibilitySettings: () => request<VisibilitySettings>("/settings/visibility"),
+  updateVisibilitySettings: (body: VisibilitySettingsUpdate) =>
+    request<VisibilitySettings>("/settings/visibility", {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  getStorageSettings: () => request<StorageSettings>("/settings/storage"),
 
   // lifecycle nodes
   listNodes: (commissionId: number) =>

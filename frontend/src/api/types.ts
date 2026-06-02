@@ -1,5 +1,17 @@
 export type Rating = "general" | "mature" | "adult";
 export type LabelType = "category" | "tag" | "rating";
+export type Visibility = "public" | "private";
+export type VisibilityPreset = "public_by_default" | "private_by_default" | "custom";
+export type VisibilityFieldKey =
+  | "title"
+  | "description"
+  | "labels"
+  | "rating"
+  | "characters"
+  | "artists"
+  | "completed_at"
+  | "confirmed_at"
+  | "price";
 
 export interface Cover {
   file_id: number;
@@ -13,8 +25,10 @@ export interface Cover {
 export interface CommissionListItem {
   id: number;
   title: string;
-  rating: Rating;
+  rating: Rating | null;
   completed_at: string | null;
+  visibility: Visibility | null;
+  effective_visibility: Visibility | null;
   categories: string[];
   tags: string[];
   characters: string[];
@@ -34,6 +48,8 @@ export interface CommissionFile {
   height: number | null;
   focal_x: number | null;
   focal_y: number | null;
+  visibility: Visibility | null;
+  effective_visibility: Visibility | null;
   url: string;
   is_cover: boolean;
 }
@@ -44,6 +60,8 @@ export interface CommissionNode {
   position: number | null;
   started_at: string | null;
   is_detached: boolean;
+  visibility: Visibility | null;
+  effective_visibility: Visibility | null;
   files: CommissionFile[];
 }
 
@@ -62,6 +80,10 @@ export interface CommissionCreate {
   description?: string | null;
   completed_at?: string | null;
   rating?: Rating;
+  confirmed_at?: string | null;
+  price_amount?: string | null;
+  price_currency?: string | null;
+  visibility_override?: Visibility | null;
   category_names?: string[];
   tag_names?: string[];
   character_names?: string[];
@@ -96,4 +118,96 @@ export interface ListParams {
 export interface Paged<T> {
   items: T[];
   total: number;
+}
+
+export interface ApiKey {
+  id: number;
+  name: string;
+  prefix: string;
+  scopes: string;
+  created_at: string;
+  last_used_at: string | null;
+  revoked_at: string | null;
+}
+
+export interface ApiKeyCreated extends ApiKey {
+  full_key: string;
+}
+
+export interface ApiKeyCreate {
+  name: string;
+  scopes: string[];
+}
+
+export type VisibilityFields = Record<VisibilityFieldKey, boolean>;
+export type VisibilityFieldPatch = Partial<Record<VisibilityFieldKey, boolean | null>>;
+
+export interface VisibilityStageDefault {
+  id?: number;
+  stage_name: string;
+  visibility: Visibility;
+  position: number;
+  note?: string | null;
+}
+
+export interface VisibilitySettings {
+  preset: VisibilityPreset;
+  default_commission_visibility: Visibility;
+  default_stage_visibility: Visibility;
+  fields: VisibilityFields;
+  stage_defaults: VisibilityStageDefault[];
+  updated_at: string | null;
+}
+
+export interface VisibilitySettingsUpdate {
+  preset?: VisibilityPreset | null;
+  default_commission_visibility?: Visibility | null;
+  default_stage_visibility?: Visibility | null;
+  fields?: VisibilityFieldPatch | null;
+  stage_defaults?: VisibilityStageDefault[] | null;
+}
+
+export interface StorageSettings {
+  backend: string;
+  local_root: string | null;
+  configurable_via: string;
+}
+
+export interface CommissionVisibilityField {
+  field: VisibilityFieldKey;
+  public: boolean | null;
+  effective_public: boolean;
+}
+
+export interface FileVisibilityState {
+  id: number;
+  label: string | null;
+  format: string;
+  is_image: boolean;
+  visibility: Visibility | null;
+  effective_visibility: Visibility;
+}
+
+export interface NodeVisibilityState {
+  id: number;
+  name: string;
+  is_detached: boolean;
+  visibility: Visibility | null;
+  effective_visibility: Visibility;
+  files: FileVisibilityState[];
+}
+
+export interface CommissionVisibility {
+  commission_id: number;
+  visibility: Visibility | null;
+  effective_visibility: Visibility;
+  fields: CommissionVisibilityField[];
+  nodes: NodeVisibilityState[];
+}
+
+export interface CommissionVisibilityUpdate {
+  visibility?: Visibility | null;
+  fields?: VisibilityFieldPatch | null;
+  nodes?: Record<number, Visibility | null>;
+  files?: Record<number, Visibility | null>;
 }

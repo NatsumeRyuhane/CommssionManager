@@ -35,7 +35,7 @@ export function EditPage() {
       setTitle(d.title);
       setDescription(d.description ?? "");
       setCompletedAt(d.completed_at ?? "");
-      setRating(d.rating);
+      setRating(d.rating ?? "general");
       setCategories(joinList(d.categories));
       setTags(joinList(d.tags));
       setCharacters(joinList(d.characters));
