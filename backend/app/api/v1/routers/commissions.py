@@ -147,7 +147,10 @@ def list_commissions(
     filtered.sort(key=sort_key, reverse=(order == "desc"))
     response.headers["X-Total-Count"] = str(len(filtered))
     page = filtered[offset : offset + limit]
-    return [crud.serialize_list_item(c, visibility_context) for c in page]
+    return [
+        crud.serialize_list_item(c, visibility_context, include_private=_can_view_private(principal))
+        for c in page
+    ]
 
 
 @router.post("", response_model=CommissionDetail, status_code=status.HTTP_201_CREATED)
@@ -157,7 +160,9 @@ def create_commission(
     _: Principal = Depends(require_edit),
 ):
     commission = crud.create_commission(db, body)
-    return crud.serialize_detail(commission, crud.load_visibility_context(db))
+    return crud.serialize_detail(
+        commission, crud.load_visibility_context(db), include_private=True
+    )
 
 
 @router.get("/{commission_id}", response_model=CommissionDetail)
@@ -169,7 +174,9 @@ def get_commission(
     commission = _get_one(db, commission_id)
     visibility_context = crud.load_visibility_context(db)
     _assert_commission_visible(commission, visibility_context, principal)
-    return crud.serialize_detail(commission, visibility_context)
+    return crud.serialize_detail(
+        commission, visibility_context, include_private=_can_view_private(principal)
+    )
 
 
 @router.patch("/{commission_id}", response_model=CommissionDetail)
@@ -188,7 +195,9 @@ def update_commission(
                 detail="cover_file_id must reference an image file belonging to this commission",
             )
     return crud.serialize_detail(
-        crud.update_commission(db, commission, body), crud.load_visibility_context(db)
+        crud.update_commission(db, commission, body),
+        crud.load_visibility_context(db),
+        include_private=True,
     )
 
 

@@ -92,7 +92,7 @@ class CoverOut(BaseModel):
 class CommissionListItem(BaseModel):
     id: int
     title: str
-    rating: Rating
+    rating: Rating | None = None
     completed_at: date | None = None
     visibility: Visibility | None = None
     effective_visibility: Visibility | None = None

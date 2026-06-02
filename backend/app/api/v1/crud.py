@@ -351,10 +351,20 @@ def tags_of(commission: Commission) -> list[str]:
     return [la.name for la in commission.labels if la.type == LabelType.tag]
 
 
-def formats_of(commission: Commission) -> list[str]:
+def formats_of(
+    commission: Commission,
+    visibility_context: VisibilityContext | None = None,
+    include_private: bool = True,
+) -> list[str]:
     seen: list[str] = []
     for node in commission.nodes:
         for f in node.files:
+            if (
+                not include_private
+                and visibility_context is not None
+                and effective_file_visibility(f, visibility_context) != Visibility.public
+            ):
+                continue
             if f.format not in seen:
                 seen.append(f.format)
     return seen
@@ -375,16 +385,34 @@ def _current_stage(commission: Commission) -> str | None:
     return nodes[-1].name if nodes else None
 
 
-def _cover(commission: Commission) -> CoverOut | None:
+def _cover(
+    commission: Commission,
+    visibility_context: VisibilityContext | None = None,
+    include_private: bool = True,
+) -> CoverOut | None:
+    def visible(file) -> bool:
+        return (
+            include_private
+            or visibility_context is None
+            or effective_file_visibility(file, visibility_context) == Visibility.public
+        )
+
     meta = commission.meta
     cover_file = None
     if meta and meta.cover_file_id:
         cover_file = next(
-            (f for n in commission.nodes for f in n.files if f.id == meta.cover_file_id), None
+            (
+                f
+                for n in commission.nodes
+                for f in n.files
+                if f.id == meta.cover_file_id and visible(f)
+            ),
+            None,
         )
     if cover_file is None:
         cover_file = next(
-            (f for n in ordered_nodes(commission) for f in n.files if f.is_image), None
+            (f for n in ordered_nodes(commission) for f in n.files if f.is_image and visible(f)),
+            None,
         )
     if cover_file is None:
         return None
@@ -411,24 +439,50 @@ def fallback_visibility_context() -> VisibilityContext:
 
 
 def serialize_list_item(
-    commission: Commission, visibility_context: VisibilityContext | None = None
+    commission: Commission,
+    visibility_context: VisibilityContext | None = None,
+    include_private: bool = True,
 ) -> CommissionListItem:
     meta = commission.meta
     visibility_context = visibility_context or fallback_visibility_context()
+    labels_public = include_private or _effective_field_public(
+        commission, "labels", visibility_context
+    )
     return CommissionListItem(
         id=commission.id,
-        title=meta.title if meta else f"#{commission.id}",
-        rating=meta.rating if meta else None,
-        completed_at=meta.completed_at if meta else None,
+        title=(
+            meta.title
+            if meta and (include_private or _effective_field_public(commission, "title", visibility_context))
+            else f"#{commission.id}"
+        ),
+        rating=(
+            meta.rating
+            if meta and (include_private or _effective_field_public(commission, "rating", visibility_context))
+            else None
+        ),
+        completed_at=(
+            meta.completed_at
+            if meta
+            and (include_private or _effective_field_public(commission, "completed_at", visibility_context))
+            else None
+        ),
         visibility=meta.visibility_override if meta else None,
         effective_visibility=effective_commission_visibility(commission, visibility_context),
-        categories=categories_of(commission),
-        tags=tags_of(commission),
-        characters=[c.name for c in commission.characters],
-        artists=[a.name for a in commission.artists],
-        formats=formats_of(commission),
+        categories=categories_of(commission) if labels_public else [],
+        tags=tags_of(commission) if labels_public else [],
+        characters=(
+            [c.name for c in commission.characters]
+            if include_private or _effective_field_public(commission, "characters", visibility_context)
+            else []
+        ),
+        artists=(
+            [a.name for a in commission.artists]
+            if include_private or _effective_field_public(commission, "artists", visibility_context)
+            else []
+        ),
+        formats=formats_of(commission, visibility_context, include_private),
         current_stage=_current_stage(commission),
-        cover=_cover(commission),
+        cover=_cover(commission, visibility_context, include_private),
     )
 
 
@@ -478,10 +532,12 @@ def node_out(
 
 
 def serialize_detail(
-    commission: Commission, visibility_context: VisibilityContext | None = None
+    commission: Commission,
+    visibility_context: VisibilityContext | None = None,
+    include_private: bool = True,
 ) -> CommissionDetail:
     visibility_context = visibility_context or fallback_visibility_context()
-    base = serialize_list_item(commission, visibility_context).model_dump()
+    base = serialize_list_item(commission, visibility_context, include_private).model_dump()
     meta = commission.meta
     cover_file_id = meta.cover_file_id if meta else None
 
@@ -494,10 +550,30 @@ def serialize_detail(
 
     return CommissionDetail(
         **base,
-        description=meta.description if meta else None,
-        confirmed_at=meta.confirmed_at if meta else None,
-        price_amount=meta.price_amount if meta else None,
-        price_currency=meta.price_currency if meta else None,
+        description=(
+            meta.description
+            if meta
+            and (include_private or _effective_field_public(commission, "description", visibility_context))
+            else None
+        ),
+        confirmed_at=(
+            meta.confirmed_at
+            if meta
+            and (include_private or _effective_field_public(commission, "confirmed_at", visibility_context))
+            else None
+        ),
+        price_amount=(
+            meta.price_amount
+            if meta
+            and (include_private or _effective_field_public(commission, "price", visibility_context))
+            else None
+        ),
+        price_currency=(
+            meta.price_currency
+            if meta
+            and (include_private or _effective_field_public(commission, "price", visibility_context))
+            else None
+        ),
         nodes=nodes,
         created_at=commission.created_at,
         updated_at=commission.updated_at,
