@@ -1,13 +1,24 @@
 import type {
+  ApiKey,
+  ApiKeyCreate,
+  ApiKeyCreated,
+  Artist,
+  ArtistCreate,
+  ArtistUpdate,
   CommissionCreate,
   CommissionDetail,
   CommissionFile,
   CommissionListItem,
   CommissionNode,
   CommissionUpdate,
+  CommissionVisibility,
+  CommissionVisibilityUpdate,
   ListParams,
   MeResponse,
   Paged,
+  StorageSettings,
+  VisibilitySettings,
+  VisibilitySettingsUpdate,
 } from "./types";
 
 const BASE = "/api/v1";
@@ -88,6 +99,9 @@ export const api = {
     request<CommissionListItem[]>(`/commissions${toQuery(params)}`),
   listCommissionsPaged: (params: ListParams = {}) =>
     requestPaged(`/commissions${toQuery(params)}`),
+  databaseExportUrl: () => `${BASE}/exports/database.json`,
+  filesExportUrl: (commissionId?: number) =>
+    `${BASE}/exports/files.zip${commissionId ? `?commission_id=${commissionId}` : ""}`,
   getCommission: (id: number) => request<CommissionDetail>(`/commissions/${id}`),
   createCommission: (body: CommissionCreate) =>
     request<CommissionDetail>("/commissions", { method: "POST", body: JSON.stringify(body) }),
@@ -99,6 +113,27 @@ export const api = {
   deleteCommission: (id: number) =>
     request<void>(`/commissions/${id}`, { method: "DELETE" }),
   copyJson: (id: number) => request<Record<string, unknown>>(`/commissions/${id}/copy-json`),
+  getCommissionVisibility: (id: number) =>
+    request<CommissionVisibility>(`/commissions/${id}/visibility`),
+  updateCommissionVisibility: (id: number, body: CommissionVisibilityUpdate) =>
+    request<CommissionVisibility>(`/commissions/${id}/visibility`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+
+  // settings
+  listApiKeys: () => request<ApiKey[]>("/api-keys"),
+  createApiKey: (body: ApiKeyCreate) =>
+    request<ApiKeyCreated>("/api-keys", { method: "POST", body: JSON.stringify(body) }),
+  revokeApiKey: (id: number) =>
+    request<ApiKey>(`/api-keys/${id}/revoke`, { method: "POST" }),
+  getVisibilitySettings: () => request<VisibilitySettings>("/settings/visibility"),
+  updateVisibilitySettings: (body: VisibilitySettingsUpdate) =>
+    request<VisibilitySettings>("/settings/visibility", {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  getStorageSettings: () => request<StorageSettings>("/settings/storage"),
 
   // lifecycle nodes
   listNodes: (commissionId: number) =>
@@ -128,6 +163,11 @@ export const api = {
     return uploadForm<CommissionFile>(`/nodes/${nodeId}/files`, form);
   },
   deleteFile: (fileId: number) => request<void>(`/files/${fileId}`, { method: "DELETE" }),
+  moveFile: (fileId: number, nodeId: number) =>
+    request<CommissionFile>(`/files/${fileId}/node`, {
+      method: "PATCH",
+      body: JSON.stringify({ node_id: nodeId }),
+    }),
   setFocal: (fileId: number, focalX: number, focalY: number) => {
     const form = new FormData();
     form.append("focal_x", String(focalX));
@@ -137,5 +177,10 @@ export const api = {
 
   labels: () => request<{ id: number; name: string; type: string }[]>("/labels"),
   characters: () => request<{ id: number; name: string }[]>("/characters"),
-  artists: () => request<{ id: number; name: string }[]>("/artists"),
+  artists: () => request<Artist[]>("/artists"),
+  createArtist: (body: ArtistCreate) =>
+    request<Artist>("/artists", { method: "POST", body: JSON.stringify(body) }),
+  updateArtist: (id: number, body: ArtistUpdate) =>
+    request<Artist>(`/artists/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteArtist: (id: number) => request<void>(`/artists/${id}`, { method: "DELETE" }),
 };

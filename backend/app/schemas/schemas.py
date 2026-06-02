@@ -37,6 +37,35 @@ class ArtistOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     name: str
+    info_xml: str | None = None
+
+
+class ArtistCreate(BaseModel):
+    name: str
+    info_xml: str | None = None
+
+    @field_validator("name")
+    @classmethod
+    def name_must_not_be_empty(cls, name: str) -> str:
+        name = name.strip()
+        if not name:
+            raise ValueError("name must not be empty")
+        return name
+
+
+class ArtistUpdate(BaseModel):
+    name: str | None = None
+    info_xml: str | None = None
+
+    @field_validator("name")
+    @classmethod
+    def name_must_not_be_empty(cls, name: str | None) -> str | None:
+        if name is None:
+            return None
+        name = name.strip()
+        if not name:
+            raise ValueError("name must not be empty")
+        return name
 
 
 # ---------------------------------------------------------------- files / nodes
@@ -54,6 +83,10 @@ class FileOut(BaseModel):
     effective_visibility: Visibility | None = None
     url: str
     is_cover: bool = False
+
+
+class FileMove(BaseModel):
+    node_id: int
 
 
 class NodeOut(BaseModel):

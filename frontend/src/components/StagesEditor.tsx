@@ -1,22 +1,17 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { api } from "../api/client";
 import type { CommissionDetail, CommissionFile, CommissionNode } from "../api/types";
-import { Cover } from "./Cover";
+import { FocalPointModal } from "./FocalPointModal";
+import { LifecycleStagesList } from "./LifecycleStagesList";
 
-interface FileHandlers {
-  coverFileId: number | null;
-  busy: boolean;
-  onDeleteFile: (f: CommissionFile) => void;
-  onSetCover: (f: CommissionFile) => void;
-}
-
-/** Edit-mode panel for managing a commission's lifecycle stages, files, and cover. */
+/** Edit-mode panel for managing lifecycle stages, files, cover, and focal points. */
 export function StagesEditor({ commissionId }: { commissionId: number }) {
   const [detail, setDetail] = useState<CommissionDetail | null>(null);
   const [newStage, setNewStage] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [focalFile, setFocalFile] = useState<CommissionFile | null>(null);
 
   const reload = useCallback(async () => {
     try {
@@ -49,6 +44,8 @@ export function StagesEditor({ commissionId }: { commissionId: number }) {
 
   const regular = detail.nodes.filter((n) => !n.is_detached);
   const detached = detail.nodes.find((n) => n.is_detached);
+  const displayNodes = detached ? [...regular, detached] : regular;
+  const moveTargets = displayNodes;
 
   function addStage() {
     if (!newStage.trim()) return;
@@ -70,11 +67,11 @@ export function StagesEditor({ commissionId }: { commissionId: number }) {
     void run(() => api.deleteNode(node.id));
   }
 
-  function move(index: number, dir: -1 | 1) {
+  function moveStage(index: number, dir: -1 | 1) {
     const ids = regular.map((n) => n.id);
-    const j = index + dir;
-    if (j < 0 || j >= ids.length) return;
-    [ids[index], ids[j]] = [ids[j], ids[index]];
+    const target = index + dir;
+    if (target < 0 || target >= ids.length) return;
+    [ids[index], ids[target]] = [ids[target], ids[index]];
     void run(() => api.reorderNodes(commissionId, ids));
   }
 
@@ -86,57 +83,75 @@ export function StagesEditor({ commissionId }: { commissionId: number }) {
     });
   }
 
-  const fh: FileHandlers = {
-    coverFileId: detail.cover?.file_id ?? null,
-    busy,
-    onDeleteFile: (f) => {
-      if (window.confirm(`Delete file “${f.label || f.format}”?`)) {
-        void run(() => api.deleteFile(f.id));
-      }
-    },
-    onSetCover: (f) => void run(() => api.updateCommission(commissionId, { cover_file_id: f.id })),
-  };
+  function moveFile(file: CommissionFile, targetNodeId: number) {
+    if (file.node_id === targetNodeId) return;
+    void run(() => api.moveFile(file.id, targetNodeId));
+  }
+
+  function saveFocal(x: number, y: number) {
+    if (!focalFile) return;
+    void run(async () => {
+      await api.setFocal(focalFile.id, x, y);
+      setFocalFile(null);
+    });
+  }
 
   return (
     <section style={{ marginTop: 28 }}>
       <h2 style={{ fontSize: 18, margin: "0 0 4px" }}>Stages &amp; files</h2>
       <div className="mono-sm muted" style={{ marginBottom: 12 }}>
-        Lifecycle stages in order. Upload files per stage; set any image as the cover. Deleting a
-        stage moves its files to the Detached holding area.
+        Lifecycle stages in order. Upload per stage, drag files between stages, set covers, and
+        adjust image focal points. Deleted-stage files move to Detached.
       </div>
 
-      {regular.map((node, i) => (
-        <StageRow
-          key={node.id}
-          node={node}
-          isFirst={i === 0}
-          isLast={i === regular.length - 1}
-          fh={fh}
-          onUp={() => move(i, -1)}
-          onDown={() => move(i, 1)}
-          onRename={() => rename(node)}
-          onDelete={() => remove(node)}
-          onUpload={(files) => upload(node, files)}
-        />
-      ))}
-
-      {detached && detached.files.length > 0 && (
-        <div
-          style={{
-            border: "1px dashed var(--warn)",
-            borderRadius: 8,
-            padding: "10px 14px",
-            marginBottom: 10,
-            background: "rgba(182,85,42,0.05)",
-          }}
-        >
-          <div className="row" style={{ marginBottom: 8 }}>
-            <strong>{detached.name}</strong>
-            <span className="mono-sm muted">uncategorized · cannot be edited or deleted</span>
-          </div>
-          <FileGrid node={detached} fh={fh} />
-        </div>
-      )}
+      <LifecycleStagesList
+        nodes={displayNodes}
+        currentStage={detail.current_stage}
+        coverFileId={detail.cover?.file_id ?? null}
+        busy={busy}
+        moveTargets={moveTargets}
+        onMoveFile={moveFile}
+        onUpload={upload}
+        onSetCover={(file) => void run(() => api.updateCommission(commissionId, { cover_file_id: file.id }))}
+        onDeleteFile={(file) => {
+          if (window.confirm(`Delete file “${file.label || file.format}”?`)) {
+            void run(() => api.deleteFile(file.id));
+          }
+        }}
+        onEditFocal={setFocalFile}
+        renderStageActions={(node) => {
+          if (node.is_detached) return null;
+          const index = regular.findIndex((item) => item.id === node.id);
+          return (
+            <>
+              <button
+                type="button"
+                className="btn sm"
+                onClick={() => moveStage(index, -1)}
+                disabled={busy || index <= 0}
+                title="Move up"
+              >
+                ↑
+              </button>
+              <button
+                type="button"
+                className="btn sm"
+                onClick={() => moveStage(index, 1)}
+                disabled={busy || index === regular.length - 1}
+                title="Move down"
+              >
+                ↓
+              </button>
+              <button type="button" className="btn sm" onClick={() => rename(node)} disabled={busy}>
+                Rename
+              </button>
+              <button type="button" className="btn sm danger" onClick={() => remove(node)} disabled={busy}>
+                Delete
+              </button>
+            </>
+          );
+        }}
+      />
 
       <div className="row gap-8" style={{ marginTop: 8 }}>
         <input
@@ -153,121 +168,14 @@ export function StagesEditor({ commissionId }: { commissionId: number }) {
       </div>
 
       {error && <div className="error-text" style={{ marginTop: 10 }}>{error}</div>}
-    </section>
-  );
-}
-
-function StageRow({
-  node,
-  isFirst,
-  isLast,
-  fh,
-  onUp,
-  onDown,
-  onRename,
-  onDelete,
-  onUpload,
-}: {
-  node: CommissionNode;
-  isFirst: boolean;
-  isLast: boolean;
-  fh: FileHandlers;
-  onUp: () => void;
-  onDown: () => void;
-  onRename: () => void;
-  onDelete: () => void;
-  onUpload: (files: FileList) => void;
-}) {
-  const fileInput = useRef<HTMLInputElement>(null);
-  return (
-    <div
-      style={{
-        border: "1px solid var(--rule)",
-        borderRadius: 8,
-        padding: "10px 14px",
-        marginBottom: 10,
-        background: "var(--paper)",
-      }}
-    >
-      <div className="row" style={{ marginBottom: node.files.length ? 10 : 0 }}>
-        <strong>{node.name}</strong>
-        <span className="mono-sm muted">{node.files.length} files</span>
-        <span className="spacer" />
-        <button type="button" className="btn sm" onClick={onUp} disabled={fh.busy || isFirst} title="Move up">
-          ↑
-        </button>
-        <button type="button" className="btn sm" onClick={onDown} disabled={fh.busy || isLast} title="Move down">
-          ↓
-        </button>
-        <button type="button" className="btn sm" onClick={() => fileInput.current?.click()} disabled={fh.busy}>
-          ⤓ Upload
-        </button>
-        <button type="button" className="btn sm" onClick={onRename} disabled={fh.busy}>
-          Rename
-        </button>
-        <button type="button" className="btn sm danger" onClick={onDelete} disabled={fh.busy}>
-          Delete
-        </button>
-        <input
-          ref={fileInput}
-          type="file"
-          multiple
-          hidden
-          onChange={(e) => {
-            if (e.target.files?.length) onUpload(e.target.files);
-            e.target.value = "";
-          }}
+      {focalFile && (
+        <FocalPointModal
+          file={focalFile}
+          busy={busy}
+          onSave={saveFocal}
+          onClose={() => setFocalFile(null)}
         />
-      </div>
-      <FileGrid node={node} fh={fh} />
-    </div>
-  );
-}
-
-function FileGrid({ node, fh }: { node: CommissionNode; fh: FileHandlers }) {
-  if (node.files.length === 0) return null;
-  return (
-    <div className="row wrap gap-8">
-      {node.files.map((f) => {
-        const isCover = f.id === fh.coverFileId;
-        return (
-          <div key={f.id} style={{ width: 96 }}>
-            <div style={{ outline: isCover ? "2px solid var(--accent)" : "none", outlineOffset: 2, borderRadius: 4 }}>
-              {f.is_image ? (
-                <Cover
-                  cover={{
-                    file_id: f.id,
-                    url: f.url,
-                    width: f.width,
-                    height: f.height,
-                    focal_x: f.focal_x,
-                    focal_y: f.focal_y,
-                  }}
-                  ratio={1}
-                />
-              ) : (
-                <div className="imgph" style={{ aspectRatio: "1" }}>
-                  {f.format}
-                </div>
-              )}
-            </div>
-            <div className="mono-sm" style={{ fontSize: 9, marginTop: 2, textAlign: "center", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {f.label || f.format}
-            </div>
-            <div className="row gap-4" style={{ justifyContent: "center", marginTop: 2 }}>
-              {f.is_image && !isCover && (
-                <button type="button" className="btn sm ghost" onClick={() => fh.onSetCover(f)} disabled={fh.busy} title="Set as cover">
-                  ★
-                </button>
-              )}
-              {isCover && <span className="mono-sm" style={{ color: "var(--accent)" }}>cover</span>}
-              <button type="button" className="btn sm danger" onClick={() => fh.onDeleteFile(f)} disabled={fh.busy} title="Delete file">
-                ✕
-              </button>
-            </div>
-          </div>
-        );
-      })}
-    </div>
+      )}
+    </section>
   );
 }
