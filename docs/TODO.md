@@ -62,10 +62,15 @@
   proxies `/api`; verified `X-Total-Count` through the proxy)
 
 ## Phase 2 — Breadth (deferred)
-- [ ] Settings (admin): API keys UI, webhooks, storage config
-- [ ] Visibility/privacy: global preset -> per-commission -> per-stage -> per-file precedence
-  (includes making `/images?visibility=` honor real per-file/stage visibility; currently a stub
-  that always returns public displayable images in stage order)
+- [x] Backend settings/admin surface:
+  - [x] Visibility preset settings + stage defaults
+  - [x] Webhook endpoint config CRUD (delivery worker remains below)
+  - [x] Storage config summary endpoint (env-driven, read-only)
+- [ ] Settings (admin): frontend UI for API keys, webhooks, storage config
+- [x] Backend visibility/privacy: global preset -> per-commission -> per-stage -> per-file
+  precedence, public metadata redaction, raw-file privacy, and `/images?visibility=` filtering
+- [ ] Visibility/privacy: frontend controls for global defaults and per-commission/stage/file
+  overrides
 - [ ] Lifecycle: shared component, drag-and-drop files between stages, detached-node handling
 - [ ] Character pages: shareable profile, main ref, curated image "bookshelves" + picker
 - [ ] Artist management: multi-platform handles, paste-to-match, no-match resolve dialog
@@ -88,8 +93,10 @@
   currently stores categories and tags.
 - Each commission has exactly one system-managed **detached node** (`is_detached=true`), auto-created; deleting a node reparents its files to detached.
 - `cover_file_id` must point to a `commission_files` row with `is_image=true`; deleting that file clears the explicit cover so fallback cover selection can run.
-- Detail page shows public displayable images in **timeline (stage) order**, ignoring detached.
-- API copy-JSON must include internal id + endpoint URLs, never API credentials.
+- Public image listing shows displayable images in **timeline (stage) order**, ignoring detached,
+  and filters by effective file visibility.
+- API copy-JSON requires edit access and must include internal id + endpoint URLs, never API
+  credentials.
 - **Compose projects are isolated by explicit name:** both compose files live in `deploy/`, so
   without explicit names they'd share the directory-derived project name and the same `postgres`
   service — bringing up the full stack would recreate the dev container `cmgr-postgres-dev`. Fixed
