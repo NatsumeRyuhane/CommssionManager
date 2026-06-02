@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { api } from "../api/client";
 import type { CommissionCreate, Rating } from "../api/types";
@@ -149,6 +149,11 @@ export function EditPage() {
           <button type="button" className="btn ghost" onClick={() => navigate(-1)}>
             Cancel
           </button>
+          {isEdit && id && (
+            <Link to={`/commissions/${id}/visibility`} className="btn">
+              Visibility
+            </Link>
+          )}
           <button
             type="button"
             className="btn"

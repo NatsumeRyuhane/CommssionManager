@@ -56,6 +56,11 @@ export function DetailPage() {
       <TopBar>
         {canWrite && <CopyJsonButton id={data.id} />}
         {canWrite && (
+          <Link to={`/commissions/${data.id}/visibility`} className="btn sm">
+            Visibility
+          </Link>
+        )}
+        {canWrite && (
           <Link to={`/commissions/${data.id}/edit`} className="btn sm primary">
             ✎ Edit
           </Link>
