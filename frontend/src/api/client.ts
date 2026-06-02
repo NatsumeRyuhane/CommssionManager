@@ -99,6 +99,9 @@ export const api = {
     request<CommissionListItem[]>(`/commissions${toQuery(params)}`),
   listCommissionsPaged: (params: ListParams = {}) =>
     requestPaged(`/commissions${toQuery(params)}`),
+  databaseExportUrl: () => `${BASE}/exports/database.json`,
+  filesExportUrl: (commissionId?: number) =>
+    `${BASE}/exports/files.zip${commissionId ? `?commission_id=${commissionId}` : ""}`,
   getCommission: (id: number) => request<CommissionDetail>(`/commissions/${id}`),
   createCommission: (body: CommissionCreate) =>
     request<CommissionDetail>("/commissions", { method: "POST", body: JSON.stringify(body) }),

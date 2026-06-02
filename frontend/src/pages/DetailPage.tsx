@@ -62,6 +62,11 @@ export function DetailPage() {
           </Link>
         )}
         {canWrite && (
+          <a className="btn sm" href={api.filesExportUrl(data.id)} download>
+            Export zip
+          </a>
+        )}
+        {canWrite && (
           <Link to={`/commissions/${data.id}/edit`} className="btn sm primary">
             ✎ Edit
           </Link>
