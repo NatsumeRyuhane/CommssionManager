@@ -3,9 +3,9 @@ from __future__ import annotations
 from datetime import date, datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.models import LabelType, Rating
+from app.models import LabelType, Rating, Visibility, VisibilityPreset, WebhookEvent
 
 
 # ---------------------------------------------------------------- auth
@@ -50,6 +50,8 @@ class FileOut(BaseModel):
     height: int | None = None
     focal_x: float | None = None
     focal_y: float | None = None
+    visibility: Visibility | None = None
+    effective_visibility: Visibility | None = None
     url: str
     is_cover: bool = False
 
@@ -60,6 +62,8 @@ class NodeOut(BaseModel):
     position: int | None = None
     started_at: datetime | None = None
     is_detached: bool
+    visibility: Visibility | None = None
+    effective_visibility: Visibility | None = None
     files: list[FileOut] = []
 
 
@@ -90,6 +94,8 @@ class CommissionListItem(BaseModel):
     title: str
     rating: Rating
     completed_at: date | None = None
+    visibility: Visibility | None = None
+    effective_visibility: Visibility | None = None
     categories: list[str] = []
     tags: list[str] = []
     characters: list[str] = []
@@ -118,6 +124,7 @@ class CommissionCreate(BaseModel):
     confirmed_at: datetime | None = None
     price_amount: Decimal | None = None
     price_currency: str | None = None
+    visibility_override: Visibility | None = None
     category_names: list[str] = []
     tag_names: list[str] = []
     character_names: list[str] = []
@@ -134,6 +141,7 @@ class CommissionUpdate(BaseModel):
     price_amount: Decimal | None = None
     price_currency: str | None = None
     cover_file_id: int | None = None
+    visibility_override: Visibility | None = None
     category_names: list[str] | None = None
     tag_names: list[str] | None = None
     character_names: list[str] | None = None
@@ -177,3 +185,140 @@ class ApiKeyOut(BaseModel):
 
 class ApiKeyCreated(ApiKeyOut):
     full_key: str
+
+
+# ---------------------------------------------------------------- settings / visibility
+class VisibilityFieldDefaults(BaseModel):
+    title: bool
+    description: bool
+    labels: bool
+    rating: bool
+    characters: bool
+    artists: bool
+    completed_at: bool
+    confirmed_at: bool
+    price: bool
+
+
+class VisibilityFieldDefaultsPatch(BaseModel):
+    title: bool | None = None
+    description: bool | None = None
+    labels: bool | None = None
+    rating: bool | None = None
+    characters: bool | None = None
+    artists: bool | None = None
+    completed_at: bool | None = None
+    confirmed_at: bool | None = None
+    price: bool | None = None
+
+
+class VisibilityStageDefaultIn(BaseModel):
+    stage_name: str
+    visibility: Visibility
+    position: int = 0
+    note: str | None = None
+
+
+class VisibilityStageDefaultOut(VisibilityStageDefaultIn):
+    id: int
+
+
+class VisibilitySettingsOut(BaseModel):
+    preset: VisibilityPreset
+    default_commission_visibility: Visibility
+    default_stage_visibility: Visibility
+    fields: VisibilityFieldDefaults
+    stage_defaults: list[VisibilityStageDefaultOut]
+    updated_at: datetime | None = None
+
+
+class VisibilitySettingsUpdate(BaseModel):
+    preset: VisibilityPreset | None = None
+    default_commission_visibility: Visibility | None = None
+    default_stage_visibility: Visibility | None = None
+    fields: VisibilityFieldDefaultsPatch | None = None
+    stage_defaults: list[VisibilityStageDefaultIn] | None = None
+
+
+class VisibilityFieldState(BaseModel):
+    field: str
+    public: bool | None = None
+    effective_public: bool
+
+
+class FileVisibilityState(BaseModel):
+    id: int
+    label: str | None = None
+    format: str
+    is_image: bool
+    visibility: Visibility | None = None
+    effective_visibility: Visibility
+
+
+class NodeVisibilityState(BaseModel):
+    id: int
+    name: str
+    is_detached: bool
+    visibility: Visibility | None = None
+    effective_visibility: Visibility
+    files: list[FileVisibilityState]
+
+
+class CommissionVisibilityOut(BaseModel):
+    commission_id: int
+    visibility: Visibility | None = None
+    effective_visibility: Visibility
+    fields: list[VisibilityFieldState]
+    nodes: list[NodeVisibilityState]
+
+
+class CommissionVisibilityUpdate(BaseModel):
+    visibility: Visibility | None = None
+    fields: VisibilityFieldDefaultsPatch | None = None
+    nodes: dict[int, Visibility | None] | None = None
+    files: dict[int, Visibility | None] | None = None
+
+
+class StorageSettingsOut(BaseModel):
+    backend: str
+    local_root: str | None = None
+    configurable_via: str = "environment"
+
+
+class WebhookCreate(BaseModel):
+    url: str
+    events: list[WebhookEvent]
+    is_enabled: bool = True
+
+    @field_validator("events")
+    @classmethod
+    def events_must_not_be_empty(cls, events: list[WebhookEvent]) -> list[WebhookEvent]:
+        if not events:
+            raise ValueError("at least one webhook event is required")
+        return events
+
+
+class WebhookUpdate(BaseModel):
+    url: str | None = None
+    events: list[WebhookEvent] | None = None
+    is_enabled: bool | None = None
+
+    @field_validator("events")
+    @classmethod
+    def events_must_not_be_empty(cls, events: list[WebhookEvent] | None) -> list[WebhookEvent] | None:
+        if events == []:
+            raise ValueError("at least one webhook event is required")
+        return events
+
+
+class WebhookOut(BaseModel):
+    id: int
+    url: str
+    events: list[WebhookEvent]
+    is_enabled: bool
+    status: str
+    created_at: datetime
+    updated_at: datetime
+    last_delivery_at: datetime | None = None
+    last_status_code: int | None = None
+    last_error: str | None = None

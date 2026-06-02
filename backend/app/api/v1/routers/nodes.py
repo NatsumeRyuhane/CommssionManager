@@ -38,8 +38,12 @@ def _node_or_404(db: Session, node_id: int) -> CommissionNode:
 @router.get("/commissions/{commission_id}/nodes", response_model=list[NodeOut])
 def list_nodes(commission_id: int, db: Session = Depends(get_db)):
     commission = _commission_or_404(db, commission_id)
+    visibility_context = crud.load_visibility_context(db)
     detached = [n for n in commission.nodes if n.is_detached]
-    return [crud.node_out(n) for n in detached + crud.ordered_nodes(commission)]
+    return [
+        crud.node_out(n, visibility_context=visibility_context)
+        for n in detached + crud.ordered_nodes(commission)
+    ]
 
 
 @router.post(
@@ -58,11 +62,14 @@ def create_node(
         name=body.name,
         position=(max(positions) + 1) if positions else 0,
         started_at=datetime.now(timezone.utc),
+        visibility_override=crud.default_stage_visibility(
+            body.name, crud.load_visibility_context(db)
+        ),
     )
     db.add(node)
     db.commit()
     db.refresh(node)
-    return crud.node_out(node)
+    return crud.node_out(node, visibility_context=crud.load_visibility_context(db))
 
 
 @router.patch("/nodes/{node_id}", response_model=NodeOut)
@@ -78,7 +85,7 @@ def rename_node(
     node.name = body.name
     db.commit()
     db.refresh(node)
-    return crud.node_out(node)
+    return crud.node_out(node, visibility_context=crud.load_visibility_context(db))
 
 
 @router.post("/commissions/{commission_id}/nodes/reorder", response_model=list[NodeOut])
@@ -102,7 +109,8 @@ def reorder_nodes(
     for i, nid in enumerate(body.node_ids):
         regular[nid].position = i
     db.commit()
-    return [crud.node_out(regular[nid]) for nid in body.node_ids]
+    visibility_context = crud.load_visibility_context(db)
+    return [crud.node_out(regular[nid], visibility_context=visibility_context) for nid in body.node_ids]
 
 
 @router.delete("/nodes/{node_id}", status_code=status.HTTP_204_NO_CONTENT)
