@@ -1,0 +1,542 @@
+import { useEffect, useMemo, useState } from "react";
+
+import { api } from "../api/client";
+import type {
+  ApiKey,
+  StorageSettings,
+  Visibility,
+  VisibilityFieldKey,
+  VisibilityPreset,
+  VisibilitySettings,
+} from "../api/types";
+import { Chip } from "../components/Chip";
+import { ToggleSwitch } from "../components/ToggleSwitch";
+import { TopBar } from "../components/TopBar";
+import { useAuth } from "../hooks/useAuth";
+
+type Tab = "api" | "visibility" | "storage";
+
+const FIELD_ROWS: { key: VisibilityFieldKey; label: string; note?: string }[] = [
+  { key: "title", label: "Title" },
+  { key: "description", label: "Description" },
+  { key: "labels", label: "Categories & tags" },
+  { key: "rating", label: "Rating" },
+  { key: "characters", label: "Characters" },
+  { key: "artists", label: "Artists" },
+  { key: "completed_at", label: "Completed date" },
+  { key: "confirmed_at", label: "Confirmed at", note: "usually private" },
+  { key: "price", label: "Price", note: "usually private" },
+];
+
+const PRESETS: { value: VisibilityPreset; label: string; desc: string }[] = [
+  {
+    value: "public_by_default",
+    label: "Public by default",
+    desc: "New commissions appear publicly unless a narrower override is set.",
+  },
+  {
+    value: "private_by_default",
+    label: "Private by default",
+    desc: "New commissions stay hidden until explicitly released.",
+  },
+  {
+    value: "custom",
+    label: "Custom",
+    desc: "Use the field and stage defaults below as the source of truth.",
+  },
+];
+
+export function SettingsPage() {
+  const { me, loading: authLoading } = useAuth();
+  const [tab, setTab] = useState<Tab>("api");
+  const [keys, setKeys] = useState<ApiKey[]>([]);
+  const [visibility, setVisibility] = useState<VisibilitySettings | null>(null);
+  const [storage, setStorage] = useState<StorageSettings | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [createdKey, setCreatedKey] = useState<string | null>(null);
+
+  const isAdmin = me?.kind === "admin";
+
+  async function reload() {
+    if (!isAdmin) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const [nextKeys, nextVisibility, nextStorage] = await Promise.all([
+        api.listApiKeys(),
+        api.getVisibilitySettings(),
+        api.getStorageSettings(),
+      ]);
+      setKeys(nextKeys);
+      setVisibility(nextVisibility);
+      setStorage(nextStorage);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!authLoading) void reload();
+    // reload is intentionally not a dependency; it closes over the current auth state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoading, isAdmin]);
+
+  if (!authLoading && !isAdmin) {
+    return (
+      <div className="app">
+        <TopBar />
+        <div style={{ padding: 48, textAlign: "center" }} className="muted">
+          Settings require admin sign-in.
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="app">
+      <TopBar>
+        <span className="mono-sm muted">admin settings</span>
+      </TopBar>
+      <div className="settings-shell">
+        <aside className="settings-sidebar">
+          <button className={`settings-tab ${tab === "api" ? "active" : ""}`} onClick={() => setTab("api")}>
+            API keys
+          </button>
+          <button
+            className={`settings-tab ${tab === "visibility" ? "active" : ""}`}
+            onClick={() => setTab("visibility")}
+          >
+            Visibility
+          </button>
+          <button
+            className={`settings-tab ${tab === "storage" ? "active" : ""}`}
+            onClick={() => setTab("storage")}
+          >
+            Storage
+          </button>
+        </aside>
+
+        <main className="settings-content">
+          {loading && <div className="mono-sm muted">Loading settings…</div>}
+          {error && <div className="error-text">{error}</div>}
+          {!loading && !error && tab === "api" && (
+            <ApiKeysPanel
+              keys={keys}
+              createdKey={createdKey}
+              busy={saving}
+              onCreated={(fullKey, nextKeys) => {
+                setCreatedKey(fullKey);
+                setKeys(nextKeys);
+              }}
+              onCopyCreated={() => {
+                if (createdKey) void navigator.clipboard?.writeText(createdKey);
+              }}
+              onRevoke={async (key) => {
+                if (!confirm(`Revoke API key “${key.name}”? This cannot be undone.`)) return;
+                setSaving(true);
+                setError(null);
+                try {
+                  const revoked = await api.revokeApiKey(key.id);
+                  setKeys((rows) => rows.map((row) => (row.id === revoked.id ? revoked : row)));
+                } catch (e) {
+                  setError(String(e));
+                } finally {
+                  setSaving(false);
+                }
+              }}
+            />
+          )}
+          {!loading && !error && tab === "visibility" && visibility && (
+            <VisibilityPanel
+              value={visibility}
+              busy={saving}
+              onChange={setVisibility}
+              onSave={async () => {
+                setSaving(true);
+                setError(null);
+                try {
+                  const body = {
+                    preset: visibility.preset,
+                    default_commission_visibility: visibility.default_commission_visibility,
+                    default_stage_visibility: visibility.default_stage_visibility,
+                    fields: visibility.fields,
+                    stage_defaults: visibility.stage_defaults.map((row, index) => ({
+                      stage_name: row.stage_name,
+                      visibility: row.visibility,
+                      position: index,
+                      note: row.note || null,
+                    })),
+                  };
+                  setVisibility(await api.updateVisibilitySettings(body));
+                } catch (e) {
+                  setError(String(e));
+                } finally {
+                  setSaving(false);
+                }
+              }}
+            />
+          )}
+          {!loading && !error && tab === "storage" && storage && <StoragePanel storage={storage} />}
+        </main>
+      </div>
+    </div>
+  );
+}
+
+function ApiKeysPanel({
+  keys,
+  createdKey,
+  busy,
+  onCreated,
+  onCopyCreated,
+  onRevoke,
+}: {
+  keys: ApiKey[];
+  createdKey: string | null;
+  busy: boolean;
+  onCreated: (fullKey: string, keys: ApiKey[]) => void;
+  onCopyCreated: () => void;
+  onRevoke: (key: ApiKey) => void;
+}) {
+  const [name, setName] = useState("");
+  const [read, setRead] = useState(true);
+  const [write, setWrite] = useState(false);
+  const activeKeys = useMemo(() => keys.filter((key) => !key.revoked_at).length, [keys]);
+
+  async function create(e: React.FormEvent) {
+    e.preventDefault();
+    const scopes = [read && "read", write && "write"].filter(Boolean) as string[];
+    if (!name.trim() || scopes.length === 0) return;
+    const created = await api.createApiKey({ name: name.trim(), scopes });
+    onCreated(created.full_key, [created, ...keys]);
+    setName("");
+    setRead(true);
+    setWrite(false);
+  }
+
+  return (
+    <section>
+      <div className="settings-heading">
+        <div>
+          <h1>API keys</h1>
+          <div className="mono-sm muted">{activeKeys} active keys</div>
+        </div>
+      </div>
+
+      <form className="settings-panel" onSubmit={(e) => void create(e)}>
+        <div className="settings-panel-title">Generate key</div>
+        <div className="settings-form-grid">
+          <label>
+            <span className="label">Name</span>
+            <input
+              className="field"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="n8n automation"
+            />
+          </label>
+          <div>
+            <span className="label">Scopes</span>
+            <label className="check-row">
+              <input type="checkbox" checked={read} onChange={(e) => setRead(e.target.checked)} />
+              read
+            </label>
+            <label className="check-row">
+              <input type="checkbox" checked={write} onChange={(e) => setWrite(e.target.checked)} />
+              write
+            </label>
+          </div>
+          <div className="settings-form-actions">
+            <button className="btn primary" disabled={busy || !name.trim() || (!read && !write)}>
+              Generate
+            </button>
+          </div>
+        </div>
+      </form>
+
+      {createdKey && (
+        <div className="settings-notice">
+          <strong>New key</strong>
+          <code>{createdKey}</code>
+          <button className="btn sm" onClick={onCopyCreated}>
+            Copy
+          </button>
+        </div>
+      )}
+
+      <div className="settings-table-wrap">
+        <table className="settings-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Key</th>
+              <th>Scopes</th>
+              <th>Created</th>
+              <th>Last used</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {keys.length === 0 && (
+              <tr>
+                <td colSpan={6} className="muted">
+                  No API keys yet.
+                </td>
+              </tr>
+            )}
+            {keys.map((key) => {
+              const revoked = Boolean(key.revoked_at);
+              return (
+                <tr key={key.id} className={revoked ? "is-muted" : ""}>
+                  <td>{key.name}</td>
+                  <td className="mono-sm">{key.prefix}••••</td>
+                  <td>
+                    <div className="row gap-4 wrap">
+                      {key.scopes.split(/\s+/).map((scope) => (
+                        <Chip key={scope} kind="tag">
+                          {scope}
+                        </Chip>
+                      ))}
+                      {revoked && <Chip kind="rating">revoked</Chip>}
+                    </div>
+                  </td>
+                  <td className="mono-sm">{key.created_at.slice(0, 10)}</td>
+                  <td className="mono-sm">{key.last_used_at ? key.last_used_at.slice(0, 10) : "never"}</td>
+                  <td style={{ textAlign: "right" }}>
+                    <button
+                      className="btn sm danger"
+                      disabled={busy || revoked}
+                      onClick={() => onRevoke(key)}
+                    >
+                      Revoke
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function VisibilityPanel({
+  value,
+  busy,
+  onChange,
+  onSave,
+}: {
+  value: VisibilitySettings;
+  busy: boolean;
+  onChange: (next: VisibilitySettings) => void;
+  onSave: () => void;
+}) {
+  function setField(field: VisibilityFieldKey, next: boolean) {
+    onChange({ ...value, fields: { ...value.fields, [field]: next } });
+  }
+
+  function setStage(index: number, patch: Partial<{ stage_name: string; visibility: Visibility; note: string }>) {
+    const stage_defaults = value.stage_defaults.map((row, i) =>
+      i === index ? { ...row, ...patch } : row
+    );
+    onChange({ ...value, stage_defaults });
+  }
+
+  function moveStage(index: number, dir: -1 | 1) {
+    const next = [...value.stage_defaults];
+    const target = index + dir;
+    if (target < 0 || target >= next.length) return;
+    [next[index], next[target]] = [next[target], next[index]];
+    onChange({ ...value, stage_defaults: next });
+  }
+
+  return (
+    <section>
+      <div className="settings-heading">
+        <div>
+          <h1>Visibility</h1>
+          <div className="mono-sm muted">Global defaults; commission, stage, and file overrides win later.</div>
+        </div>
+        <button className="btn primary" disabled={busy} onClick={onSave}>
+          {busy ? "Saving…" : "Save presets"}
+        </button>
+      </div>
+
+      <div className="settings-panel">
+        <div className="settings-panel-title">Default preset</div>
+        <div className="preset-grid">
+          {PRESETS.map((preset) => (
+            <button
+              type="button"
+              key={preset.value}
+              className={`preset-option ${value.preset === preset.value ? "active" : ""}`}
+              onClick={() => onChange({ ...value, preset: preset.value })}
+            >
+              <span className="radio-dot" />
+              <strong>{preset.label}</strong>
+              <span>{preset.desc}</span>
+            </button>
+          ))}
+        </div>
+        <div className="settings-form-grid two">
+          <SelectVisibility
+            label="Default commission visibility"
+            value={value.default_commission_visibility}
+            onChange={(next) => onChange({ ...value, default_commission_visibility: next })}
+          />
+          <SelectVisibility
+            label="Default stage visibility"
+            value={value.default_stage_visibility}
+            onChange={(next) => onChange({ ...value, default_stage_visibility: next })}
+          />
+        </div>
+      </div>
+
+      <div className="settings-panel">
+        <div className="settings-panel-title">Field defaults</div>
+        <div className="settings-list">
+          {FIELD_ROWS.map((row) => (
+            <div className="settings-list-row" key={row.key}>
+              <div>
+                <strong>{row.label}</strong>
+                {row.note && <span className="mono-sm muted"> · {row.note}</span>}
+              </div>
+              <ToggleSwitch
+                checked={value.fields[row.key]}
+                onChange={(next) => setField(row.key, next)}
+                label={`${row.label} public`}
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="settings-panel">
+        <div className="row" style={{ justifyContent: "space-between", marginBottom: 10 }}>
+          <div className="settings-panel-title" style={{ margin: 0 }}>
+            Stage defaults
+          </div>
+          <button
+            className="btn sm"
+            onClick={() =>
+              onChange({
+                ...value,
+                stage_defaults: [
+                  ...value.stage_defaults,
+                  { stage_name: "", visibility: value.default_stage_visibility, position: value.stage_defaults.length, note: "" },
+                ],
+              })
+            }
+          >
+            + Add stage
+          </button>
+        </div>
+        <div className="stage-default-list">
+          {value.stage_defaults.map((stage, index) => (
+            <div className="stage-default-row" key={`${stage.id ?? "new"}-${index}`}>
+              <input
+                className="field"
+                value={stage.stage_name}
+                onChange={(e) => setStage(index, { stage_name: e.target.value })}
+                placeholder="Delivered"
+              />
+              <select
+                className="field"
+                value={stage.visibility}
+                onChange={(e) => setStage(index, { visibility: e.target.value as Visibility })}
+              >
+                <option value="public">Public</option>
+                <option value="private">Private</option>
+              </select>
+              <input
+                className="field"
+                value={stage.note ?? ""}
+                onChange={(e) => setStage(index, { note: e.target.value })}
+                placeholder="note"
+              />
+              <button className="btn sm" disabled={index === 0} onClick={() => moveStage(index, -1)}>
+                ↑
+              </button>
+              <button
+                className="btn sm"
+                disabled={index === value.stage_defaults.length - 1}
+                onClick={() => moveStage(index, 1)}
+              >
+                ↓
+              </button>
+              <button
+                className="btn sm danger"
+                onClick={() =>
+                  onChange({
+                    ...value,
+                    stage_defaults: value.stage_defaults.filter((_, i) => i !== index),
+                  })
+                }
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="settings-note">
+        <strong>Precedence:</strong> global preset → commission override → stage override → file override.
+      </div>
+    </section>
+  );
+}
+
+function SelectVisibility({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: Visibility;
+  onChange: (value: Visibility) => void;
+}) {
+  return (
+    <label>
+      <span className="label">{label}</span>
+      <select className="field" value={value} onChange={(e) => onChange(e.target.value as Visibility)}>
+        <option value="public">Public</option>
+        <option value="private">Private</option>
+      </select>
+    </label>
+  );
+}
+
+function StoragePanel({ storage }: { storage: StorageSettings }) {
+  return (
+    <section>
+      <div className="settings-heading">
+        <div>
+          <h1>Storage</h1>
+          <div className="mono-sm muted">Read-only summary from environment configuration.</div>
+        </div>
+      </div>
+      <div className="settings-panel storage-summary">
+        <div>
+          <span className="label">Backend</span>
+          <strong>{storage.backend}</strong>
+        </div>
+        <div>
+          <span className="label">Configurable via</span>
+          <strong>{storage.configurable_via}</strong>
+        </div>
+        {storage.local_root && (
+          <div>
+            <span className="label">Local root</span>
+            <code>{storage.local_root}</code>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}

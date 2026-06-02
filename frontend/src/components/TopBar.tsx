@@ -19,6 +19,11 @@ export function TopBar({ children }: { children?: ReactNode }) {
       {canWrite ? (
         <>
           <span className="mono-sm muted">🔓 {me?.kind === "admin" ? "admin" : me?.label}</span>
+          {me?.kind === "admin" && (
+            <Link to="/settings" className="btn sm">
+              Settings
+            </Link>
+          )}
           <button className="btn sm" onClick={() => void logout()}>
             Sign out
           </button>
