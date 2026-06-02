@@ -48,6 +48,11 @@ def test_public_images_are_regular_images_in_stage_order(admin_client: TestClien
         json={"cover_file_id": delivered_image["id"]},
     )
     assert set_cover.status_code == 200
+    show_sketch = admin_client.patch(
+        f"/api/v1/commissions/{commission['id']}/visibility",
+        json={"files": {sketch_image["id"]: "public"}},
+    )
+    assert show_sketch.status_code == 200
     assert admin_client.delete(f"/api/v1/nodes/{color['id']}").status_code == 204
 
     images = admin_client.get(f"/api/v1/commissions/{commission['id']}/images").json()

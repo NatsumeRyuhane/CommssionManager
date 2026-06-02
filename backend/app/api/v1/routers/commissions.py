@@ -7,14 +7,16 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.v1 import crud
-from app.auth.deps import Principal, require_edit
+from app.auth.deps import Principal, get_principal, require_edit
 from app.db import get_db
-from app.models import Commission
+from app.models import Commission, Visibility
 from app.schemas import (
     CommissionCreate,
     CommissionDetail,
     CommissionListItem,
     CommissionUpdate,
+    CommissionVisibilityOut,
+    CommissionVisibilityUpdate,
     CopyJsonOut,
     FileOut,
 )
@@ -50,10 +52,27 @@ def _get_one(db: Session, commission_id: int) -> Commission:
     return commission
 
 
+def _can_view_private(principal: Principal | None) -> bool:
+    return principal is not None and principal.can_write
+
+
+def _assert_commission_visible(
+    commission: Commission,
+    visibility_context: crud.VisibilityContext,
+    principal: Principal | None,
+) -> None:
+    if (
+        crud.effective_commission_visibility(commission, visibility_context) != Visibility.public
+        and not _can_view_private(principal)
+    ):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Commission not found")
+
+
 @router.get("", response_model=list[CommissionListItem])
 def list_commissions(
     response: Response,
     db: Session = Depends(get_db),
+    principal: Principal | None = Depends(get_principal),
     q: str | None = None,
     search_in: str = "title,description",
     categories: list[str] = Query(default=[]),
@@ -72,6 +91,7 @@ def list_commissions(
     offset: int = Query(default=0, ge=0),
 ):
     items = _load_all(db)
+    visibility_context = crud.load_visibility_context(db)
     fields = {s.strip() for s in search_in.split(",") if s.strip()}
 
     def keep(c: Commission) -> bool:
@@ -111,6 +131,12 @@ def list_commissions(
         return True
 
     filtered = [c for c in items if keep(c)]
+    if not _can_view_private(principal):
+        filtered = [
+            c
+            for c in filtered
+            if crud.effective_commission_visibility(c, visibility_context) == Visibility.public
+        ]
 
     def sort_key(c: Commission):
         meta = c.meta
@@ -121,7 +147,10 @@ def list_commissions(
     filtered.sort(key=sort_key, reverse=(order == "desc"))
     response.headers["X-Total-Count"] = str(len(filtered))
     page = filtered[offset : offset + limit]
-    return [crud.serialize_list_item(c) for c in page]
+    return [
+        crud.serialize_list_item(c, visibility_context, include_private=_can_view_private(principal))
+        for c in page
+    ]
 
 
 @router.post("", response_model=CommissionDetail, status_code=status.HTTP_201_CREATED)
@@ -131,12 +160,23 @@ def create_commission(
     _: Principal = Depends(require_edit),
 ):
     commission = crud.create_commission(db, body)
-    return crud.serialize_detail(commission)
+    return crud.serialize_detail(
+        commission, crud.load_visibility_context(db), include_private=True
+    )
 
 
 @router.get("/{commission_id}", response_model=CommissionDetail)
-def get_commission(commission_id: int, db: Session = Depends(get_db)):
-    return crud.serialize_detail(_get_one(db, commission_id))
+def get_commission(
+    commission_id: int,
+    db: Session = Depends(get_db),
+    principal: Principal | None = Depends(get_principal),
+):
+    commission = _get_one(db, commission_id)
+    visibility_context = crud.load_visibility_context(db)
+    _assert_commission_visible(commission, visibility_context, principal)
+    return crud.serialize_detail(
+        commission, visibility_context, include_private=_can_view_private(principal)
+    )
 
 
 @router.patch("/{commission_id}", response_model=CommissionDetail)
@@ -154,7 +194,11 @@ def update_commission(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="cover_file_id must reference an image file belonging to this commission",
             )
-    return crud.serialize_detail(crud.update_commission(db, commission, body))
+    return crud.serialize_detail(
+        crud.update_commission(db, commission, body),
+        crud.load_visibility_context(db),
+        include_private=True,
+    )
 
 
 @router.delete("/{commission_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -173,30 +217,107 @@ def delete_commission(
 
 
 @router.get("/{commission_id}/copy-json", response_model=CopyJsonOut)
-def copy_json(commission_id: int, db: Session = Depends(get_db)):
+def copy_json(
+    commission_id: int,
+    db: Session = Depends(get_db),
+    _: Principal = Depends(require_edit),
+):
     """Agent-friendly payload: internal id + endpoint URLs, never API credentials."""
     return crud.serialize_copy_json(_get_one(db, commission_id))
 
 
 @router.get("/{commission_id}/files", response_model=list[FileOut])
-def commission_files(commission_id: int, db: Session = Depends(get_db)):
+def commission_files(
+    commission_id: int,
+    db: Session = Depends(get_db),
+    _: Principal = Depends(require_edit),
+):
     commission = _get_one(db, commission_id)
     cover_id = commission.meta.cover_file_id if commission.meta else None
-    return [crud.file_out(f, cover_id) for n in commission.nodes for f in n.files]
+    visibility_context = crud.load_visibility_context(db)
+    return [
+        crud.file_out(f, cover_id, visibility_context)
+        for n in commission.nodes
+        for f in n.files
+    ]
 
 
 @router.get("/{commission_id}/images", response_model=list[FileOut])
 def commission_images(
     commission_id: int,
-    visibility: str = "public",  # placeholder; per-file visibility lands in Phase 2
+    visibility: Visibility = Visibility.public,
     db: Session = Depends(get_db),
+    principal: Principal | None = Depends(get_principal),
 ):
+    if visibility != Visibility.public and (principal is None or not principal.can_write):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Private images require admin login or a write-scoped API key.",
+        )
     commission = _get_one(db, commission_id)
     cover_id = commission.meta.cover_file_id if commission.meta else None
-    # public images in timeline (stage) order, ignoring the detached node
+    visibility_context = crud.load_visibility_context(db)
+    if visibility == Visibility.public:
+        _assert_commission_visible(commission, visibility_context, principal)
     out = []
     for n in crud.ordered_nodes(commission):
         for f in n.files:
-            if f.is_image:
-                out.append(crud.file_out(f, cover_id))
+            if f.is_image and crud.effective_file_visibility(f, visibility_context) == visibility:
+                out.append(crud.file_out(f, cover_id, visibility_context))
     return out
+
+
+@router.get("/{commission_id}/visibility", response_model=CommissionVisibilityOut)
+def get_commission_visibility(
+    commission_id: int,
+    db: Session = Depends(get_db),
+    _: Principal = Depends(require_edit),
+):
+    commission = _get_one(db, commission_id)
+    return crud.serialize_commission_visibility(
+        commission, crud.load_visibility_context(db)
+    )
+
+
+@router.patch("/{commission_id}/visibility", response_model=CommissionVisibilityOut)
+def update_commission_visibility(
+    commission_id: int,
+    body: CommissionVisibilityUpdate,
+    db: Session = Depends(get_db),
+    _: Principal = Depends(require_edit),
+):
+    commission = _get_one(db, commission_id)
+    if "visibility" in body.model_fields_set and commission.meta is not None:
+        commission.meta.visibility_override = body.visibility
+    if body.fields is not None and commission.meta is not None:
+        for field, value in body.fields.model_dump(exclude_unset=True).items():
+            setattr(commission.meta, crud.FIELD_OVERRIDE_ATTRS[field], value)
+
+    nodes_by_id = {node.id: node for node in commission.nodes}
+    files_by_id = {
+        file.id: file for node in commission.nodes for file in node.files
+    }
+    if body.nodes is not None:
+        missing = set(body.nodes) - set(nodes_by_id)
+        if missing:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="nodes contains ids outside this commission",
+            )
+        for node_id, visibility in body.nodes.items():
+            nodes_by_id[node_id].visibility_override = visibility
+    if body.files is not None:
+        missing = set(body.files) - set(files_by_id)
+        if missing:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="files contains ids outside this commission",
+            )
+        for file_id, visibility in body.files.items():
+            files_by_id[file_id].visibility_override = visibility
+
+    db.commit()
+    commission = _get_one(db, commission_id)
+    return crud.serialize_commission_visibility(
+        commission, crud.load_visibility_context(db)
+    )

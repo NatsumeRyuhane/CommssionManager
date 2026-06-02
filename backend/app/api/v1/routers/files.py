@@ -9,7 +9,7 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.api.v1 import crud
-from app.auth.deps import Principal, require_edit
+from app.auth.deps import Principal, get_principal, require_edit
 from app.db import get_db
 from app.models import (
     CommissionFile,
@@ -79,13 +79,27 @@ async def upload_file(
     db.add(file)
     db.commit()
     db.refresh(file)
-    return crud.file_out(file, None)
+    return crud.file_out(file, None, crud.load_visibility_context(db))
 
 
 @router.get("/files/{file_id}/raw")
-def get_raw(file_id: int, db: Session = Depends(get_db)):
+def get_raw(
+    file_id: int,
+    db: Session = Depends(get_db),
+    principal: Principal | None = Depends(get_principal),
+):
     file = db.get(CommissionFile, file_id)
     if file is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
+    visibility_context = crud.load_visibility_context(db)
+    commission = file.node.commission
+    public_file = (
+        file.is_image
+        and crud.effective_commission_visibility(commission, visibility_context)
+        == crud.Visibility.public
+        and crud.effective_file_visibility(file, visibility_context) == crud.Visibility.public
+    )
+    if not public_file and (principal is None or not principal.can_write):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
     obj = db.get(StorageObject, file.storage_object_id)
     data = get_storage().read(obj.key, bucket=obj.bucket)
@@ -110,7 +124,7 @@ def set_focal(
     file.focal_y = max(0.0, min(1.0, focal_y))
     db.commit()
     db.refresh(file)
-    return crud.file_out(file, None)
+    return crud.file_out(file, None, crud.load_visibility_context(db))
 
 
 @router.delete("/files/{file_id}", status_code=status.HTTP_204_NO_CONTENT)
