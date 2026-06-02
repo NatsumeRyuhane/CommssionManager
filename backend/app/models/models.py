@@ -42,6 +42,23 @@ class StorageBackend(str, enum.Enum):
     gcs = "gcs"
 
 
+class Visibility(str, enum.Enum):
+    public = "public"
+    private = "private"
+
+
+class VisibilityPreset(str, enum.Enum):
+    public_by_default = "public_by_default"
+    private_by_default = "private_by_default"
+    custom = "custom"
+
+
+class WebhookEvent(str, enum.Enum):
+    commission_created = "commission.created"
+    commission_updated = "commission.updated"
+    commission_delivered = "commission.delivered"
+
+
 # ---------------------------------------------------------------- lookups
 class Label(Base):
     __tablename__ = "labels"
@@ -81,6 +98,68 @@ class StorageObject(Base):
     size_bytes: Mapped[int | None] = mapped_column(BigInteger)
     checksum: Mapped[str | None] = mapped_column(String)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+# ---------------------------------------------------------------- settings
+class AppSettings(Base):
+    __tablename__ = "app_settings"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    visibility_preset: Mapped[VisibilityPreset] = mapped_column(
+        Enum(VisibilityPreset, name="visibility_preset"),
+        nullable=False,
+        default=VisibilityPreset.public_by_default,
+    )
+    default_commission_visibility: Mapped[Visibility] = mapped_column(
+        Enum(Visibility, name="visibility"),
+        nullable=False,
+        default=Visibility.public,
+    )
+    default_stage_visibility: Mapped[Visibility] = mapped_column(
+        Enum(Visibility, name="visibility"),
+        nullable=False,
+        default=Visibility.private,
+    )
+    title_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    description_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    labels_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    rating_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    characters_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    artists_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    completed_at_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    confirmed_at_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    price_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class VisibilityStageDefault(Base):
+    __tablename__ = "visibility_stage_defaults"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    stage_name: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    visibility: Mapped[Visibility] = mapped_column(
+        Enum(Visibility, name="visibility"), nullable=False
+    )
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    note: Mapped[str | None] = mapped_column(String)
+
+
+class WebhookEndpoint(Base):
+    __tablename__ = "webhook_endpoints"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    url: Mapped[str] = mapped_column(String, nullable=False)
+    events: Mapped[str] = mapped_column(String, nullable=False)
+    is_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    last_delivery_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_status_code: Mapped[int | None] = mapped_column(Integer)
+    last_error: Mapped[str | None] = mapped_column(Text)
 
 
 # ---------------------------------------------------------------- commission
@@ -123,6 +202,18 @@ class CommissionMetadata(Base):
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     price_amount: Mapped[float | None] = mapped_column(Numeric(12, 2))
     price_currency: Mapped[str | None] = mapped_column(String(3))
+    visibility_override: Mapped[Visibility | None] = mapped_column(
+        Enum(Visibility, name="visibility")
+    )
+    title_public_override: Mapped[bool | None] = mapped_column(Boolean)
+    description_public_override: Mapped[bool | None] = mapped_column(Boolean)
+    labels_public_override: Mapped[bool | None] = mapped_column(Boolean)
+    rating_public_override: Mapped[bool | None] = mapped_column(Boolean)
+    characters_public_override: Mapped[bool | None] = mapped_column(Boolean)
+    artists_public_override: Mapped[bool | None] = mapped_column(Boolean)
+    completed_at_public_override: Mapped[bool | None] = mapped_column(Boolean)
+    confirmed_at_public_override: Mapped[bool | None] = mapped_column(Boolean)
+    price_public_override: Mapped[bool | None] = mapped_column(Boolean)
 
     commission: Mapped[Commission] = relationship(back_populates="meta")
     cover_file: Mapped[CommissionFile | None] = relationship(foreign_keys=[cover_file_id])
@@ -142,6 +233,9 @@ class CommissionNode(Base):
     position: Mapped[int | None] = mapped_column(Integer)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     is_detached: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    visibility_override: Mapped[Visibility | None] = mapped_column(
+        Enum(Visibility, name="visibility")
+    )
 
     commission: Mapped[Commission] = relationship(back_populates="nodes")
     files: Mapped[list[CommissionFile]] = relationship(
@@ -168,6 +262,9 @@ class CommissionFile(Base):
     height: Mapped[int | None] = mapped_column(Integer)
     focal_x: Mapped[float | None] = mapped_column(Float)
     focal_y: Mapped[float | None] = mapped_column(Float)
+    visibility_override: Mapped[Visibility | None] = mapped_column(
+        Enum(Visibility, name="visibility")
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     node: Mapped[CommissionNode] = relationship(back_populates="files", foreign_keys=[node_id])

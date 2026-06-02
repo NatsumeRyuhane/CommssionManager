@@ -25,6 +25,17 @@ Enum rating {
   adult
 }
 
+Enum visibility {
+  public
+  private
+}
+
+Enum visibility_preset {
+  public_by_default
+  private_by_default
+  custom
+}
+
 //----------------------------------------------------------------------
 // Core lookup tables
 //----------------------------------------------------------------------
@@ -101,6 +112,53 @@ Table storage_objects {
 }
 
 //----------------------------------------------------------------------
+// Settings
+//----------------------------------------------------------------------
+
+Table app_settings {
+  id                            integer           [pk]
+  visibility_preset             visibility_preset [not null, default: 'public_by_default']
+  default_commission_visibility visibility        [not null, default: 'public']
+  default_stage_visibility      visibility        [not null, default: 'private']
+  title_public                  boolean           [not null, default: true]
+  description_public            boolean           [not null, default: true]
+  labels_public                 boolean           [not null, default: true]
+  rating_public                 boolean           [not null, default: true]
+  characters_public             boolean           [not null, default: true]
+  artists_public                boolean           [not null, default: true]
+  completed_at_public           boolean           [not null, default: true]
+  confirmed_at_public           boolean           [not null, default: false]
+  price_public                  boolean           [not null, default: false]
+  updated_at                    timestamp         [default: `now()`]
+
+  Note: 'Singleton admin settings row. Visibility defaults apply to new/public views unless overridden by commission, stage, or file visibility.'
+}
+
+Table visibility_stage_defaults {
+  id         integer    [pk, increment]
+  stage_name varchar    [not null, unique]
+  visibility visibility [not null]
+  position   integer    [not null, default: 0]
+  note       varchar
+
+  Note: 'Global stage-name defaults used when lifecycle stages are created or when an existing stage has no explicit override.'
+}
+
+Table webhook_endpoints {
+  id               integer   [pk, increment]
+  url              varchar   [not null]
+  events           varchar   [not null, Note: 'Space-delimited event names: commission.created, commission.updated, commission.delivered']
+  is_enabled       boolean   [not null, default: true]
+  created_at       timestamp [default: `now()`]
+  updated_at       timestamp [default: `now()`]
+  last_delivery_at timestamp
+  last_status_code integer
+  last_error       text
+
+  Note: 'Admin-managed webhook endpoints. Delivery workers are a later Phase 2 slice; this table stores endpoint config and last delivery summary.'
+}
+
+//----------------------------------------------------------------------
 // Commission
 //----------------------------------------------------------------------
 
@@ -123,6 +181,16 @@ Table commission_metadata {
   confirmed_at    timestamp      [Note: 'When the commission was accepted/confirmed by the admin']
   price_amount    numeric(12, 2) [Note: 'Agreed commission price']
   price_currency  varchar(3)     [Note: 'ISO 4217 currency code, e.g. USD, JPY, CNY']
+  visibility_override          visibility [Note: 'Nullable commission-level override. Null inherits app_settings.default_commission_visibility.']
+  title_public_override        boolean    [Note: 'Nullable field-level public/private override. Null inherits app_settings.']
+  description_public_override  boolean
+  labels_public_override       boolean
+  rating_public_override       boolean
+  characters_public_override   boolean
+  artists_public_override      boolean
+  completed_at_public_override boolean
+  confirmed_at_public_override boolean
+  price_public_override        boolean
 
   Note: 'All descriptive metadata for a commission grouped in one place. Rating is a first-class enum column here; commission_labels currently stores categories and tags.'
 }
@@ -143,6 +211,7 @@ Table commission_files {
   height            integer   [Note: 'Pixel height; null when is_image = false']
   focal_x           float     [Note: 'Relative X of the main subject center (0.0–1.0) for thumbnail cropping; null when is_image = false']
   focal_y           float     [Note: 'Relative Y of the main subject center (0.0–1.0) for thumbnail cropping; null when is_image = false']
+  visibility_override visibility [Note: 'Nullable file-level override. Highest-precedence visibility control for public image filtering.']
   created_at        timestamp [default: `now()`]
 
   Note: 'Any file received as part of a commission: rendered images, source files, design docs, etc. Only files with is_image = true are eligible as cover art.'
@@ -159,6 +228,7 @@ Table commission_nodes {
   position      integer   [Note: 'Admin-defined ordering; lower values come first. NULL for the detached node.']
   started_at    timestamp [Note: 'When this stage began. NULL for the detached node.']
   is_detached   boolean   [not null, default: false, Note: 'True for the one system-managed detached node per commission. Detached nodes cannot be deleted or reordered.']
+  visibility_override visibility [Note: 'Nullable stage-level override. Null inherits the matching visibility_stage_defaults row or app_settings.default_stage_visibility.']
 
   indexes {
     (commission_id, position) [unique]
