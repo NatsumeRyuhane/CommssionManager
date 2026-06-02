@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Commission Manager — Wireframes</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<style>
+  /* design-canvas overrides for this project */
+  body { font-family: "Inter", system-ui, sans-serif; }
+  /* placeholder shown while React boots */
+  #boot { padding: 40px; font-family: "IBM Plex Mono", monospace; color: #9b9a97; }
+</style>
+</head>
+<body>
+  <div id="root"><div id="boot">Loading wireframes…</div></div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script type="text/babel" src="design-canvas.jsx"></script>
+  <script type="text/babel" src="tweaks-panel.jsx"></script>
+  <script type="text/babel" src="primitives.jsx"></script>
+  <script type="text/babel" src="screens-auth.jsx"></script>
+  <script type="text/babel" src="screens-home.jsx"></script>
+  <script type="text/babel" src="screens-detail.jsx"></script>
+  <script type="text/babel" src="screens-edit.jsx"></script>
+  <script type="text/babel" src="screens-lifecycle.jsx"></script>
+  <script type="text/babel" src="screens-mobile.jsx"></script>
+  <script type="text/babel" src="screens-settings.jsx"></script>
+  <script type="text/babel" src="screens-extra.jsx"></script>
+  <script type="text/babel" src="screens-characters.jsx"></script>
+  <script type="text/babel" src="screens-artists.jsx"></script>
+
+  <script type="text/babel">
+    const { DesignCanvas, DCSection, DCArtboard, DCPostIt } = window;
+
+    function App() {
+      return (
+        <DesignCanvas
+          title="Commission Manager · Wireframes"
+          subtitle="Notion-flavored low-fi · Heiyao's commission art system"
+        >
+          <DCSection id="auth" title="① Login / Auth gate" subtitle="Public read · login only for edit">
+            <DCArtboard id="auth-desktop" label="Desktop · inline popover" width={1100} height={680}>
+              <LoginInline />
+            </DCArtboard>
+            <DCArtboard id="auth-mobile" label="Mobile · bottom sheet" width={420} height={880}>
+              <div style={{padding:18, display:"flex", justifyContent:"center", background:"var(--paper-2)", height:"100%"}}>
+                <MobileAuth />
+              </div>
+            </DCArtboard>
+          </DCSection>
+
+          <DCSection id="home" title="② Home / Gallery" subtitle="Desktop + mobile · filter-open and batch-select states shown alongside">
+            <DCArtboard id="home-desktop" label="Desktop · default" width={1280} height={820}>
+              <HomeGallery />
+            </DCArtboard>
+            <DCArtboard id="home-mobile" label="Mobile" width={420} height={880}>
+              <div style={{padding:18, display:"flex", justifyContent:"center", background:"var(--paper-2)", height:"100%"}}>
+                <MobileGallery />
+              </div>
+            </DCArtboard>
+            <DCArtboard id="home-filter-open" label="Desktop state · filter menu open" width={1280} height={820}>
+              <HomeGalleryFilterOpen />
+            </DCArtboard>
+            <DCArtboard id="home-batch" label="Desktop state · batch select" width={1100} height={760}>
+              <HomeBatchSelect />
+            </DCArtboard>
+          </DCSection>
+
+          <DCSection id="filter" title="③ Filter & Search panel" subtitle="Deep-dive · desktop expanded panel + mobile sheet">
+            <DCArtboard id="filter-desktop" label="Desktop · expanded panel" width={1200} height={720}>
+              <FilterPanelDeepDive />
+            </DCArtboard>
+            <DCArtboard id="filter-mobile" label="Mobile · full-screen filter" width={420} height={880}>
+              <div style={{padding:18, display:"flex", justifyContent:"center", background:"var(--paper-2)", height:"100%"}}>
+                <MobileFilter />
+              </div>
+            </DCArtboard>
+          </DCSection>
+
+          <DCSection id="detail" title="④ Detail page" subtitle="Hero + side rail · public images in timeline order · API copy (logged in)">
+            <DCArtboard id="detail-desktop" label="Desktop · hero + side rail + timeline gallery" width={1200} height={1380}>
+              <DetailHeroSide />
+            </DCArtboard>
+            <DCArtboard id="detail-mobile" label="Mobile" width={420} height={880}>
+              <div style={{padding:18, display:"flex", justifyContent:"center", background:"var(--paper-2)", height:"100%"}}>
+                <MobileDetail />
+              </div>
+            </DCArtboard>
+          </DCSection>
+
+          <DCSection id="edit" title="⑤ Add / Edit page" subtitle="Stages with files · focal-point reticle · API copy JSON (logged in)">
+            <DCArtboard id="edit-desktop" label="Desktop · edit commission" width={1280} height={900}>
+              <AddEditPage />
+            </DCArtboard>
+            <DCArtboard id="edit-mobile" label="Mobile · tabbed edit" width={420} height={880}>
+              <div style={{padding:18, display:"flex", justifyContent:"center", background:"var(--paper-2)", height:"100%"}}>
+                <MobileEdit />
+              </div>
+            </DCArtboard>
+            <DCPostIt>
+              Drag the green reticle on the cover image to set the focal point.
+            </DCPostIt>
+          </DCSection>
+
+          <DCSection id="settings" title="⑥ Global Settings (admin)" subtitle="API key mgmt · webhooks · global visibility presets · 4 screens">
+            <DCArtboard id="settings-api-desktop" label="Desktop · API & integrations" width={1100} height={860}>
+              <SettingsAPI />
+            </DCArtboard>
+            <DCArtboard id="settings-api-mobile" label="Mobile · API & integrations" width={420} height={880}>
+              <div style={{padding:18, display:"flex", justifyContent:"center", background:"var(--paper-2)", height:"100%"}}>
+                <MobileSettingsAPI />
+              </div>
+            </DCArtboard>
+            <DCArtboard id="settings-vis-desktop" label="Desktop · Visibility presets" width={1100} height={760}>
+              <SettingsVisibility />
+            </DCArtboard>
+            <DCArtboard id="settings-vis-mobile" label="Mobile · Visibility presets" width={420} height={880}>
+              <div style={{padding:18, display:"flex", justifyContent:"center", background:"var(--paper-2)", height:"100%"}}>
+                <MobileSettingsVisibility />
+              </div>
+            </DCArtboard>
+          </DCSection>
+
+          <DCSection id="privacy" title="⑦ Visibility / privacy" subtitle="Per-commission override panel · inherits global preset from ⑥">
+            <DCArtboard id="priv-desktop" label="Desktop · per-commission override" width={1200} height={900}>
+              <DesktopVisibility />
+            </DCArtboard>
+            <DCArtboard id="priv-mobile" label="Mobile · per-commission override" width={420} height={880}>
+              <div style={{padding:18, display:"flex", justifyContent:"center", background:"var(--paper-2)", height:"100%"}}>
+                <MobileVisibility />
+              </div>
+            </DCArtboard>
+            <DCPostIt>
+              Stage toggles cascade to all files in that stage. File-level overrides win.
+              Global preset (set in ⑥ Settings) is the default; this panel overrides it per-commission.
+            </DCPostIt>
+          </DCSection>
+
+          <DCSection id="lifecycle" title="⑧ Lifecycle endpoint" subtitle="Shared LifecycleStagesList component · embedded in desktop detail · standalone page primarily for mobile (linked via 'View lifecycle' button) and desktop deep-links">
+            <DCArtboard id="life-desktop" label="Desktop standalone page · rarely visited, mainly deep-link" width={900} height={820}>
+              <LifecycleVertical />
+            </DCArtboard>
+            <DCArtboard id="life-mobile" label="Mobile standalone page · reached from detail 'View lifecycle ›'" width={420} height={880}>
+              <div style={{padding:18, display:"flex", justifyContent:"center", background:"var(--paper-2)", height:"100%"}}>
+                <MobileLifecycle />
+              </div>
+            </DCArtboard>
+            <DCPostIt>
+              Same LifecycleStagesList component renders inline in the desktop detail page (④) and as the body of this standalone page. On mobile the detail page shows just a "View lifecycle ›" button — taps land here.
+            </DCPostIt>
+          </DCSection>
+          <DCSection id="characters" title="⑨ Character pages" subtitle="Shareable profile · main ref · admin-curated image 'bookshelves' (click + add images for the picker)">
+            <DCArtboard id="char-desktop" label="Desktop · character page (admin view)" width={1200} height={1180}>
+              <CharacterPage />
+            </DCArtboard>
+            <DCArtboard id="char-mobile" label="Mobile · character page" width={420} height={980}>
+              <div style={{padding:18, display:"flex", justifyContent:"center", background:"var(--paper-2)", height:"100%"}}>
+                <MobileCharacterPage />
+              </div>
+            </DCArtboard>
+            <DCPostIt>
+              Sets are "bookshelves": each has its own title + description, and the admin curates
+              which gallery images (containing this character) belong to it via the picker modal.
+            </DCPostIt>
+          </DCSection>
+
+          <DCSection id="artists" title="⑩ Artist management" subtitle="One artist · many platform handles · paste-to-match · no-match resolve dialog">
+            <DCArtboard id="artist-desktop" label="Desktop · artist hub (live handle match — type in the box)" width={1200} height={920}>
+              <ArtistManagement />
+            </DCArtboard>
+            <DCArtboard id="artist-mobile" label="Mobile · artist hub" width={420} height={920}>
+              <div style={{padding:18, display:"flex", justifyContent:"center", background:"var(--paper-2)", height:"100%"}}>
+                <MobileArtistManagement />
+              </div>
+            </DCArtboard>
+            <DCArtboard id="artist-dialog-desktop" label="Desktop · 2.1 no-match dialog" width={1100} height={720}>
+              <ArtistResolveDialog />
+            </DCArtboard>
+            <DCArtboard id="artist-dialog-mobile" label="Mobile · 2.1 no-match sheet" width={420} height={880}>
+              <div style={{padding:18, display:"flex", justifyContent:"center", background:"var(--paper-2)", height:"100%"}}>
+                <MobileArtistResolve />
+              </div>
+            </DCArtboard>
+            <DCPostIt>
+              Type a handle in the hub's search box — matches resolve live across all platforms,
+              each row showing the platform badge + configured artist name. Clear it / type gibberish
+              to see the no-match "Resolve this handle…" path (full dialog shown in the next artboards).
+            </DCPostIt>
+          </DCSection>
+        </DesignCanvas>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
