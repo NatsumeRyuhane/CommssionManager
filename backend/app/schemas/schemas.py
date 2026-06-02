@@ -56,6 +56,10 @@ class FileOut(BaseModel):
     is_cover: bool = False
 
 
+class FileMove(BaseModel):
+    node_id: int
+
+
 class NodeOut(BaseModel):
     id: int
     name: str

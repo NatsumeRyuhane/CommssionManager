@@ -100,6 +100,55 @@ def test_set_focal_point_clamps_to_image_bounds(admin_client: TestClient):
     assert focal.json()["focal_y"] == 1.0
 
 
+def test_move_file_between_nodes_in_same_commission(admin_client: TestClient):
+    res = admin_client.post(
+        "/api/v1/commissions",
+        json={"title": "Move file test", "node_names": ["Sketching", "Delivered"]},
+    )
+    assert res.status_code == 201, res.text
+    commission = res.json()
+    sketching = next(n for n in commission["nodes"] if n["name"] == "Sketching")
+    delivered = next(n for n in commission["nodes"] if n["name"] == "Delivered")
+    detached = next(n for n in commission["nodes"] if n["is_detached"])
+    uploaded = _upload(admin_client, sketching["id"], "rough.png", _png(), "image/png")
+
+    moved = admin_client.patch(
+        f"/api/v1/files/{uploaded['id']}/node", json={"node_id": delivered["id"]}
+    )
+    assert moved.status_code == 200, moved.text
+    assert moved.json()["node_id"] == delivered["id"]
+
+    detail = admin_client.get(f"/api/v1/commissions/{commission['id']}").json()
+    delivered_files = next(n for n in detail["nodes"] if n["id"] == delivered["id"])["files"]
+    sketching_files = next(n for n in detail["nodes"] if n["id"] == sketching["id"])["files"]
+    assert [f["id"] for f in delivered_files] == [uploaded["id"]]
+    assert sketching_files == []
+
+    moved_to_detached = admin_client.patch(
+        f"/api/v1/files/{uploaded['id']}/node", json={"node_id": detached["id"]}
+    )
+    assert moved_to_detached.status_code == 200, moved_to_detached.text
+    assert moved_to_detached.json()["node_id"] == detached["id"]
+
+
+def test_move_file_rejects_nodes_from_other_commissions(admin_client: TestClient):
+    source_commission_id, source_node_id = _commission(admin_client)
+    _, other_node_id = _commission(admin_client)
+    uploaded = _upload(admin_client, source_node_id, "final.png", _png(), "image/png")
+
+    moved = admin_client.patch(
+        f"/api/v1/files/{uploaded['id']}/node", json={"node_id": other_node_id}
+    )
+
+    assert moved.status_code == 422
+    files = admin_client.get(f"/api/v1/commissions/{source_commission_id}/files").json()
+    assert files[0]["node_id"] == source_node_id
+
+
+def test_move_file_requires_auth(client: TestClient):
+    assert client.patch("/api/v1/files/1/node", json={"node_id": 1}).status_code == 401
+
+
 def test_delete_file_removes_it_from_api_results_and_raw_access(admin_client: TestClient):
     commission_id, node_id = _commission(admin_client)
     uploaded = _upload(admin_client, node_id, "final.png", _png(), "image/png")

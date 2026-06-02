@@ -18,7 +18,7 @@ from app.models import (
     StorageBackend,
     StorageObject,
 )
-from app.schemas import FileOut
+from app.schemas import FileMove, FileOut
 from app.storage import get_storage
 
 router = APIRouter(tags=["files"])
@@ -125,6 +125,32 @@ def set_focal(
     db.commit()
     db.refresh(file)
     return crud.file_out(file, None, crud.load_visibility_context(db))
+
+
+@router.patch("/files/{file_id}/node", response_model=FileOut)
+def move_file(
+    file_id: int,
+    body: FileMove,
+    db: Session = Depends(get_db),
+    _: Principal = Depends(require_edit),
+):
+    file = db.get(CommissionFile, file_id)
+    if file is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
+    target = db.get(CommissionNode, body.node_id)
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Node not found")
+    if target.commission_id != file.node.commission_id:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="node_id must belong to the same commission as the file",
+        )
+
+    file.node_id = target.id
+    db.commit()
+    db.refresh(file)
+    cover_id = target.commission.meta.cover_file_id if target.commission.meta else None
+    return crud.file_out(file, cover_id, crud.load_visibility_context(db))
 
 
 @router.delete("/files/{file_id}", status_code=status.HTTP_204_NO_CONTENT)
