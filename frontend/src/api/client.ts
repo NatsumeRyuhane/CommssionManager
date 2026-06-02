@@ -157,6 +157,11 @@ export const api = {
     return uploadForm<CommissionFile>(`/nodes/${nodeId}/files`, form);
   },
   deleteFile: (fileId: number) => request<void>(`/files/${fileId}`, { method: "DELETE" }),
+  moveFile: (fileId: number, nodeId: number) =>
+    request<CommissionFile>(`/files/${fileId}/node`, {
+      method: "PATCH",
+      body: JSON.stringify({ node_id: nodeId }),
+    }),
   setFocal: (fileId: number, focalX: number, focalY: number) => {
     const form = new FormData();
     form.append("focal_x", String(focalX));

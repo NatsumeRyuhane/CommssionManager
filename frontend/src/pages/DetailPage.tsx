@@ -5,6 +5,7 @@ import { api } from "../api/client";
 import type { CommissionDetail } from "../api/types";
 import { Chip } from "../components/Chip";
 import { Cover } from "../components/Cover";
+import { LifecycleStagesList } from "../components/LifecycleStagesList";
 import { TopBar } from "../components/TopBar";
 import { useAuth } from "../hooks/useAuth";
 
@@ -147,59 +148,11 @@ export function DetailPage() {
       {/* BOTTOM HALF — vertical lifecycle */}
       <div style={{ padding: "24px 48px", maxWidth: 760 }}>
         <h2 style={{ fontSize: 16, margin: "0 0 12px" }}>Lifecycle</h2>
-        {lifecycle.map((node) => (
-          <div
-            key={node.id}
-            style={{
-              border: node.is_detached ? "1px dashed var(--warn)" : "1px solid var(--rule)",
-              borderRadius: 8,
-              padding: "12px 14px",
-              marginBottom: 12,
-              background: node.is_detached ? "rgba(182,85,42,0.05)" : "var(--paper)",
-            }}
-          >
-            <div className="row" style={{ marginBottom: node.files.length ? 10 : 0 }}>
-              <strong>{node.name}</strong>
-              {node.is_detached && <Chip kind="rating">detached</Chip>}
-              {node.name === currentStage && <Chip kind="cat">current</Chip>}
-              <span className="spacer" />
-              {node.started_at && (
-                <span className="mono-sm">{node.started_at.slice(0, 10)}</span>
-              )}
-            </div>
-            {node.files.length > 0 && (
-              <div className="row wrap gap-8">
-                {node.files.map((f) => (
-                  <div key={f.id} style={{ width: 96 }}>
-                    {f.is_image ? (
-                      <Cover
-                        cover={{
-                          file_id: f.id,
-                          url: f.url,
-                          width: f.width,
-                          height: f.height,
-                          focal_x: f.focal_x,
-                          focal_y: f.focal_y,
-                        }}
-                        ratio={1}
-                      />
-                    ) : (
-                      <div className="imgph" style={{ aspectRatio: "1" }}>
-                        {f.format}
-                      </div>
-                    )}
-                    <div
-                      className="mono-sm"
-                      style={{ fontSize: 9, marginTop: 2, textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}
-                    >
-                      {f.label || f.format}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
+        <LifecycleStagesList
+          nodes={lifecycle}
+          currentStage={currentStage}
+          coverFileId={data.cover?.file_id ?? null}
+        />
       </div>
     </div>
   );
