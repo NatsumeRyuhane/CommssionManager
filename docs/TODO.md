@@ -49,7 +49,7 @@
 - [x] Edit page: lifecycle stage management (add/rename/reorder/delete)
 - [x] Edit page: per-stage file upload/delete + set cover
 - [x] Gallery: total count (X-Total-Count) + load-more pagination
-- [ ] Focal-point reticle editor on the cover image (Phase 2)
+- [x] Focal-point reticle editor on uploaded images (Phase 2)
 - [ ] Mobile layouts (Phase 2)
 
 ### Deploy
@@ -66,17 +66,18 @@
   - [x] Visibility preset settings + stage defaults
   - [x] Webhook endpoint config CRUD (delivery worker remains below)
   - [x] Storage config summary endpoint (env-driven, read-only)
-- [ ] Settings (admin): frontend UI for API keys, webhooks, storage config
+- [x] Settings (admin): frontend UI for API keys, visibility presets, and storage config
+- [ ] Settings (admin): frontend UI for webhooks (excluded from this round)
 - [x] Backend visibility/privacy: global preset -> per-commission -> per-stage -> per-file
   precedence, public metadata redaction, raw-file privacy, and `/images?visibility=` filtering
-- [ ] Visibility/privacy: frontend controls for global defaults and per-commission/stage/file
+- [x] Visibility/privacy: frontend controls for global defaults and per-commission/stage/file
   overrides
-- [ ] Lifecycle: shared component, drag-and-drop files between stages, detached-node handling
+- [x] Lifecycle: shared component, drag-and-drop files between stages, detached-node handling
 - [ ] Character pages: shareable profile, main ref, curated image "bookshelves" + picker
-- [ ] Artist management: multi-platform handles, paste-to-match, no-match resolve dialog
+- [x] Artist management: multi-platform handles, paste-to-match, no-match resolve dialog
 - [ ] Mobile views for every section
-- [ ] Focal-point reticle editor on cover image
-- [ ] Export: DB export + file-export `.zip` (`{artists}-{id}/{node}/`, node-dated dirs)
+- [x] Focal-point reticle editor on cover image
+- [x] Export: DB export + file-export `.zip` (`{artists}-{id}/{node}/`, node-dated dirs)
 - [ ] Webhooks delivery (`commission.created/updated/delivered`)
 
 ## Phase 3 — Optional / advanced (deferred)
@@ -97,6 +98,9 @@
   and filters by effective file visibility.
 - API copy-JSON requires edit access and must include internal id + endpoint URLs, never API
   credentials.
+- Exports require edit access: `/api/v1/exports/database.json` exports metadata/storage records
+  without physical file bytes; `/api/v1/exports/files.zip` packages stored files under
+  `{artists}-{id}/{node}/` and accepts `commission_id` for a single-work zip.
 - **Compose projects are isolated by explicit name:** both compose files live in `deploy/`, so
   without explicit names they'd share the directory-derived project name and the same `postgres`
   service — bringing up the full stack would recreate the dev container `cmgr-postgres-dev`. Fixed
