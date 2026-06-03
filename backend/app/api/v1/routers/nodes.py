@@ -73,7 +73,7 @@ def create_node(
 
 
 @router.patch("/nodes/{node_id}", response_model=NodeOut)
-def rename_node(
+def update_node(
     node_id: int,
     body: NodeUpdate,
     db: Session = Depends(get_db),
@@ -81,8 +81,13 @@ def rename_node(
 ):
     node = _node_or_404(db, node_id)
     if node.is_detached:
-        raise HTTPException(status_code=400, detail="The detached node cannot be renamed")
-    node.name = body.name
+        raise HTTPException(status_code=400, detail="The detached node cannot be edited")
+    if body.name is None and "started_at" not in body.model_fields_set:
+        raise HTTPException(status_code=400, detail="No node fields provided")
+    if body.name is not None:
+        node.name = body.name
+    if "started_at" in body.model_fields_set:
+        node.started_at = body.started_at
     db.commit()
     db.refresh(node)
     return crud.node_out(node, visibility_context=crud.load_visibility_context(db))

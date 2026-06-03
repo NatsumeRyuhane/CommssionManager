@@ -105,7 +105,18 @@ class NodeCreate(BaseModel):
 
 
 class NodeUpdate(BaseModel):
-    name: str
+    name: str | None = None
+    started_at: datetime | None = None
+
+    @field_validator("name")
+    @classmethod
+    def name_must_not_be_empty(cls, name: str | None) -> str | None:
+        if name is None:
+            return None
+        name = name.strip()
+        if not name:
+            raise ValueError("name must not be empty")
+        return name
 
 
 class NodeReorder(BaseModel):

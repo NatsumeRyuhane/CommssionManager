@@ -15,6 +15,7 @@ interface LifecycleStagesListProps {
   onSetCover?: (file: CommissionFile) => void;
   onDeleteFile?: (file: CommissionFile) => void;
   onEditFocal?: (file: CommissionFile) => void;
+  onEditDate?: (node: CommissionNode) => void;
   renderStageActions?: (node: CommissionNode, index: number) => ReactNode;
 }
 
@@ -29,6 +30,7 @@ export function LifecycleStagesList({
   onSetCover,
   onDeleteFile,
   onEditFocal,
+  onEditDate,
   renderStageActions,
 }: LifecycleStagesListProps) {
   const filesById = useMemo(() => {
@@ -55,6 +57,7 @@ export function LifecycleStagesList({
           onSetCover={onSetCover}
           onDeleteFile={onDeleteFile}
           onEditFocal={onEditFocal}
+          onEditDate={onEditDate}
           stageActions={renderStageActions?.(node, index)}
         />
       ))}
@@ -74,6 +77,7 @@ function LifecycleStage({
   onSetCover,
   onDeleteFile,
   onEditFocal,
+  onEditDate,
   stageActions,
 }: {
   node: CommissionNode;
@@ -87,6 +91,7 @@ function LifecycleStage({
   onSetCover?: (file: CommissionFile) => void;
   onDeleteFile?: (file: CommissionFile) => void;
   onEditFocal?: (file: CommissionFile) => void;
+  onEditDate?: (node: CommissionNode) => void;
   stageActions?: ReactNode;
 }) {
   const fileInput = useRef<HTMLInputElement>(null);
@@ -120,7 +125,19 @@ function LifecycleStage({
         {node.name === currentStage && <Chip kind="cat">current</Chip>}
         <span className="mono-sm muted">{node.files.length} files</span>
         <span className="spacer" />
-        {node.started_at && <span className="mono-sm">{node.started_at.slice(0, 10)}</span>}
+        {onEditDate && !node.is_detached ? (
+          <button
+            type="button"
+            className="lifecycle-date-button mono-sm"
+            disabled={busy}
+            onClick={() => onEditDate(node)}
+            title="Change lifecycle date"
+          >
+            {node.started_at ? node.started_at.slice(0, 10) : "Set date"}
+          </button>
+        ) : (
+          node.started_at && <span className="mono-sm">{node.started_at.slice(0, 10)}</span>
+        )}
         {canUpload && (
           <>
             <button

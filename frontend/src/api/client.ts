@@ -148,6 +148,13 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ name }),
     }),
+  updateNodeDate: (nodeId: number, startedAt: string | null) =>
+    request<CommissionNode>(`/nodes/${nodeId}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        started_at: startedAt ? `${startedAt}T00:00:00Z` : null,
+      }),
+    }),
   reorderNodes: (commissionId: number, nodeIds: number[]) =>
     request<CommissionNode[]>(`/commissions/${commissionId}/nodes/reorder`, {
       method: "POST",

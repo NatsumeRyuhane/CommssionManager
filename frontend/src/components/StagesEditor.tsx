@@ -4,6 +4,7 @@ import { api } from "../api/client";
 import type { CommissionDetail, CommissionFile, CommissionNode } from "../api/types";
 import { FocalPointModal } from "./FocalPointModal";
 import { LifecycleStagesList } from "./LifecycleStagesList";
+import { NodeDateModal } from "./NodeDateModal";
 
 /** Edit-mode panel for managing lifecycle stages, files, cover, and focal points. */
 export function StagesEditor({ commissionId }: { commissionId: number }) {
@@ -12,6 +13,7 @@ export function StagesEditor({ commissionId }: { commissionId: number }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [focalFile, setFocalFile] = useState<CommissionFile | null>(null);
+  const [dateNode, setDateNode] = useState<CommissionNode | null>(null);
 
   const reload = useCallback(async () => {
     try {
@@ -96,6 +98,14 @@ export function StagesEditor({ commissionId }: { commissionId: number }) {
     });
   }
 
+  function saveNodeDate(date: string | null) {
+    if (!dateNode) return;
+    void run(async () => {
+      await api.updateNodeDate(dateNode.id, date);
+      setDateNode(null);
+    });
+  }
+
   return (
     <section style={{ marginTop: 28 }}>
       <h2 style={{ fontSize: 18, margin: "0 0 4px" }}>Stages &amp; files</h2>
@@ -119,6 +129,7 @@ export function StagesEditor({ commissionId }: { commissionId: number }) {
           }
         }}
         onEditFocal={setFocalFile}
+        onEditDate={setDateNode}
         renderStageActions={(node) => {
           if (node.is_detached) return null;
           const index = regular.findIndex((item) => item.id === node.id);
@@ -174,6 +185,14 @@ export function StagesEditor({ commissionId }: { commissionId: number }) {
           busy={busy}
           onSave={saveFocal}
           onClose={() => setFocalFile(null)}
+        />
+      )}
+      {dateNode && (
+        <NodeDateModal
+          node={dateNode}
+          busy={busy}
+          onSave={saveNodeDate}
+          onClose={() => setDateNode(null)}
         />
       )}
     </section>
