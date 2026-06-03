@@ -69,11 +69,13 @@ export function StagesEditor({ commissionId }: { commissionId: number }) {
     void run(() => api.deleteNode(node.id));
   }
 
-  function moveStage(index: number, dir: -1 | 1) {
+  function reorderStage(draggedNodeId: number, targetNodeId: number) {
     const ids = regular.map((n) => n.id);
-    const target = index + dir;
-    if (target < 0 || target >= ids.length) return;
-    [ids[index], ids[target]] = [ids[target], ids[index]];
+    const from = ids.indexOf(draggedNodeId);
+    const to = ids.indexOf(targetNodeId);
+    if (from === -1 || to === -1 || from === to) return;
+    const [moved] = ids.splice(from, 1);
+    ids.splice(to, 0, moved);
     void run(() => api.reorderNodes(commissionId, ids));
   }
 
@@ -121,6 +123,7 @@ export function StagesEditor({ commissionId }: { commissionId: number }) {
         busy={busy}
         moveTargets={moveTargets}
         onMoveFile={moveFile}
+        onReorderNode={reorderStage}
         onUpload={upload}
         onSetCover={(file) => void run(() => api.updateCommission(commissionId, { cover_file_id: file.id }))}
         onDeleteFile={(file) => {
@@ -132,27 +135,8 @@ export function StagesEditor({ commissionId }: { commissionId: number }) {
         onEditDate={setDateNode}
         renderStageActions={(node) => {
           if (node.is_detached) return null;
-          const index = regular.findIndex((item) => item.id === node.id);
           return (
             <>
-              <button
-                type="button"
-                className="btn sm"
-                onClick={() => moveStage(index, -1)}
-                disabled={busy || index <= 0}
-                title="Move up"
-              >
-                ↑
-              </button>
-              <button
-                type="button"
-                className="btn sm"
-                onClick={() => moveStage(index, 1)}
-                disabled={busy || index === regular.length - 1}
-                title="Move down"
-              >
-                ↓
-              </button>
               <button type="button" className="btn sm" onClick={() => rename(node)} disabled={busy}>
                 Rename
               </button>

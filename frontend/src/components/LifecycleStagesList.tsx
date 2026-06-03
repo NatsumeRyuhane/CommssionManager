@@ -4,6 +4,8 @@ import type { CommissionFile, CommissionNode } from "../api/types";
 import { Chip } from "./Chip";
 import { Cover } from "./Cover";
 
+const NODE_DRAG_TYPE = "application/x-cmgr-node-id";
+
 interface LifecycleStagesListProps {
   nodes: CommissionNode[];
   currentStage?: string | null;
@@ -11,6 +13,7 @@ interface LifecycleStagesListProps {
   busy?: boolean;
   moveTargets?: CommissionNode[];
   onMoveFile?: (file: CommissionFile, targetNodeId: number) => void;
+  onReorderNode?: (draggedNodeId: number, targetNodeId: number) => void;
   onUpload?: (node: CommissionNode, files: FileList) => void;
   onSetCover?: (file: CommissionFile) => void;
   onDeleteFile?: (file: CommissionFile) => void;
@@ -26,6 +29,7 @@ export function LifecycleStagesList({
   busy = false,
   moveTargets = nodes,
   onMoveFile,
+  onReorderNode,
   onUpload,
   onSetCover,
   onDeleteFile,
@@ -53,6 +57,7 @@ export function LifecycleStagesList({
           filesById={filesById}
           moveTargets={moveTargets}
           onMoveFile={onMoveFile}
+          onReorderNode={onReorderNode}
           onUpload={onUpload}
           onSetCover={onSetCover}
           onDeleteFile={onDeleteFile}
@@ -73,6 +78,7 @@ function LifecycleStage({
   filesById,
   moveTargets,
   onMoveFile,
+  onReorderNode,
   onUpload,
   onSetCover,
   onDeleteFile,
@@ -87,6 +93,7 @@ function LifecycleStage({
   filesById: Map<number, CommissionFile>;
   moveTargets: CommissionNode[];
   onMoveFile?: (file: CommissionFile, targetNodeId: number) => void;
+  onReorderNode?: (draggedNodeId: number, targetNodeId: number) => void;
   onUpload?: (node: CommissionNode, files: FileList) => void;
   onSetCover?: (file: CommissionFile) => void;
   onDeleteFile?: (file: CommissionFile) => void;
@@ -98,10 +105,16 @@ function LifecycleStage({
   const [dropActive, setDropActive] = useState(false);
   const canMove = Boolean(onMoveFile);
   const canUpload = Boolean(onUpload && !node.is_detached);
+  const canReorder = Boolean(onReorderNode && !node.is_detached);
 
   function drop(e: DragEvent<HTMLDivElement>) {
     e.preventDefault();
     setDropActive(false);
+    const draggedNodeId = Number(e.dataTransfer.getData(NODE_DRAG_TYPE));
+    if (draggedNodeId && canReorder) {
+      onReorderNode?.(draggedNodeId, node.id);
+      return;
+    }
     const fileId = Number(e.dataTransfer.getData("text/plain"));
     const file = filesById.get(fileId);
     if (!file || file.node_id === node.id) return;
@@ -112,14 +125,32 @@ function LifecycleStage({
     <div
       className={`lifecycle-stage ${node.is_detached ? "detached" : ""} ${dropActive ? "drop-active" : ""}`}
       onDragOver={(e) => {
-        if (!canMove) return;
+        const draggingNode = e.dataTransfer.types.includes(NODE_DRAG_TYPE);
+        if ((!draggingNode && !canMove) || (draggingNode && !canReorder)) return;
         e.preventDefault();
         setDropActive(true);
       }}
       onDragLeave={() => setDropActive(false)}
-      onDrop={canMove ? drop : undefined}
+      onDrop={canMove || canReorder ? drop : undefined}
     >
       <div className="lifecycle-stage-head">
+        {canReorder && (
+          <button
+            type="button"
+            className="lifecycle-stage-handle"
+            draggable={!busy}
+            disabled={busy}
+            title="Drag to reorder stage"
+            aria-label={`Drag ${node.name} to reorder`}
+            onDragStart={(e) => {
+              e.dataTransfer.setData(NODE_DRAG_TYPE, String(node.id));
+              e.dataTransfer.setData("text/plain", `node:${node.id}`);
+              e.dataTransfer.effectAllowed = "move";
+            }}
+          >
+            <span className="lifecycle-stage-handle-dots" aria-hidden="true" />
+          </button>
+        )}
         <strong>{node.name}</strong>
         {node.is_detached && <Chip kind="rating">detached</Chip>}
         {node.name === currentStage && <Chip kind="cat">current</Chip>}
