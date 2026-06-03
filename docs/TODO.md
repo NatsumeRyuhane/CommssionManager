@@ -77,7 +77,7 @@
 - [x] Visibility/privacy: frontend controls for global defaults and per-commission/stage/file
   overrides
 - [x] Lifecycle: shared component, draggable stage reorder handle, drag-and-drop files between
-  stages, detached-node handling
+  stages, detached-first exception handling
 - [ ] Character pages: shareable profile, main ref, curated image "bookshelves" + picker
 - [x] Artist management: multi-platform handles, paste-to-match, no-match resolve dialog
 - [ ] Mobile views for every section

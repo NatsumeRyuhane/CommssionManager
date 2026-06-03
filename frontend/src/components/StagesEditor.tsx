@@ -46,7 +46,7 @@ export function StagesEditor({ commissionId }: { commissionId: number }) {
 
   const regular = detail.nodes.filter((n) => !n.is_detached);
   const detached = detail.nodes.find((n) => n.is_detached);
-  const displayNodes = detached ? [...regular, detached] : regular;
+  const displayNodes = detached ? [detached, ...regular] : regular;
   const moveTargets = displayNodes;
 
   function addStage() {
@@ -112,8 +112,22 @@ export function StagesEditor({ commissionId }: { commissionId: number }) {
     <section style={{ marginTop: 28 }}>
       <h2 style={{ fontSize: 18, margin: "0 0 4px" }}>Stages &amp; files</h2>
       <div className="mono-sm muted" style={{ marginBottom: 12 }}>
-        Lifecycle stages in order. Upload per stage, drag files between stages, set covers, and
-        adjust image focal points. Deleted-stage files move to Detached.
+        Detached files appear first for review. Upload per stage, drag files between stages, set
+        covers, and adjust image focal points. Deleted-stage files move to Detached.
+      </div>
+
+      <div className="row gap-8" style={{ marginBottom: 12 }}>
+        <input
+          className="field"
+          placeholder="New stage name (e.g. Lineart)"
+          value={newStage}
+          onChange={(e) => setNewStage(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addStage())}
+          style={{ maxWidth: 280 }}
+        />
+        <button type="button" className="btn sm" onClick={addStage} disabled={busy}>
+          + Add stage
+        </button>
       </div>
 
       <LifecycleStagesList
@@ -147,20 +161,6 @@ export function StagesEditor({ commissionId }: { commissionId: number }) {
           );
         }}
       />
-
-      <div className="row gap-8" style={{ marginTop: 8 }}>
-        <input
-          className="field"
-          placeholder="New stage name (e.g. Lineart)"
-          value={newStage}
-          onChange={(e) => setNewStage(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addStage())}
-          style={{ maxWidth: 280 }}
-        />
-        <button type="button" className="btn sm" onClick={addStage} disabled={busy}>
-          + Add stage
-        </button>
-      </div>
 
       {error && <div className="error-text" style={{ marginTop: 10 }}>{error}</div>}
       {focalFile && (
