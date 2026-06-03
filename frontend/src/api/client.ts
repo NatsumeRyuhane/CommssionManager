@@ -16,6 +16,8 @@ import type {
   ListParams,
   MeResponse,
   Paged,
+  SiteSettings,
+  SiteSettingsUpdate,
   StorageSettings,
   VisibilitySettings,
   VisibilitySettingsUpdate,
@@ -127,6 +129,12 @@ export const api = {
     request<ApiKeyCreated>("/api-keys", { method: "POST", body: JSON.stringify(body) }),
   revokeApiKey: (id: number) =>
     request<ApiKey>(`/api-keys/${id}/revoke`, { method: "POST" }),
+  getSiteSettings: () => request<SiteSettings>("/settings/site"),
+  updateSiteSettings: (body: SiteSettingsUpdate) =>
+    request<SiteSettings>("/settings/site", {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
   getVisibilitySettings: () => request<VisibilitySettings>("/settings/visibility"),
   updateVisibilitySettings: (body: VisibilitySettingsUpdate) =>
     request<VisibilitySettings>("/settings/visibility", {

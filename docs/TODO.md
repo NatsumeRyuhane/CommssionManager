@@ -67,10 +67,11 @@
 
 ## Phase 2 — Breadth (deferred)
 - [x] Backend settings/admin surface:
+  - [x] Site title setting
   - [x] Visibility preset settings + stage defaults
   - [x] Webhook endpoint config CRUD (delivery worker remains below)
   - [x] Storage config summary endpoint (env-driven, read-only)
-- [x] Settings (admin): frontend UI for API keys, visibility presets, and storage config
+- [x] Settings (admin): frontend UI for site title, API keys, visibility presets, and storage config
 - [ ] Settings (admin): frontend UI for webhooks (excluded from this round)
 - [x] Backend visibility/privacy: global preset -> per-commission -> per-stage -> per-file
   precedence, public metadata redaction, raw-file privacy, and `/images?visibility=` filtering

@@ -31,6 +31,7 @@ from app.schemas import (
     FileVisibilityState,
     NodeOut,
     NodeVisibilityState,
+    SiteSettingsOut,
     VisibilityFieldDefaults,
     VisibilityFieldState,
     VisibilitySettingsOut,
@@ -38,6 +39,7 @@ from app.schemas import (
 )
 
 SETTINGS_ID = 1
+DEFAULT_SITE_TITLE = "Commissions"
 
 FIELD_DEFAULTS: dict[str, bool] = {
     "title": True,
@@ -259,13 +261,24 @@ def load_visibility_context(db: Session) -> VisibilityContext:
     )
 
 
-def ensure_visibility_settings(db: Session) -> tuple[AppSettings, list[VisibilityStageDefault]]:
+def ensure_app_settings(db: Session) -> AppSettings:
     settings = db.get(AppSettings, SETTINGS_ID)
     if settings is None:
-        settings = AppSettings(id=SETTINGS_ID)
+        settings = AppSettings(id=SETTINGS_ID, site_title=DEFAULT_SITE_TITLE)
         db.add(settings)
         db.flush()
+    return settings
 
+
+def site_settings_out(settings: AppSettings | None) -> SiteSettingsOut:
+    return SiteSettingsOut(
+        site_title=settings.site_title if settings is not None else DEFAULT_SITE_TITLE,
+        updated_at=settings.updated_at if settings is not None else None,
+    )
+
+
+def ensure_visibility_settings(db: Session) -> tuple[AppSettings, list[VisibilityStageDefault]]:
+    settings = ensure_app_settings(db)
     existing = {
         row.stage_name.lower(): row
         for row in db.scalars(select(VisibilityStageDefault))

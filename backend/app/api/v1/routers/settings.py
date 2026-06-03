@@ -10,8 +10,10 @@ from app.api.v1 import crud
 from app.auth.deps import Principal, require_edit
 from app.core.config import settings
 from app.db import get_db
-from app.models import VisibilityStageDefault, WebhookEndpoint, WebhookEvent
+from app.models import AppSettings, VisibilityStageDefault, WebhookEndpoint, WebhookEvent
 from app.schemas import (
+    SiteSettingsOut,
+    SiteSettingsUpdate,
     StorageSettingsOut,
     VisibilitySettingsOut,
     VisibilitySettingsUpdate,
@@ -59,6 +61,27 @@ def _webhook_out(row: WebhookEndpoint) -> WebhookOut:
         last_status_code=row.last_status_code,
         last_error=row.last_error,
     )
+
+
+@router.get("/site", response_model=SiteSettingsOut)
+def get_site_settings(db: Session = Depends(get_db)):
+    return crud.site_settings_out(db.get(AppSettings, crud.SETTINGS_ID))
+
+
+@router.patch("/site", response_model=SiteSettingsOut)
+def update_site_settings(
+    body: SiteSettingsUpdate,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_edit),
+):
+    _require_admin(principal)
+    row = crud.ensure_app_settings(db)
+    if body.site_title is not None:
+        row.site_title = body.site_title
+    row.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(row)
+    return crud.site_settings_out(row)
 
 
 @router.get("/visibility", response_model=VisibilitySettingsOut)

@@ -284,6 +284,25 @@ class VisibilitySettingsUpdate(BaseModel):
     stage_defaults: list[VisibilityStageDefaultIn] | None = None
 
 
+class SiteSettingsOut(BaseModel):
+    site_title: str
+    updated_at: datetime | None = None
+
+
+class SiteSettingsUpdate(BaseModel):
+    site_title: str | None = Field(default=None, max_length=120)
+
+    @field_validator("site_title")
+    @classmethod
+    def site_title_must_not_be_empty(cls, title: str | None) -> str | None:
+        if title is None:
+            return None
+        title = title.strip()
+        if not title:
+            raise ValueError("site_title must not be empty")
+        return title
+
+
 class VisibilityFieldState(BaseModel):
     field: str
     public: bool | None = None

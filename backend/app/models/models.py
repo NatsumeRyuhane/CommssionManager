@@ -105,6 +105,9 @@ class AppSettings(Base):
     __tablename__ = "app_settings"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    site_title: Mapped[str] = mapped_column(
+        String(120), nullable=False, default="Commissions"
+    )
     visibility_preset: Mapped[VisibilityPreset] = mapped_column(
         Enum(VisibilityPreset, name="visibility_preset"),
         nullable=False,
