@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models import (
@@ -266,7 +267,13 @@ def ensure_app_settings(db: Session) -> AppSettings:
     if settings is None:
         settings = AppSettings(id=SETTINGS_ID, site_title=DEFAULT_SITE_TITLE)
         db.add(settings)
-        db.flush()
+        try:
+            db.flush()
+        except IntegrityError:
+            db.rollback()
+            settings = db.get(AppSettings, SETTINGS_ID)
+            if settings is None:
+                raise
     return settings
 
 

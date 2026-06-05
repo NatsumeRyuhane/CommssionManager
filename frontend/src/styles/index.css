@@ -613,7 +613,7 @@ a { color: inherit; text-decoration: none; }
 .lifecycle-stage-handle-dots {
   width: 12px;
   height: 18px;
-  background-image: radial-gradient(circle at 2px 2px, currentColor 1.3px, transparent 1.5px);
+  background-image: radial-gradient(circle at 2px 2px, currentcolor 1.3px, transparent 1.5px);
   background-size: 6px 6px;
   background-repeat: repeat;
 }
