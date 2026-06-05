@@ -82,10 +82,10 @@ export function CoverFocalEditor({ commissionId, version = 0, onChange }: CoverF
   }
 
   return (
-    <div className="edit-field-group cover-focal-editor">
+    <div className={`edit-field-group cover-focal-editor${dragging ? " is-dragging" : ""}`}>
       <div className="label">Cover image · focal point</div>
       <div
-        className="cover-focal-canvas"
+        className={`cover-focal-canvas${dragging ? " is-dragging" : ""}`}
         onPointerDown={(e) => {
           (e.target as Element).setPointerCapture?.(e.pointerId);
           setDragging(true);
