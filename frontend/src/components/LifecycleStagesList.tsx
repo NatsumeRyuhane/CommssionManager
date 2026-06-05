@@ -17,7 +17,6 @@ interface LifecycleStagesListProps {
   onUpload?: (node: CommissionNode, files: FileList) => void;
   onSetCover?: (file: CommissionFile) => void;
   onDeleteFile?: (file: CommissionFile) => void;
-  onEditFocal?: (file: CommissionFile) => void;
   onEditDate?: (node: CommissionNode) => void;
   renderStageActions?: (node: CommissionNode, index: number) => ReactNode;
 }
@@ -33,7 +32,6 @@ export function LifecycleStagesList({
   onUpload,
   onSetCover,
   onDeleteFile,
-  onEditFocal,
   onEditDate,
   renderStageActions,
 }: LifecycleStagesListProps) {
@@ -61,7 +59,6 @@ export function LifecycleStagesList({
           onUpload={onUpload}
           onSetCover={onSetCover}
           onDeleteFile={onDeleteFile}
-          onEditFocal={onEditFocal}
           onEditDate={onEditDate}
           stageActions={renderStageActions?.(node, index)}
         />
@@ -82,7 +79,6 @@ function LifecycleStage({
   onUpload,
   onSetCover,
   onDeleteFile,
-  onEditFocal,
   onEditDate,
   stageActions,
 }: {
@@ -97,7 +93,6 @@ function LifecycleStage({
   onUpload?: (node: CommissionNode, files: FileList) => void;
   onSetCover?: (file: CommissionFile) => void;
   onDeleteFile?: (file: CommissionFile) => void;
-  onEditFocal?: (file: CommissionFile) => void;
   onEditDate?: (node: CommissionNode) => void;
   stageActions?: ReactNode;
 }) {
@@ -209,7 +204,6 @@ function LifecycleStage({
               onMoveFile={onMoveFile}
               onSetCover={onSetCover}
               onDeleteFile={onDeleteFile}
-              onEditFocal={onEditFocal}
             />
           ))}
         </div>
@@ -226,7 +220,6 @@ function LifecycleFileTile({
   onMoveFile,
   onSetCover,
   onDeleteFile,
-  onEditFocal,
 }: {
   file: CommissionFile;
   isCover: boolean;
@@ -235,9 +228,8 @@ function LifecycleFileTile({
   onMoveFile?: (file: CommissionFile, targetNodeId: number) => void;
   onSetCover?: (file: CommissionFile) => void;
   onDeleteFile?: (file: CommissionFile) => void;
-  onEditFocal?: (file: CommissionFile) => void;
 }) {
-  const editable = Boolean(onSetCover || onDeleteFile || onMoveFile || onEditFocal);
+  const editable = Boolean(onSetCover || onDeleteFile || onMoveFile);
   return (
     <div
       className="lifecycle-file"
@@ -299,17 +291,6 @@ function LifecycleFileTile({
               title="Set as cover"
             >
               ★
-            </button>
-          )}
-          {file.is_image && onEditFocal && (
-            <button
-              type="button"
-              className="btn sm ghost"
-              disabled={busy}
-              onClick={() => onEditFocal(file)}
-              title="Edit focal point"
-            >
-              ⊕
             </button>
           )}
           {isCover && <span className="mono-sm" style={{ color: "var(--accent)" }}>cover</span>}

@@ -2,17 +2,21 @@ import { useCallback, useEffect, useState } from "react";
 
 import { api } from "../api/client";
 import type { CommissionDetail, CommissionFile, CommissionNode } from "../api/types";
-import { FocalPointModal } from "./FocalPointModal";
 import { LifecycleStagesList } from "./LifecycleStagesList";
 import { NodeDateModal } from "./NodeDateModal";
 
-/** Edit-mode panel for managing lifecycle stages, files, cover, and focal points. */
-export function StagesEditor({ commissionId }: { commissionId: number }) {
+/** Edit-mode panel for managing lifecycle stages, files, and cover selection. */
+export function StagesEditor({
+  commissionId,
+  onChange,
+}: {
+  commissionId: number;
+  onChange?: () => void;
+}) {
   const [detail, setDetail] = useState<CommissionDetail | null>(null);
   const [newStage, setNewStage] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [focalFile, setFocalFile] = useState<CommissionFile | null>(null);
   const [dateNode, setDateNode] = useState<CommissionNode | null>(null);
 
   const reload = useCallback(async () => {
@@ -33,6 +37,7 @@ export function StagesEditor({ commissionId }: { commissionId: number }) {
     try {
       await op();
       await reload();
+      onChange?.();
     } catch (e) {
       setError(String(e));
     } finally {
@@ -92,14 +97,6 @@ export function StagesEditor({ commissionId }: { commissionId: number }) {
     void run(() => api.moveFile(file.id, targetNodeId));
   }
 
-  function saveFocal(x: number, y: number) {
-    if (!focalFile) return;
-    void run(async () => {
-      await api.setFocal(focalFile.id, x, y);
-      setFocalFile(null);
-    });
-  }
-
   function saveNodeDate(date: string | null) {
     if (!dateNode) return;
     void run(async () => {
@@ -112,8 +109,9 @@ export function StagesEditor({ commissionId }: { commissionId: number }) {
     <section style={{ marginTop: 28 }}>
       <h2 style={{ fontSize: 18, margin: "0 0 4px" }}>Stages &amp; files</h2>
       <div className="mono-sm muted" style={{ marginBottom: 12 }}>
-        Detached files appear first for review. Upload per stage, drag files between stages, set
-        covers, and adjust image focal points. Deleted-stage files move to Detached.
+        Detached files appear first for review. Upload per stage, drag files between stages, and
+        pick a cover (★). Deleted-stage files move to Detached. The cover&rsquo;s focal point is
+        edited from the right rail.
       </div>
 
       <div className="row gap-8" style={{ marginBottom: 12 }}>
@@ -145,7 +143,6 @@ export function StagesEditor({ commissionId }: { commissionId: number }) {
             void run(() => api.deleteFile(file.id));
           }
         }}
-        onEditFocal={setFocalFile}
         onEditDate={setDateNode}
         renderStageActions={(node) => {
           if (node.is_detached) return null;
@@ -163,14 +160,6 @@ export function StagesEditor({ commissionId }: { commissionId: number }) {
       />
 
       {error && <div className="error-text" style={{ marginTop: 10 }}>{error}</div>}
-      {focalFile && (
-        <FocalPointModal
-          file={focalFile}
-          busy={busy}
-          onSave={saveFocal}
-          onClose={() => setFocalFile(null)}
-        />
-      )}
       {dateNode && (
         <NodeDateModal
           node={dateNode}

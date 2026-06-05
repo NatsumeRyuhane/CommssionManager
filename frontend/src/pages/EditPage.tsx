@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import type { CommissionCreate, Rating } from "../api/types";
 import { Chip } from "../components/Chip";
+import { CoverFocalEditor } from "../components/CoverFocalEditor";
 import { StagesEditor } from "../components/StagesEditor";
 import { TopBar } from "../components/TopBar";
 import { useAuth } from "../hooks/useAuth";
@@ -38,6 +39,8 @@ export function EditPage() {
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [coverVersion, setCoverVersion] = useState(0);
+  const bumpCoverVersion = () => setCoverVersion((v) => v + 1);
 
   useEffect(() => {
     if (!isEdit || !id) return;
@@ -147,7 +150,7 @@ export function EditPage() {
 
           {isEdit && id ? (
             <div style={{ marginTop: 18 }}>
-              <StagesEditor commissionId={Number(id)} />
+              <StagesEditor commissionId={Number(id)} onChange={bumpCoverVersion} />
             </div>
           ) : (
             <div className="settings-panel" style={{ marginTop: 18 }}>
@@ -168,6 +171,13 @@ export function EditPage() {
         </div>
 
         <aside className="edit-rail">
+          {isEdit && id && (
+            <CoverFocalEditor
+              commissionId={Number(id)}
+              version={coverVersion}
+              onChange={bumpCoverVersion}
+            />
+          )}
           <FieldGroup label="Completed">
             <input
               className="field"
