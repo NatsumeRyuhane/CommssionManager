@@ -216,6 +216,9 @@ def main() -> None:
         choices=["start", "stop", "restart", "upgrade", "status", "logs", "test"],
     )
     ap.add_argument("service", nargs="?", help="for logs: api|web (dev) or a compose service")
+    if len(sys.argv) == 1:
+        ap.print_help()
+        return
     args = ap.parse_args()
 
     values = c.load_env(announce=True)

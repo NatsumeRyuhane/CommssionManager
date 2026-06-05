@@ -64,6 +64,7 @@
   named volume
 - [x] `python3 main.py upgrade` for prod: stop app containers, discard non-runtime local changes,
   sync to upstream `main`, rebuild, and start
+- [x] `python3 main.py` with no arguments prints the management CLI usage guide
 
 ## Phase 2 — Breadth (deferred)
 - [x] Backend settings/admin surface:
