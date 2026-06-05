@@ -7,7 +7,7 @@ The deployment mode comes from CMGR_ENV in backend/.env (written by deploy/setup
     test  run the backend test suite    — pytest (ephemeral Postgres via testcontainers)
     prod  full Docker stack             — docker compose (db + api + web/nginx)
 
-    python3 main.py <start|stop|restart|status|logs|test> [service]
+    python3 main.py <start|stop|restart|upgrade|status|logs|test> [service]
 
 Stdlib only; orchestrates uv, pnpm, and docker compose. Dev servers run as background
 processes tracked by pidfiles/logs under deploy/.run/.
@@ -143,6 +143,62 @@ def prod_logs(service: str | None) -> None:
         pass
 
 
+def prod_upgrade() -> None:
+    _require("docker")
+    _require("git")
+    _require_upgrade_branch()
+
+    stopped = False
+    try:
+        c.step("Stopping app containers")
+        c.run(c.compose(c.COMPOSE_FULL, "stop", "api", "web"))
+        stopped = True
+
+        _sync_repo_to_upstream()
+
+        c.step("Full stack (build + up)")
+        c.run(c.compose(c.COMPOSE_FULL, "up", "-d", "--build"))
+        print()
+        c.ok(c.color("1", f"App:  http://localhost:{c.PROD_WEB_PORT}"))
+        c.info("status: python3 main.py status   |   logs: python3 main.py logs")
+    except SystemExit:
+        if stopped:
+            c.warn("upgrade failed — attempting to bring app containers back online")
+            c.run(c.compose(c.COMPOSE_FULL, "up", "-d", "--build"), check=False)
+        raise
+
+
+def _sync_repo_to_upstream() -> None:
+    c.step("Repository sync")
+    c.warn("discarding tracked changes and untracked non-ignored files")
+
+    # Clean before fetch so local runtime artifacts only survive if they are intentionally ignored.
+    c.run(["git", "reset", "--hard", "HEAD"], cwd=c.ROOT)
+    c.run(["git", "clean", "-fd"], cwd=c.ROOT)
+
+    c.run(["git", "fetch", "--prune"], cwd=c.ROOT)
+    c.run(["git", "reset", "--hard", "@{u}"], cwd=c.ROOT)
+    c.run(["git", "clean", "-fd"], cwd=c.ROOT)
+    c.ok("repository matches upstream main")
+
+
+def _require_upgrade_branch() -> None:
+    branch = _git_output(["git", "branch", "--show-current"])
+    if branch != "main":
+        c.die(f"upgrade must run from main, currently on {branch or '(detached HEAD)'}")
+    _git_output(["git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"])
+
+
+def _git_output(cmd: list[str]) -> str:
+    c.info(c.color("2", f"$ {' '.join(cmd)}   (in .)"))
+    result = subprocess.run(cmd, cwd=c.ROOT, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if result.returncode != 0:
+        if result.stderr.strip():
+            c.err(result.stderr.strip())
+        c.die(f"command failed ({result.returncode}): {' '.join(cmd)}", result.returncode)
+    return result.stdout.strip()
+
+
 # ------------------------------------------------------------------------------- test
 def run_tests() -> None:
     _require("uv")
@@ -155,7 +211,10 @@ def run_tests() -> None:
 # ------------------------------------------------------------------------------- dispatch
 def main() -> None:
     ap = argparse.ArgumentParser(description="Run/control Commission Manager.")
-    ap.add_argument("command", choices=["start", "stop", "restart", "status", "logs", "test"])
+    ap.add_argument(
+        "command",
+        choices=["start", "stop", "restart", "upgrade", "status", "logs", "test"],
+    )
     ap.add_argument("service", nargs="?", help="for logs: api|web (dev) or a compose service")
     args = ap.parse_args()
 
@@ -173,6 +232,12 @@ def main() -> None:
 
     if args.command == "test":
         run_tests()
+
+    if args.command == "upgrade":
+        if mode != "prod":
+            c.die("upgrade is only supported in prod mode (CMGR_ENV=prod)")
+        prod_upgrade()
+        return
 
     handlers = {
         "dev": {"start": dev_start, "stop": dev_stop, "status": dev_status},
