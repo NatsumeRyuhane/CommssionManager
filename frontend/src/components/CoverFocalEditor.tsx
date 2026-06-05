@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type PointerEvent } from "react";
+import { useEffect, useState, type PointerEvent } from "react";
 
 import { api } from "../api/client";
 import type { Cover } from "../api/types";
@@ -24,10 +24,11 @@ function clamp(v: number) {
 export function CoverFocalEditor({ commissionId, version = 0, onChange }: CoverFocalEditorProps) {
   const [cover, setCover] = useState<Cover | null>(null);
   const [focal, setFocal] = useState<[number, number]>([0.5, 0.5]);
+  const [savedFocal, setSavedFocal] = useState<[number, number]>([0.5, 0.5]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [dragging, setDragging] = useState(false);
-  const dirty = useRef(false);
+  const [pressed, setPressed] = useState(false);
+  const [moveLocked, setMoveLocked] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -37,9 +38,10 @@ export function CoverFocalEditor({ commissionId, version = 0, onChange }: CoverF
         if (!active) return;
         setCover(d.cover);
         if (d.cover) {
-          setFocal([d.cover.focal_x ?? 0.5, d.cover.focal_y ?? 0.5]);
+          const next: [number, number] = [d.cover.focal_x ?? 0.5, d.cover.focal_y ?? 0.5];
+          setFocal(next);
+          setSavedFocal(next);
         }
-        dirty.current = false;
       })
       .catch((e) => active && setError(String(e)));
     return () => {
@@ -52,22 +54,25 @@ export function CoverFocalEditor({ commissionId, version = 0, onChange }: CoverF
     const x = clamp((e.clientX - rect.left) / rect.width);
     const y = clamp((e.clientY - rect.top) / rect.height);
     setFocal([x, y]);
-    dirty.current = true;
   }
 
-  async function commit() {
-    if (!cover || !dirty.current) return;
-    dirty.current = false;
+  async function save() {
+    if (!cover) return;
     setBusy(true);
     setError(null);
     try {
       await api.setFocal(cover.file_id, focal[0], focal[1]);
+      setSavedFocal(focal);
       onChange?.();
     } catch (e) {
       setError(String(e));
     } finally {
       setBusy(false);
     }
+  }
+
+  function revert() {
+    setFocal(savedFocal);
   }
 
   if (!cover) {
@@ -81,26 +86,31 @@ export function CoverFocalEditor({ commissionId, version = 0, onChange }: CoverF
     );
   }
 
+  const dirty = focal[0] !== savedFocal[0] || focal[1] !== savedFocal[1];
+
   return (
-    <div className={`edit-field-group cover-focal-editor${dragging ? " is-dragging" : ""}`}>
+    <div className={`edit-field-group cover-focal-editor${moveLocked ? " is-dragging" : ""}`}>
       <div className="label">Cover image · focal point</div>
       <div
-        className={`cover-focal-canvas${dragging ? " is-dragging" : ""}`}
+        className={`cover-focal-canvas${moveLocked ? " is-dragging" : ""}`}
         onPointerDown={(e) => {
           (e.target as Element).setPointerCapture?.(e.pointerId);
-          setDragging(true);
+          setPressed(true);
+          // first pick animates because moveLocked is still false
           pick(e);
         }}
         onPointerMove={(e) => {
-          if (dragging) pick(e);
+          if (!pressed) return;
+          if (!moveLocked) setMoveLocked(true);
+          pick(e);
         }}
         onPointerUp={() => {
-          setDragging(false);
-          void commit();
+          setPressed(false);
+          setMoveLocked(false);
         }}
         onPointerCancel={() => {
-          setDragging(false);
-          void commit();
+          setPressed(false);
+          setMoveLocked(false);
         }}
       >
         <img src={cover.url} alt="" draggable={false} />
@@ -118,8 +128,7 @@ export function CoverFocalEditor({ commissionId, version = 0, onChange }: CoverF
         />
       </div>
       <div className="mono-sm muted" style={{ textAlign: "center", marginTop: 6 }}>
-        drag the reticle · focal ({focal[0].toFixed(2)}, {focal[1].toFixed(2)})
-        {busy && <span style={{ marginLeft: 6 }}>· saving…</span>}
+        focal ({focal[0].toFixed(2)}, {focal[1].toFixed(2)})
       </div>
       <div className="cover-focal-previews">
         {RATIOS.map((r) => (
@@ -143,6 +152,26 @@ export function CoverFocalEditor({ commissionId, version = 0, onChange }: CoverF
           </div>
         ))}
       </div>
+      {dirty && (
+        <div className="cover-focal-actions">
+          <button
+            type="button"
+            className="btn sm ghost"
+            onClick={revert}
+            disabled={busy}
+          >
+            Revert
+          </button>
+          <button
+            type="button"
+            className="btn sm primary"
+            onClick={() => void save()}
+            disabled={busy}
+          >
+            {busy ? "Saving…" : "✓ Save focal"}
+          </button>
+        </div>
+      )}
       {error && <div className="error-text">{error}</div>}
     </div>
   );
