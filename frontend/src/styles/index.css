@@ -582,6 +582,55 @@ a { color: inherit; text-decoration: none; }
   gap: 8px;
   min-height: 30px;
 }
+.lifecycle-stage-handle {
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--mute);
+  cursor: grab;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  flex-shrink: 0;
+}
+.lifecycle-stage-handle:not(:disabled):hover {
+  background: var(--paper-2);
+  color: var(--ink);
+}
+.lifecycle-stage-handle:not(:disabled):active {
+  cursor: grabbing;
+}
+.lifecycle-stage-handle:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.lifecycle-stage-handle:focus-visible {
+  outline: 2px solid #d3e8df;
+}
+.lifecycle-stage-handle-dots {
+  width: 12px;
+  height: 18px;
+  background-image: radial-gradient(circle at 2px 2px, currentcolor 1.3px, transparent 1.5px);
+  background-size: 6px 6px;
+  background-repeat: repeat;
+}
+.lifecycle-date-button {
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  padding: 2px 5px;
+  cursor: pointer;
+}
+.lifecycle-date-button:hover {
+  background: var(--paper-2);
+  color: var(--ink);
+}
+.lifecycle-date-button:focus-visible {
+  outline: 2px solid #d3e8df;
+}
 .lifecycle-empty {
   border: 1px dashed var(--rule-2);
   border-radius: 6px;
@@ -629,6 +678,15 @@ a { color: inherit; text-decoration: none; }
   width: 70px;
   padding: 3px 5px;
   font-size: 11px;
+}
+
+.node-date-modal {
+  width: min(420px, 92vw);
+  background: var(--paper);
+  border: 1px solid var(--rule-2);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-2);
+  padding: 18px;
 }
 
 /* ---- focal editor ---- */

@@ -39,10 +39,31 @@ def test_rename_node(admin_client: TestClient):
     assert res.json()["name"] == "Rough"
 
 
+def test_update_node_started_at(admin_client: TestClient):
+    c = _commission(admin_client)
+    delivered = _regular(c["nodes"])[1]
+
+    dated = admin_client.patch(
+        f"/api/v1/nodes/{delivered['id']}", json={"started_at": "2026-05-29T00:00:00Z"}
+    )
+    assert dated.status_code == 200, dated.text
+    assert dated.json()["started_at"].startswith("2026-05-29T00:00:00")
+
+    cleared = admin_client.patch(f"/api/v1/nodes/{delivered['id']}", json={"started_at": None})
+    assert cleared.status_code == 200, cleared.text
+    assert cleared.json()["started_at"] is None
+
+
 def test_cannot_rename_or_delete_detached(admin_client: TestClient):
     c = _commission(admin_client)
     detached = next(n for n in c["nodes"] if n["is_detached"])
     assert admin_client.patch(f"/api/v1/nodes/{detached['id']}", json={"name": "x"}).status_code == 400
+    assert (
+        admin_client.patch(
+            f"/api/v1/nodes/{detached['id']}", json={"started_at": "2026-05-29T00:00:00Z"}
+        ).status_code
+        == 400
+    )
     assert admin_client.delete(f"/api/v1/nodes/{detached['id']}").status_code == 400
 
 

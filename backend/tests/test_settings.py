@@ -7,6 +7,36 @@ def _create_key(admin_client: TestClient, *, name: str, scopes: list[str]) -> di
     return res.json()
 
 
+def test_site_settings_are_public_with_default(client: TestClient):
+    initial = client.get("/api/v1/settings/site")
+    assert initial.status_code == 200, initial.text
+    assert initial.json()["site_title"] == "Commissions"
+
+
+def test_site_settings_are_admin_patchable(admin_client: TestClient):
+    key = _create_key(admin_client, name="writer", scopes=["write"])
+    blocked = admin_client.patch(
+        "/api/v1/settings/site",
+        json={"site_title": "Private header"},
+        headers={"X-API-Key": key["full_key"]},
+    )
+    assert blocked.status_code == 403
+
+    blank = admin_client.patch("/api/v1/settings/site", json={"site_title": "  "})
+    assert blank.status_code == 422
+
+    patched = admin_client.patch(
+        "/api/v1/settings/site",
+        json={"site_title": "Heiyao's commissions"},
+    )
+    assert patched.status_code == 200, patched.text
+    assert patched.json()["site_title"] == "Heiyao's commissions"
+
+    fetched = admin_client.get("/api/v1/settings/site")
+    assert fetched.status_code == 200
+    assert fetched.json()["site_title"] == "Heiyao's commissions"
+
+
 def test_visibility_settings_are_admin_only_and_patchable(admin_client: TestClient):
     key = _create_key(admin_client, name="writer", scopes=["write"])
     headers = {"X-API-Key": key["full_key"]}

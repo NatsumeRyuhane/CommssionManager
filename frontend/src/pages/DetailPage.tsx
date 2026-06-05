@@ -48,8 +48,8 @@ export function DetailPage() {
 
   const regular = data.nodes.filter((n) => !n.is_detached);
   const detached = data.nodes.filter((n) => n.is_detached && n.files.length > 0);
-  // Detached pinned first, then stages newest -> oldest (matches the wireframe).
-  const lifecycle = [...detached, ...[...regular].reverse()];
+  // Match edit-page order: Detached first when it has files, then lifecycle position order.
+  const lifecycle = [...detached, ...regular];
   const currentStage = data.current_stage;
 
   return (

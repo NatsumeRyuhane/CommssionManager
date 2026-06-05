@@ -16,6 +16,8 @@ import type {
   ListParams,
   MeResponse,
   Paged,
+  SiteSettings,
+  SiteSettingsUpdate,
   StorageSettings,
   VisibilitySettings,
   VisibilitySettingsUpdate,
@@ -127,6 +129,12 @@ export const api = {
     request<ApiKeyCreated>("/api-keys", { method: "POST", body: JSON.stringify(body) }),
   revokeApiKey: (id: number) =>
     request<ApiKey>(`/api-keys/${id}/revoke`, { method: "POST" }),
+  getSiteSettings: () => request<SiteSettings>("/settings/site"),
+  updateSiteSettings: (body: SiteSettingsUpdate) =>
+    request<SiteSettings>("/settings/site", {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
   getVisibilitySettings: () => request<VisibilitySettings>("/settings/visibility"),
   updateVisibilitySettings: (body: VisibilitySettingsUpdate) =>
     request<VisibilitySettings>("/settings/visibility", {
@@ -147,6 +155,13 @@ export const api = {
     request<CommissionNode>(`/nodes/${nodeId}`, {
       method: "PATCH",
       body: JSON.stringify({ name }),
+    }),
+  updateNodeDate: (nodeId: number, startedAt: string | null) =>
+    request<CommissionNode>(`/nodes/${nodeId}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        started_at: startedAt ? `${startedAt}T00:00:00Z` : null,
+      }),
     }),
   reorderNodes: (commissionId: number, nodeIds: number[]) =>
     request<CommissionNode[]>(`/commissions/${commissionId}/nodes/reorder`, {

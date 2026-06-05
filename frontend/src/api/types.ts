@@ -189,6 +189,15 @@ export interface StorageSettings {
   configurable_via: string;
 }
 
+export interface SiteSettings {
+  site_title: string;
+  updated_at: string | null;
+}
+
+export interface SiteSettingsUpdate {
+  site_title?: string | null;
+}
+
 export interface CommissionVisibilityField {
   field: VisibilityFieldKey;
   public: boolean | null;

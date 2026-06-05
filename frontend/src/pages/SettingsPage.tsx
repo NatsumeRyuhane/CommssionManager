@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
 import type {
   ApiKey,
+  SiteSettings,
   StorageSettings,
   Visibility,
   VisibilityFieldKey,
@@ -14,7 +15,7 @@ import { ToggleSwitch } from "../components/ToggleSwitch";
 import { TopBar } from "../components/TopBar";
 import { useAuth } from "../hooks/useAuth";
 
-type Tab = "api" | "visibility" | "storage";
+type Tab = "site" | "api" | "visibility" | "storage";
 
 const FIELD_ROWS: { key: VisibilityFieldKey; label: string; note?: string }[] = [
   { key: "title", label: "Title" },
@@ -48,8 +49,9 @@ const PRESETS: { value: VisibilityPreset; label: string; desc: string }[] = [
 
 export function SettingsPage() {
   const { me, loading: authLoading } = useAuth();
-  const [tab, setTab] = useState<Tab>("api");
+  const [tab, setTab] = useState<Tab>("site");
   const [keys, setKeys] = useState<ApiKey[]>([]);
+  const [site, setSite] = useState<SiteSettings | null>(null);
   const [visibility, setVisibility] = useState<VisibilitySettings | null>(null);
   const [storage, setStorage] = useState<StorageSettings | null>(null);
   const [loading, setLoading] = useState(true);
@@ -64,12 +66,14 @@ export function SettingsPage() {
     setLoading(true);
     setError(null);
     try {
-      const [nextKeys, nextVisibility, nextStorage] = await Promise.all([
+      const [nextKeys, nextSite, nextVisibility, nextStorage] = await Promise.all([
         api.listApiKeys(),
+        api.getSiteSettings(),
         api.getVisibilitySettings(),
         api.getStorageSettings(),
       ]);
       setKeys(nextKeys);
+      setSite(nextSite);
       setVisibility(nextVisibility);
       setStorage(nextStorage);
     } catch (e) {
@@ -98,11 +102,14 @@ export function SettingsPage() {
 
   return (
     <div className="app">
-      <TopBar>
+      <TopBar siteTitle={site?.site_title ?? "Commissions"}>
         <span className="mono-sm muted">admin settings</span>
       </TopBar>
       <div className="settings-shell">
         <aside className="settings-sidebar">
+          <button className={`settings-tab ${tab === "site" ? "active" : ""}`} onClick={() => setTab("site")}>
+            Site
+          </button>
           <button className={`settings-tab ${tab === "api" ? "active" : ""}`} onClick={() => setTab("api")}>
             API keys
           </button>
@@ -123,6 +130,24 @@ export function SettingsPage() {
         <main className="settings-content">
           {loading && <div className="mono-sm muted">Loading settings…</div>}
           {error && <div className="error-text">{error}</div>}
+          {!loading && !error && tab === "site" && site && (
+            <SitePanel
+              value={site}
+              busy={saving}
+              onChange={setSite}
+              onSave={async () => {
+                setSaving(true);
+                setError(null);
+                try {
+                  setSite(await api.updateSiteSettings({ site_title: site.site_title }));
+                } catch (e) {
+                  setError(String(e));
+                } finally {
+                  setSaving(false);
+                }
+              }}
+            />
+          )}
           {!loading && !error && tab === "api" && (
             <ApiKeysPanel
               keys={keys}
@@ -184,6 +209,58 @@ export function SettingsPage() {
         </main>
       </div>
     </div>
+  );
+}
+
+function SitePanel({
+  value,
+  busy,
+  onChange,
+  onSave,
+}: {
+  value: SiteSettings;
+  busy: boolean;
+  onChange: (next: SiteSettings) => void;
+  onSave: () => void;
+}) {
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!value.site_title.trim()) return;
+    onSave();
+  }
+
+  return (
+    <section>
+      <div className="settings-heading">
+        <div>
+          <h1>Site</h1>
+          <div className="mono-sm muted">
+            {value.updated_at ? `Updated ${value.updated_at.slice(0, 10)}` : "Default settings"}
+          </div>
+        </div>
+      </div>
+
+      <form className="settings-panel" onSubmit={submit}>
+        <div className="settings-panel-title">Header</div>
+        <div className="settings-form-grid">
+          <label>
+            <span className="label">Site title</span>
+            <input
+              className="field"
+              value={value.site_title}
+              onChange={(e) => onChange({ ...value, site_title: e.target.value })}
+              placeholder="Commissions"
+              maxLength={120}
+            />
+          </label>
+          <div className="settings-form-actions">
+            <button className="btn primary" disabled={busy || !value.site_title.trim()}>
+              {busy ? "Saving…" : "Save site"}
+            </button>
+          </div>
+        </div>
+      </form>
+    </section>
   );
 }
 

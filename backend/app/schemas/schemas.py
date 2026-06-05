@@ -105,7 +105,18 @@ class NodeCreate(BaseModel):
 
 
 class NodeUpdate(BaseModel):
-    name: str
+    name: str | None = None
+    started_at: datetime | None = None
+
+    @field_validator("name")
+    @classmethod
+    def name_must_not_be_empty(cls, name: str | None) -> str | None:
+        if name is None:
+            return None
+        name = name.strip()
+        if not name:
+            raise ValueError("name must not be empty")
+        return name
 
 
 class NodeReorder(BaseModel):
@@ -271,6 +282,25 @@ class VisibilitySettingsUpdate(BaseModel):
     default_stage_visibility: Visibility | None = None
     fields: VisibilityFieldDefaultsPatch | None = None
     stage_defaults: list[VisibilityStageDefaultIn] | None = None
+
+
+class SiteSettingsOut(BaseModel):
+    site_title: str
+    updated_at: datetime | None = None
+
+
+class SiteSettingsUpdate(BaseModel):
+    site_title: str | None = Field(default=None, max_length=120)
+
+    @field_validator("site_title")
+    @classmethod
+    def site_title_must_not_be_empty(cls, title: str | None) -> str | None:
+        if title is None:
+            return None
+        title = title.strip()
+        if not title:
+            raise ValueError("site_title must not be empty")
+        return title
 
 
 class VisibilityFieldState(BaseModel):

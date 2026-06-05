@@ -67,16 +67,18 @@
 
 ## Phase 2 — Breadth (deferred)
 - [x] Backend settings/admin surface:
+  - [x] Site title setting
   - [x] Visibility preset settings + stage defaults
   - [x] Webhook endpoint config CRUD (delivery worker remains below)
   - [x] Storage config summary endpoint (env-driven, read-only)
-- [x] Settings (admin): frontend UI for API keys, visibility presets, and storage config
+- [x] Settings (admin): frontend UI for site title, API keys, visibility presets, and storage config
 - [ ] Settings (admin): frontend UI for webhooks (excluded from this round)
 - [x] Backend visibility/privacy: global preset -> per-commission -> per-stage -> per-file
   precedence, public metadata redaction, raw-file privacy, and `/images?visibility=` filtering
 - [x] Visibility/privacy: frontend controls for global defaults and per-commission/stage/file
   overrides
-- [x] Lifecycle: shared component, drag-and-drop files between stages, detached-node handling
+- [x] Lifecycle: shared component, draggable stage reorder handle, drag-and-drop files between
+  stages, detached-first exception handling
 - [ ] Character pages: shareable profile, main ref, curated image "bookshelves" + picker
 - [x] Artist management: multi-platform handles, paste-to-match, no-match resolve dialog
 - [ ] Mobile views for every section

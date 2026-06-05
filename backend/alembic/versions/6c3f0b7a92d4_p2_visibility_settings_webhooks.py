@@ -8,6 +8,7 @@ from collections.abc import Sequence
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 
 revision: str = "6c3f0b7a92d4"
@@ -16,16 +17,25 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 
-visibility = sa.Enum("public", "private", name="visibility")
-visibility_preset = sa.Enum(
-    "public_by_default", "private_by_default", "custom", name="visibility_preset"
+visibility = postgresql.ENUM("public", "private", name="visibility", create_type=False)
+visibility_preset = postgresql.ENUM(
+    "public_by_default",
+    "private_by_default",
+    "custom",
+    name="visibility_preset",
+    create_type=False,
 )
 
 
 def upgrade() -> None:
     bind = op.get_bind()
-    visibility.create(bind, checkfirst=True)
-    visibility_preset.create(bind, checkfirst=True)
+    postgresql.ENUM("public", "private", name="visibility").create(bind, checkfirst=True)
+    postgresql.ENUM(
+        "public_by_default",
+        "private_by_default",
+        "custom",
+        name="visibility_preset",
+    ).create(bind, checkfirst=True)
 
     op.create_table(
         "app_settings",
@@ -182,5 +192,10 @@ def downgrade() -> None:
     op.drop_table("app_settings")
 
     bind = op.get_bind()
-    visibility_preset.drop(bind, checkfirst=True)
-    visibility.drop(bind, checkfirst=True)
+    postgresql.ENUM(
+        "public_by_default",
+        "private_by_default",
+        "custom",
+        name="visibility_preset",
+    ).drop(bind, checkfirst=True)
+    postgresql.ENUM("public", "private", name="visibility").drop(bind, checkfirst=True)

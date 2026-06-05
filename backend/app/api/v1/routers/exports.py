@@ -148,6 +148,7 @@ def _settings_export(db: Session) -> dict[str, object] | None:
     if settings is None:
         return None
     return {
+        "site_title": settings.site_title,
         "visibility_preset": settings.visibility_preset.value,
         "default_commission_visibility": settings.default_commission_visibility.value,
         "default_stage_visibility": settings.default_stage_visibility.value,
