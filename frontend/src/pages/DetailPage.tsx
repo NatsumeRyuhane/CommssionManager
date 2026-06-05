@@ -48,9 +48,17 @@ export function DetailPage() {
 
   const regular = data.nodes.filter((n) => !n.is_detached);
   const detached = data.nodes.filter((n) => n.is_detached && n.files.length > 0);
-  // Match edit-page order: Detached first when it has files, then lifecycle position order.
   const lifecycle = [...detached, ...regular];
   const currentStage = data.current_stage;
+  const paddedId = String(data.id).padStart(3, "0");
+
+  const isPublic = data.effective_visibility !== "private";
+  const subBits = [
+    `commission #${paddedId}`,
+    data.completed_at || null,
+    data.cover?.width && data.cover?.height ? `${data.cover.width}×${data.cover.height}` : null,
+    data.formats.length ? data.formats.join("/") : null,
+  ].filter(Boolean) as string[];
 
   return (
     <div className="app">
@@ -58,12 +66,12 @@ export function DetailPage() {
         {canWrite && <CopyJsonButton id={data.id} />}
         {canWrite && (
           <Link to={`/commissions/${data.id}/visibility`} className="btn sm">
-            Visibility
+            👁 Visibility
           </Link>
         )}
         {canWrite && (
           <a className="btn sm" href={api.filesExportUrl(data.id)} download>
-            Export zip
+            ↗ Export zip
           </a>
         )}
         {canWrite && (
@@ -78,81 +86,114 @@ export function DetailPage() {
         )}
       </TopBar>
 
-      {/* TOP HALF — hero + side rail */}
-      <div style={{ display: "flex", borderBottom: "1px solid var(--rule)" }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
+      {/* breadcrumb sub-header */}
+      <div className="detail-crumb">
+        <Link to="/" className="mono-sm muted">← gallery</Link>
+        <span className="mono-sm muted">/</span>
+        <strong className="detail-crumb-title">{data.title}</strong>
+        <span className="mono-sm muted">#{paddedId}</span>
+        <span className="spacer" />
+        <span
+          className="mono-sm detail-visibility"
+          style={{ color: isPublic ? "var(--accent)" : "var(--warn)" }}
+        >
+          {isPublic ? "🌐 public" : "🔒 private"}
+          {currentStage && (
+            <span className="muted" style={{ marginLeft: 8 }}>· stage: {currentStage}</span>
+          )}
+        </span>
+      </div>
+
+      {/* hero + side rail */}
+      <div className="detail-hero">
+        <div className="detail-hero-main">
           <div className="page-title">
-            <div className="row gap-8 wrap" style={{ marginBottom: 6 }}>
+            <div className="row gap-8 wrap" style={{ marginBottom: 10 }}>
               {data.categories.map((c) => (
                 <Chip key={c} kind="cat">{c}</Chip>
               ))}
-              <Chip kind="rating">{data.rating}</Chip>
+              {data.rating && <Chip kind="rating">{data.rating}</Chip>}
               {data.tags.map((t) => (
                 <Chip key={t} kind="tag">{t}</Chip>
               ))}
             </div>
             <h1>{data.title}</h1>
-            <div className="sub mono">
-              commission #{String(data.id).padStart(3, "0")}
-              {data.completed_at ? ` · ${data.completed_at}` : ""}
-              {data.cover?.width ? ` · ${data.cover.width}×${data.cover.height}` : ""}
-              {data.formats.length ? ` · ${data.formats.join("/")}` : ""}
-            </div>
+            {subBits.length > 0 && (
+              <div className="sub mono">{subBits.join(" · ")}</div>
+            )}
           </div>
-          <div style={{ padding: "8px 48px 28px" }}>
-            <div style={{ maxWidth: 460, margin: "0 auto" }}>
+          <div className="detail-cover-wrap">
+            <div className="detail-cover">
               <Cover cover={data.cover} />
             </div>
           </div>
+          {data.description && (
+            <p className="detail-description">{data.description}</p>
+          )}
         </div>
 
-        {/* side rail */}
-        <aside
-          style={{
-            width: 300,
-            borderLeft: "1px solid var(--rule)",
-            padding: "28px 24px",
-            flexShrink: 0,
-          }}
-        >
-          {data.description && (
-            <>
-              <div className="label">Description</div>
-              <p style={{ marginTop: 0 }}>{data.description}</p>
-            </>
+        <aside className="detail-rail">
+          <div className="detail-rail-visibility">
+            <span className="mono-sm">visibility:</span>
+            <span style={{ color: isPublic ? "var(--accent)" : "var(--warn)" }}>
+              {isPublic ? "🌐 public" : "🔒 private"}
+            </span>
+            {canWrite && (
+              <>
+                <span className="spacer" />
+                <Link
+                  to={`/commissions/${data.id}/visibility`}
+                  className="mono-sm"
+                  style={{ color: "var(--accent)" }}
+                >
+                  edit
+                </Link>
+              </>
+            )}
+          </div>
+
+          {data.completed_at && (
+            <MetaRow label="Date" value={data.completed_at} pub />
           )}
-          <Meta label="Characters">
-            {data.characters.map((c) => <Chip key={c} kind="char">{c}</Chip>)}
-          </Meta>
-          <Meta label="Artists">
-            {data.artists.map((a) => <Chip key={a} kind="artist">{a}</Chip>)}
-          </Meta>
-          {canWrite && (data.price_amount || data.confirmed_at) && (
-            <div
-              style={{
-                marginTop: 16,
-                padding: "10px 12px",
-                background: "var(--paper-2)",
-                borderRadius: 6,
-              }}
-            >
-              <div className="mono-sm" style={{ marginBottom: 4 }}>🔒 admin-only</div>
-              {data.price_amount && (
-                <div className="mono-sm">
-                  Price: {data.price_amount} {data.price_currency}
-                </div>
-              )}
-              {data.confirmed_at && (
-                <div className="mono-sm">Confirmed: {data.confirmed_at.slice(0, 10)}</div>
-              )}
-            </div>
+          {canWrite && data.confirmed_at && (
+            <MetaRow label="Confirmed" value={data.confirmed_at.slice(0, 10)} pub={false} />
+          )}
+          {canWrite && data.price_amount && (
+            <MetaRow
+              label="Price"
+              value={`${data.price_amount}${data.price_currency ? ` ${data.price_currency}` : ""}`}
+              pub={false}
+            />
+          )}
+
+          {data.characters.length > 0 && (
+            <MetaBlock label="Characters">
+              {data.characters.map((c) => <Chip key={c} kind="char">{c}</Chip>)}
+            </MetaBlock>
+          )}
+          {data.artists.length > 0 && (
+            <MetaBlock label="Artists">
+              {data.artists.map((a) => <Chip key={a} kind="artist">{a}</Chip>)}
+            </MetaBlock>
+          )}
+          {currentStage && (
+            <MetaBlock label="Current stage">
+              <Chip kind="cat">{currentStage}</Chip>
+            </MetaBlock>
           )}
         </aside>
       </div>
 
-      {/* BOTTOM HALF — vertical lifecycle */}
-      <div style={{ padding: "24px 48px", maxWidth: 760 }}>
-        <h2 style={{ fontSize: 16, margin: "0 0 12px" }}>Lifecycle</h2>
+      {/* lifecycle */}
+      <div className="detail-lifecycle">
+        <div className="row" style={{ justifyContent: "space-between", marginBottom: 12 }}>
+          <div className="row gap-8">
+            <strong style={{ fontSize: 15 }}>Lifecycle</strong>
+            <span className="mono-sm muted">
+              {regular.length} stages{detached.length ? " · detached present" : ""}
+            </span>
+          </div>
+        </div>
         <LifecycleStagesList
           nodes={lifecycle}
           currentStage={currentStage}
@@ -163,9 +204,23 @@ export function DetailPage() {
   );
 }
 
-function Meta({ label, children }: { label: string; children: React.ReactNode }) {
+function MetaRow({ label, value, pub }: { label: string; value: string; pub: boolean }) {
   return (
-    <div style={{ marginTop: 14 }}>
+    <div className="detail-meta-row">
+      <span className="row gap-4">
+        <span className="label" style={{ margin: 0 }}>{label}</span>
+        <span style={{ fontSize: 10, color: pub ? "var(--accent)" : "var(--warn)" }}>
+          {pub ? "🌐" : "🔒"}
+        </span>
+      </span>
+      <span style={{ fontSize: 13 }}>{value}</span>
+    </div>
+  );
+}
+
+function MetaBlock({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="detail-meta-block">
       <div className="label">{label}</div>
       <div className="row wrap gap-4">{children}</div>
     </div>
