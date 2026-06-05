@@ -80,6 +80,9 @@
   overrides
 - [x] Lifecycle: shared component, draggable stage reorder handle, drag-and-drop files between
   stages, detached-first exception handling
+- [x] Design polish to match the wireframe handoff: detail page hero + side rail (breadcrumb,
+  privacy-marked meta rows, chip blocks); edit page two-column layout (borderless title, sticky
+  meta rail with chip previews + inline price/confirmed fields); filter popover arrow
 - [ ] Character pages: shareable profile, main ref, curated image "bookshelves" + picker
 - [x] Artist management: multi-platform handles, paste-to-match, no-match resolve dialog
 - [ ] Mobile views for every section
