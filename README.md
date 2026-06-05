@@ -45,6 +45,7 @@ python3 main.py start               # dev: Postgres + migrate + uvicorn + vite (
 python3 main.py status              # what's running
 python3 main.py logs                # tail the dev server logs
 python3 main.py stop                # stop the dev servers
+python3 main.py upgrade             # prod: stop app containers, sync repo, rebuild, start
 python3 main.py test                # run the backend suite (any env)
 ```
 
@@ -135,7 +136,15 @@ isolated from the dev Postgres (project `deploy`), so the two can run side by si
    The API container runs `alembic upgrade head` on startup, then serves on the internal
    network; the web container publishes the app on **<http://localhost:8080>** (change the
    `web` port mapping in the compose file to suit your host).
-3. **Data** lives outside rebuilt containers. Postgres uses the named Docker volume
+3. **Upgrade an existing deployment** from the checked-out branch's upstream:
+   ```sh
+   python3 main.py upgrade
+   ```
+   In `CMGR_ENV=prod`, this stops the `api` and `web` containers, discards tracked local changes
+   plus untracked non-ignored files (`git reset --hard` + `git clean -fd`), fetches/prunes, resets
+   the repo to upstream `main`, and rebuilds/starts the stack. Ignored runtime data such as
+   `data/`, `.env`, Docker volumes, and `deploy/.run/` is preserved.
+4. **Data** lives outside rebuilt containers. Postgres uses the named Docker volume
    `cmgr_cmgr_pgdata`; uploaded files are bind-mounted from repo-root `data/storage` into the API
    container at `/data/storage`. Back up both locations to preserve commissions and their files.
 

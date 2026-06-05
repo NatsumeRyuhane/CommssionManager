@@ -62,6 +62,8 @@
   proxies `/api`; verified `X-Total-Count` through the proxy)
 - [x] Prod uploaded files bind-mount to repo-root `data/storage`; Postgres remains in a Docker
   named volume
+- [x] `python3 main.py upgrade` for prod: stop app containers, discard non-runtime local changes,
+  sync to upstream `main`, rebuild, and start
 
 ## Phase 2 — Breadth (deferred)
 - [x] Backend settings/admin surface:
@@ -106,6 +108,8 @@
 - Prod uploaded files live under repo-root `data/storage` via the API container's `/data/storage`
   bind mount; this path is gitignored runtime data. Postgres remains in Docker volume
   `cmgr_cmgr_pgdata`.
+- Prod upgrade is intentionally destructive to repo-local drift: `python3 main.py upgrade` hard
+  resets to upstream `main` and runs `git clean -fd`; ignored runtime data is preserved.
 - **Compose projects are isolated by explicit name:** both compose files live in `deploy/`, so
   without explicit names they'd share the directory-derived project name and the same `postgres`
   service — bringing up the full stack would recreate the dev container `cmgr-postgres-dev`. Fixed
