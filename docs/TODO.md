@@ -60,6 +60,8 @@
   float pnpm versions or fail on the minimum-release-age supply-chain gate
 - [x] End-to-end verify of the full-stack compose build (db migrates + api serves + web/nginx
   proxies `/api`; verified `X-Total-Count` through the proxy)
+- [x] Prod uploaded files bind-mount to repo-root `data/storage`; Postgres remains in a Docker
+  named volume
 
 ## Phase 2 — Breadth (deferred)
 - [x] Backend settings/admin surface:
@@ -101,6 +103,9 @@
 - Exports require edit access: `/api/v1/exports/database.json` exports metadata/storage records
   without physical file bytes; `/api/v1/exports/files.zip` packages stored files under
   `{artists}-{id}/{node}/` and accepts `commission_id` for a single-work zip.
+- Prod uploaded files live under repo-root `data/storage` via the API container's `/data/storage`
+  bind mount; this path is gitignored runtime data. Postgres remains in Docker volume
+  `cmgr_cmgr_pgdata`.
 - **Compose projects are isolated by explicit name:** both compose files live in `deploy/`, so
   without explicit names they'd share the directory-derived project name and the same `postgres`
   service — bringing up the full stack would recreate the dev container `cmgr-postgres-dev`. Fixed

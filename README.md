@@ -135,8 +135,13 @@ isolated from the dev Postgres (project `deploy`), so the two can run side by si
    The API container runs `alembic upgrade head` on startup, then serves on the internal
    network; the web container publishes the app on **<http://localhost:8080>** (change the
    `web` port mapping in the compose file to suit your host).
-3. **Data** lives in named volumes (`cmgr_cmgr_pgdata` for Postgres, `cmgr_cmgr_storage` for
-   uploaded files). Back these up to preserve commissions and their files.
+3. **Data** lives outside rebuilt containers. Postgres uses the named Docker volume
+   `cmgr_cmgr_pgdata`; uploaded files are bind-mounted from repo-root `data/storage` into the API
+   container at `/data/storage`. Back up both locations to preserve commissions and their files.
+
+   If upgrading an older deployment that used the former `cmgr_cmgr_storage` Docker volume for
+   uploads, copy that volume's contents into `data/storage` before switching to this compose file;
+   otherwise the app will start with an empty upload directory.
 
 ---
 
