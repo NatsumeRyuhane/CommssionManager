@@ -36,7 +36,8 @@ services:
       CMGR_STORAGE_LOCAL_ROOT: /data/storage
       CMGR_CORS_ORIGINS: ${CORS_ORIGINS:-["http://localhost:8080"]}
     volumes:
-      - cmgr_storage:/data/storage
+      # Relative to deploy/docker-compose.yml: store uploaded files under repo-root data/storage.
+      - ../data/storage:/data/storage
     depends_on:
       postgres:
         condition: service_healthy
@@ -52,4 +53,3 @@ services:
 
 volumes:
   cmgr_pgdata:
-  cmgr_storage:
