@@ -3,18 +3,22 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from fastapi import HTTPException, status
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models import (
     AppSettings,
     Artist,
+    ArtistAlias,
     Character,
+    CharacterAlias,
     Commission,
     CommissionMetadata,
     CommissionNode,
     Label,
+    LabelAlias,
     LabelType,
     Visibility,
     VisibilityPreset,
@@ -95,30 +99,93 @@ class VisibilityContext:
 
 
 # ---------------------------------------------------------------- get-or-create lookups
+# Resolution rules: an input string matches a row when it equals (case-insensitive)
+# either the row's `name` or one of its aliases. Names are stored as the user typed
+# them; the lowercased form is compared via func.lower / the alias_lower column.
+
+
+def resolve_label(db: Session, name: str) -> Label | None:
+    needle = name.strip().lower()
+    if not needle:
+        return None
+    row = db.scalar(select(Label).where(func.lower(Label.name) == needle))
+    if row is not None:
+        return row
+    alias = db.scalar(select(LabelAlias).where(LabelAlias.alias_lower == needle))
+    return alias.label if alias is not None else None
+
+
+def resolve_character(db: Session, name: str) -> Character | None:
+    needle = name.strip().lower()
+    if not needle:
+        return None
+    row = db.scalar(select(Character).where(func.lower(Character.name) == needle))
+    if row is not None:
+        return row
+    alias = db.scalar(select(CharacterAlias).where(CharacterAlias.alias_lower == needle))
+    return alias.character if alias is not None else None
+
+
+def resolve_artist(db: Session, name: str) -> Artist | None:
+    needle = name.strip().lower()
+    if not needle:
+        return None
+    row = db.scalar(select(Artist).where(func.lower(Artist.name) == needle))
+    if row is not None:
+        return row
+    alias = db.scalar(select(ArtistAlias).where(ArtistAlias.alias_lower == needle))
+    return alias.artist if alias is not None else None
+
+
 def get_or_create_label(db: Session, name: str, type_: LabelType) -> Label:
-    row = db.scalar(select(Label).where(Label.name == name))
-    if row is None:
-        row = Label(name=name, type=type_)
-        db.add(row)
-        db.flush()
+    name = name.strip()
+    if not name:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Label name is empty")
+    existing = resolve_label(db, name)
+    if existing is not None:
+        if existing.type != type_:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"\"{name}\" already exists as a {existing.type.value}; "
+                    f"it cannot also be a {type_.value}. "
+                    "Reclassify or alias it in label management first."
+                ),
+            )
+        return existing
+    row = Label(name=name, type=type_)
+    db.add(row)
+    db.flush()
     return row
 
 
 def get_or_create_character(db: Session, name: str) -> Character:
-    row = db.scalar(select(Character).where(Character.name == name))
-    if row is None:
-        row = Character(name=name)
-        db.add(row)
-        db.flush()
+    name = name.strip()
+    if not name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Character name is empty"
+        )
+    existing = resolve_character(db, name)
+    if existing is not None:
+        return existing
+    row = Character(name=name)
+    db.add(row)
+    db.flush()
     return row
 
 
 def get_or_create_artist(db: Session, name: str) -> Artist:
-    row = db.scalar(select(Artist).where(Artist.name == name))
-    if row is None:
-        row = Artist(name=name)
-        db.add(row)
-        db.flush()
+    name = name.strip()
+    if not name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Artist name is empty"
+        )
+    existing = resolve_artist(db, name)
+    if existing is not None:
+        return existing
+    row = Artist(name=name)
+    db.add(row)
+    db.flush()
     return row
 
 
