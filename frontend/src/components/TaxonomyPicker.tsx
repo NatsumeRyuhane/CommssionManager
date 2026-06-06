@@ -107,6 +107,7 @@ export function TaxonomyPicker({ kind, values, onChange, placeholder }: Taxonomy
   const [open, setOpen] = useState(false);
   const [pendingName, setPendingName] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const searchRequestIdRef = useRef(0);
 
   const lowerValues = useMemo(
     () => new Set(values.map((v) => v.toLowerCase())),
@@ -115,6 +116,7 @@ export function TaxonomyPicker({ kind, values, onChange, placeholder }: Taxonomy
 
   // Debounced search
   useEffect(() => {
+    const requestId = ++searchRequestIdRef.current;
     const needle = q.trim();
     if (!needle) {
       setMatches([]);
@@ -125,14 +127,17 @@ export function TaxonomyPicker({ kind, values, onChange, placeholder }: Taxonomy
     const t = window.setTimeout(async () => {
       try {
         const m = await adapter.search(needle);
-        setMatches(m);
+        if (searchRequestIdRef.current === requestId) setMatches(m);
       } catch {
-        setMatches([]);
+        if (searchRequestIdRef.current === requestId) setMatches([]);
       } finally {
-        setLoading(false);
+        if (searchRequestIdRef.current === requestId) setLoading(false);
       }
     }, 200);
-    return () => window.clearTimeout(t);
+    return () => {
+      window.clearTimeout(t);
+      if (searchRequestIdRef.current === requestId) searchRequestIdRef.current += 1;
+    };
   }, [q, adapter]);
 
   // Close dropdown on outside click
@@ -459,8 +464,10 @@ function AliasParentPicker({ adapter, selected, onSelect }: AliasParentPickerPro
   const [q, setQ] = useState("");
   const [matches, setMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState(false);
+  const searchRequestIdRef = useRef(0);
 
   useEffect(() => {
+    const requestId = ++searchRequestIdRef.current;
     const needle = q.trim();
     if (!needle) {
       setMatches([]);
@@ -470,14 +477,18 @@ function AliasParentPicker({ adapter, selected, onSelect }: AliasParentPickerPro
     setLoading(true);
     const t = window.setTimeout(async () => {
       try {
-        setMatches(await adapter.search(needle));
+        const nextMatches = await adapter.search(needle);
+        if (searchRequestIdRef.current === requestId) setMatches(nextMatches);
       } catch {
-        setMatches([]);
+        if (searchRequestIdRef.current === requestId) setMatches([]);
       } finally {
-        setLoading(false);
+        if (searchRequestIdRef.current === requestId) setLoading(false);
       }
     }, 200);
-    return () => window.clearTimeout(t);
+    return () => {
+      window.clearTimeout(t);
+      if (searchRequestIdRef.current === requestId) searchRequestIdRef.current += 1;
+    };
   }, [q, adapter]);
 
   return (
