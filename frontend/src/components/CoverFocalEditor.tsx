@@ -29,9 +29,17 @@ export function CoverFocalEditor({ commissionId, version = 0, onChange }: CoverF
   const [error, setError] = useState<string | null>(null);
   const [pressed, setPressed] = useState(false);
   const [moveLocked, setMoveLocked] = useState(false);
+  // `loading` gates the save handler so a refetch-in-flight can't PATCH focal
+  // against a stale cover.file_id when the cover changed under us. We
+  // intentionally do *not* clear `cover` at refetch start: version bumps fire
+  // on any StagesEditor mutation (uploads, moves, etc.) and clearing would
+  // flicker the canvas to the empty state on those routine events.
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
+    setLoading(true);
+    setError(null);
     api
       .getCommission(commissionId)
       .then((d) => {
@@ -42,8 +50,13 @@ export function CoverFocalEditor({ commissionId, version = 0, onChange }: CoverF
           setFocal(next);
           setSavedFocal(next);
         }
+        setLoading(false);
       })
-      .catch((e) => active && setError(String(e)));
+      .catch((e) => {
+        if (!active) return;
+        setError(String(e));
+        setLoading(false);
+      });
     return () => {
       active = false;
     };
@@ -57,7 +70,9 @@ export function CoverFocalEditor({ commissionId, version = 0, onChange }: CoverF
   }
 
   async function save() {
-    if (!cover) return;
+    // Refuse to save while a refetch is in flight: `cover.file_id` could be
+    // about to change underneath us and we'd PATCH focal onto the wrong file.
+    if (!cover || loading) return;
     setBusy(true);
     setError(null);
     try {
@@ -158,7 +173,7 @@ export function CoverFocalEditor({ commissionId, version = 0, onChange }: CoverF
             type="button"
             className="btn sm ghost"
             onClick={revert}
-            disabled={busy}
+            disabled={busy || loading}
           >
             Revert
           </button>
@@ -166,9 +181,9 @@ export function CoverFocalEditor({ commissionId, version = 0, onChange }: CoverF
             type="button"
             className="btn sm primary"
             onClick={() => void save()}
-            disabled={busy}
+            disabled={busy || loading}
           >
-            {busy ? "Saving…" : "✓ Save focal"}
+            {busy ? "Saving…" : loading ? "Refreshing…" : "✓ Save focal"}
           </button>
         </div>
       )}
