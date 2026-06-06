@@ -2,6 +2,14 @@ import { Database, FileArchive } from "lucide-react";
 
 import { api } from "../api/client";
 
+/**
+ * Render the "Exports" settings panel with controls to download site-wide exports.
+ *
+ * Shows a "Database export" panel linking to a JSON dump of all commission metadata (no binary payloads)
+ * and a "Files export" panel linking to a ZIP of every stored file organized under `{artists}-{id}/{node}/`.
+ *
+ * @returns A section element containing two export panels: a database JSON download and a files ZIP download.
+ */
 export function ExportsPanel() {
   return (
     <section>

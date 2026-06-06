@@ -105,6 +105,15 @@ class VisibilityContext:
 
 
 def resolve_label(db: Session, name: str) -> Label | None:
+    """
+    Resolve a Label by its canonical name or any alias, matching case-insensitively.
+    
+    Parameters:
+        name (str): The label name or alias to look up; leading and trailing whitespace are ignored.
+    
+    Returns:
+        Label | None: `Label` if a matching canonical name or alias exists, `None` otherwise.
+    """
     needle = name.strip().lower()
     if not needle:
         return None
@@ -116,6 +125,15 @@ def resolve_label(db: Session, name: str) -> Label | None:
 
 
 def resolve_character(db: Session, name: str) -> Character | None:
+    """
+    Resolve a character by its name or alias and return the canonical Character if found.
+    
+    Parameters:
+        name (str): The character name or alias to resolve; leading/trailing whitespace is ignored and matching is case-insensitive.
+    
+    Returns:
+        Character | None: The matched `Character` when a name or alias matches, `None` if the input is empty or no match exists.
+    """
     needle = name.strip().lower()
     if not needle:
         return None
@@ -127,6 +145,15 @@ def resolve_character(db: Session, name: str) -> Character | None:
 
 
 def resolve_artist(db: Session, name: str) -> Artist | None:
+    """
+    Resolve an artist by canonical name or stored alias using case-insensitive matching.
+    
+    Parameters:
+        name (str): Artist name or alias; leading and trailing whitespace are ignored. An empty or whitespace-only name returns no match.
+    
+    Returns:
+        Artist | None: The matched Artist if found, `None` otherwise.
+    """
     needle = name.strip().lower()
     if not needle:
         return None
@@ -138,6 +165,20 @@ def resolve_artist(db: Session, name: str) -> Artist | None:
 
 
 def get_or_create_label(db: Session, name: str, type_: LabelType) -> Label:
+    """
+    Ensure a Label with the given name and type exists, returning the existing row or creating a new one.
+    
+    Parameters:
+        name (str): Label name; leading and trailing whitespace are removed before lookup.
+        type_ (LabelType): Desired label category (e.g., category or tag).
+    
+    Returns:
+        Label: The existing matching Label or the newly created Label.
+    
+    Raises:
+        HTTPException: 400 if the trimmed `name` is empty.
+        HTTPException: 400 if a label with the same name exists but has a different `type_`.
+    """
     name = name.strip()
     if not name:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Label name is empty")
@@ -160,6 +201,18 @@ def get_or_create_label(db: Session, name: str, type_: LabelType) -> Label:
 
 
 def get_or_create_character(db: Session, name: str) -> Character:
+    """
+    Return an existing Character matching `name` (case-insensitive via aliases) or create, persist, and return a new Character with that name.
+    
+    Parameters:
+        name (str): Character name; leading and trailing whitespace are trimmed. Must not be empty.
+    
+    Returns:
+        Character: The existing or newly created Character row.
+    
+    Raises:
+        HTTPException: If `name` is empty after trimming (400 Bad Request).
+    """
     name = name.strip()
     if not name:
         raise HTTPException(
@@ -175,6 +228,18 @@ def get_or_create_character(db: Session, name: str) -> Character:
 
 
 def get_or_create_artist(db: Session, name: str) -> Artist:
+    """
+    Return an existing Artist matching the provided name (case-insensitive against canonical names and aliases) or create and return a new Artist.
+    
+    Parameters:
+        name (str): Artist name; leading/trailing whitespace is trimmed.
+    
+    Returns:
+        Artist: The existing or newly created Artist instance. The returned instance is added to the database session and flushed (so it will have an assigned id).
+    
+    Raises:
+        HTTPException: If `name` is empty after trimming (status 400).
+    """
     name = name.strip()
     if not name:
         raise HTTPException(

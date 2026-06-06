@@ -6,7 +6,16 @@ import type { CommissionDetail, CommissionFile, CommissionNode } from "../api/ty
 import { LifecycleStagesList } from "./LifecycleStagesList";
 import { NodeDateModal } from "./NodeDateModal";
 
-/** Edit-mode panel for managing lifecycle stages, files, and cover selection. */
+/**
+ * Edit-mode panel for managing commission lifecycle stages, their files, and cover selection.
+ *
+ * Renders controls to add, rename, delete, and reorder stages; upload, move, and delete files;
+ * choose a cover file; and edit per-stage dates. Upon any successful operation that changes
+ * commission data, the component reloads its state and calls the optional `onChange` callback.
+ *
+ * @param commissionId - ID of the commission being edited
+ * @param onChange - Optional callback invoked after successful mutations and reloads
+ */
 export function StagesEditor({
   commissionId,
   onChange,
@@ -32,6 +41,12 @@ export function StagesEditor({
     void reload();
   }, [reload]);
 
+  /**
+   * Execute an async operation while managing busy and error state, reload the commission data on success, and invoke the optional `onChange` callback.
+   *
+   * @param op - The asynchronous operation to perform.
+   * @returns Nothing.
+   */
   async function run(op: () => Promise<unknown>) {
     setBusy(true);
     setError(null);
@@ -54,6 +69,12 @@ export function StagesEditor({
   const detached = detail.nodes.find((n) => n.is_detached);
   const displayNodes = detached ? [detached, ...regular] : regular;
 
+  /**
+   * Create a new stage from the current `newStage` input and clear the input field.
+   *
+   * If the trimmed `newStage` is empty, the function does nothing. Otherwise it creates
+   * a stage using the trimmed name and resets `newStage` to an empty string.
+   */
   function addStage() {
     if (!newStage.trim()) return;
     void run(async () => {
@@ -92,11 +113,24 @@ export function StagesEditor({
     });
   }
 
+  /**
+   * Moves a commission file to another node (stage).
+   *
+   * If the file is already assigned to the target node, no action is taken.
+   *
+   * @param file - The commission file to move
+   * @param targetNodeId - ID of the destination node
+   */
   function moveFile(file: CommissionFile, targetNodeId: number) {
     if (file.node_id === targetNodeId) return;
     void run(() => api.moveFile(file.id, targetNodeId));
   }
 
+  /**
+   * Update the currently selected node's date and close the node date modal.
+   *
+   * @param date - The date to set as an ISO date string, or `null` to remove the date
+   */
   function saveNodeDate(date: string | null) {
     if (!dateNode) return;
     void run(async () => {

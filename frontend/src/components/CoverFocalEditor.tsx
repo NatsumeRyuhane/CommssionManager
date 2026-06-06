@@ -17,10 +17,30 @@ const RATIOS: { w: number; h: number; label: string }[] = [
   { w: 16, h: 9, label: "16:9" },
 ];
 
+/**
+ * Clamp a number to the inclusive range 0 to 1.
+ *
+ * @param v - The input value to constrain
+ * @returns The input value constrained to the inclusive range 0 to 1
+ */
 function clamp(v: number) {
   return Math.max(0, Math.min(1, v));
 }
 
+/**
+ * Render an editor UI for selecting and saving a cover image focal point.
+ *
+ * Displays the current cover (fetched for `commissionId`), allows pointer-driven
+ * adjustment of the focal point (shown as normalized x/y fractions between 0 and 1),
+ * shows preview thumbnails for preset aspect ratios, and provides "Revert" and
+ * "Save focal" actions that persist the selected focal to the API. Refetches cover
+ * data when `commissionId` or `version` changes and surfaces API errors.
+ *
+ * @param commissionId - The commission identifier whose cover will be fetched and edited
+ * @param version - Optional numeric token to force refetch when bumped (defaults to 0)
+ * @param onChange - Optional callback invoked after a successful save
+ * @returns The React element containing the cover focal editor UI
+ */
 export function CoverFocalEditor({ commissionId, version = 0, onChange }: CoverFocalEditorProps) {
   const [cover, setCover] = useState<Cover | null>(null);
   const [focal, setFocal] = useState<[number, number]>([0.5, 0.5]);

@@ -20,6 +20,15 @@ const PLATFORMS = [
   "other",
 ];
 
+/**
+ * Render the Artists management panel with search, alias and handle editing, and a resolve dialog.
+ *
+ * Displays configured artists, their platform handles and aliases; provides controls to search by handle/URL/alias/name,
+ * create new artists, add or remove aliases, add or update platform handles via the resolve dialog, rename and delete artists,
+ * and surfaces loading/saving/error state.
+ *
+ * @returns The React element for the artists management UI.
+ */
 export function ArtistsPanel() {
   const [artists, setArtists] = useState<Artist[]>([]);
   const [query, setQuery] = useState("");
@@ -369,7 +378,23 @@ export function ArtistsPanel() {
   );
 }
 
-// ---------------------------------------------------------------- handle resolver
+/**
+ * Renders a modal dialog to create a new artist or attach a handle to an existing artist.
+ *
+ * This dialog lets the user pick between creating a new artist (with optional initial handle)
+ * or adding the provided handle to an existing artist. On save it will either create a new
+ * artist or update an existing artist's handles and then invoke the appropriate callbacks.
+ *
+ * @param query - Initial handle or URL text to populate the form
+ * @param artists - Current list of artists available for attaching a handle
+ * @param initialArtistId - If non-null, prefills the dialog in "existing" mode for that artist
+ * @param busy - When true, disables primary actions to indicate an in-progress save
+ * @param onClose - Called when the dialog should be closed without saving
+ * @param onSaved - Called with the created or updated artist after a successful save
+ * @param onError - Called with an error message string on failure, or `null` to clear errors
+ * @param setBusy - Setter used to toggle the busy state while saving
+ * @returns The dialog React element
+ */
 
 function ArtistResolveDialog({
   query,
