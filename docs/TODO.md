@@ -36,8 +36,9 @@
 - [x] Pytest harness + API coverage (auth, API keys, CRUD, filters/sort, files, nodes, cover, lookups, pagination)
 - [x] Self-contained tests: ephemeral Postgres via `testcontainers` (no dependency on the dev
   compose stack; `CMGR_TEST_DATABASE_URL` overrides for CI)
-- [x] GitHub Actions CI on PRs to `main`: backend `ruff check` + `pytest` (against a Postgres
-  service container) and frontend `pnpm build` (typecheck + bundle) run in parallel
+- [x] GitHub Actions CI on pull requests and pushes to `main`: backend `ruff check` + `pytest`
+  (against a Postgres service container) and frontend `pnpm build` (typecheck + bundle) run in
+  parallel
 - [x] Config: all settings required from env / `.env` (no in-code defaults); `.env.example` committed
 - [x] Wire frontend gallery to read `X-Total-Count` (paginate beyond 60)
 

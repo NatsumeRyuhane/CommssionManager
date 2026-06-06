@@ -6,6 +6,11 @@ on:
   push:
     branches: [main]
 
+# Least-privilege: jobs only need to read the repo. Elevate per-job if any
+# future step needs to write checks, PR comments, packages, etc.
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -37,6 +42,8 @@ jobs:
       CMGR_TEST_DATABASE_URL: postgresql+psycopg://test:test@localhost:5432/test
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -65,6 +72,8 @@ jobs:
         working-directory: frontend
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
