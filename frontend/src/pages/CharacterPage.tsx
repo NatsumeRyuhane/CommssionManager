@@ -405,6 +405,8 @@ export function CharacterPage() {
           </div>
         </div>
 
+        <hr className="char-section-divider" />
+
         <div className="row" style={{ justifyContent: "space-between", marginBottom: 14 }}>
           <h2 style={{ margin: 0, fontSize: 20 }}>Curated sets</h2>
           <span className="mono-sm muted">
