@@ -117,8 +117,8 @@ class CharacterOut(BaseModel):
     id: int
     name: str
     aliases: list[_AliasOut] = []
-    # Frontend reads this to decide whether to render the "has character page"
-    # marker. Always false today; the page model lands in a later phase.
+    # Frontend reads this to render the "has character page" marker on chips,
+    # typeahead rows, and directory cards.
     has_page: bool = False
 
 
@@ -548,3 +548,87 @@ class WebhookOut(BaseModel):
     last_delivery_at: datetime | None = None
     last_status_code: int | None = None
     last_error: str | None = None
+
+
+# ---------------------------------------------------------------- character pages
+class CharacterPageImage(BaseModel):
+    id: int
+    url: str
+    width: int | None = None
+    height: int | None = None
+    focal_x: float | None = None
+    focal_y: float | None = None
+    commission_id: int
+    commission_title: str
+    label: str | None = None
+
+
+class CharacterPageSetItemOut(BaseModel):
+    id: int
+    position: int
+    file: CharacterPageImage
+
+
+class CharacterPageSetOut(BaseModel):
+    id: int
+    title: str
+    description: str | None = None
+    position: int
+    items: list[CharacterPageSetItemOut] = []
+
+
+class CharacterPageOut(BaseModel):
+    character_id: int
+    character_name: str
+    about: str | None = None
+    main_reference: CharacterPageImage | None = None
+    sets: list[CharacterPageSetOut] = []
+    commission_count: int = 0
+    updated_at: datetime | None = None
+
+
+class CharacterPageUpdate(BaseModel):
+    about: str | None = None
+    main_reference_file_id: int | None = None
+
+
+class CharacterPageSetCreate(BaseModel):
+    title: str
+    description: str | None = None
+
+    @field_validator("title")
+    @classmethod
+    def _strip_title(cls, title: str) -> str:
+        return _strip_required(title)
+
+
+class CharacterPageSetUpdate(BaseModel):
+    title: str | None = None
+    description: str | None = None
+
+    @field_validator("title")
+    @classmethod
+    def _strip_title(cls, title: str | None) -> str | None:
+        return _strip_optional(title)
+
+
+class CharacterPageSetReorder(BaseModel):
+    set_ids: list[int]
+
+
+class CharacterPageSetItemsAdd(BaseModel):
+    file_ids: list[int]
+
+
+class CharacterPageSetItemsReorder(BaseModel):
+    item_ids: list[int]
+
+
+class CharacterPageListItem(BaseModel):
+    character_id: int
+    character_name: str
+    set_count: int
+    image_count: int
+    commission_count: int
+    main_reference: CharacterPageImage | None = None
+    updated_at: datetime | None = None
