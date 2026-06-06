@@ -152,16 +152,6 @@ export function GalleryPage() {
           Sort: {sort} {order === "desc" ? "↓" : "↑"}
         </button>
         {canWrite && (
-          <a className="btn sm" href={api.databaseExportUrl()} download>
-            Export DB
-          </a>
-        )}
-        {canWrite && (
-          <a className="btn sm" href={api.filesExportUrl()} download>
-            Export files
-          </a>
-        )}
-        {canWrite && (
           <Link to="/commissions/new" className="btn sm primary">
             + New
           </Link>

@@ -12,6 +12,7 @@ import type {
 } from "../api/types";
 import { ArtistsPanel } from "../components/ArtistsPanel";
 import { Chip } from "../components/Chip";
+import { ExportsPanel } from "../components/ExportsPanel";
 import { TaxonomyManagementPanel } from "../components/TaxonomyManagementPanel";
 import { ToggleSwitch } from "../components/ToggleSwitch";
 import { TopBar } from "../components/TopBar";
@@ -25,7 +26,8 @@ type Tab =
   | "artists"
   | "api"
   | "visibility"
-  | "storage";
+  | "storage"
+  | "exports";
 
 const FIELD_ROWS: { key: VisibilityFieldKey; label: string; note?: string }[] = [
   { key: "title", label: "Title" },
@@ -164,6 +166,12 @@ export function SettingsPage() {
           >
             Storage
           </button>
+          <button
+            className={`settings-tab ${tab === "exports" ? "active" : ""}`}
+            onClick={() => setTab("exports")}
+          >
+            Exports
+          </button>
         </aside>
 
         <main className="settings-content">
@@ -267,6 +275,7 @@ export function SettingsPage() {
             />
           )}
           {tab === "artists" && <ArtistsPanel />}
+          {tab === "exports" && <ExportsPanel />}
         </main>
       </div>
     </div>
