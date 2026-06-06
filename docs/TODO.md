@@ -80,6 +80,7 @@
   overrides
 - [x] Lifecycle: shared component, draggable stage reorder handle, drag-and-drop files between
   stages, detached-first exception handling
+- [x] Factory lifecycle stage defaults use chronological order
 - [ ] Character pages: shareable profile, main ref, curated image "bookshelves" + picker
 - [x] Artist management: multi-platform handles, paste-to-match, no-match resolve dialog
 - [ ] Mobile views for every section
