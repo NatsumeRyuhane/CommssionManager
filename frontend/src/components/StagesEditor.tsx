@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 
 import { api } from "../api/client";
 import type { CommissionDetail, CommissionFile, CommissionNode } from "../api/types";
@@ -52,7 +53,6 @@ export function StagesEditor({
   const regular = detail.nodes.filter((n) => !n.is_detached);
   const detached = detail.nodes.find((n) => n.is_detached);
   const displayNodes = detached ? [detached, ...regular] : regular;
-  const moveTargets = displayNodes;
 
   function addStage() {
     if (!newStage.trim()) return;
@@ -123,8 +123,15 @@ export function StagesEditor({
           onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addStage())}
           style={{ maxWidth: 280 }}
         />
-        <button type="button" className="btn sm" onClick={addStage} disabled={busy}>
-          + Add stage
+        <button
+          type="button"
+          className="icon-btn add"
+          onClick={addStage}
+          disabled={busy || !newStage.trim()}
+          title="Add stage"
+          aria-label="Add stage"
+        >
+          <Plus size={18} strokeWidth={2.5} />
         </button>
       </div>
 
@@ -133,7 +140,6 @@ export function StagesEditor({
         currentStage={detail.current_stage}
         coverFileId={detail.cover?.file_id ?? null}
         busy={busy}
-        moveTargets={moveTargets}
         onMoveFile={moveFile}
         onReorderNode={reorderStage}
         onUpload={upload}
@@ -148,11 +154,25 @@ export function StagesEditor({
           if (node.is_detached) return null;
           return (
             <>
-              <button type="button" className="btn sm" onClick={() => rename(node)} disabled={busy}>
-                Rename
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={() => rename(node)}
+                disabled={busy}
+                title="Rename stage"
+                aria-label="Rename stage"
+              >
+                <Pencil size={16} strokeWidth={2} />
               </button>
-              <button type="button" className="btn sm danger" onClick={() => remove(node)} disabled={busy}>
-                Delete
+              <button
+                type="button"
+                className="icon-btn danger"
+                onClick={() => remove(node)}
+                disabled={busy}
+                title="Delete stage"
+                aria-label="Delete stage"
+              >
+                <Trash2 size={16} strokeWidth={2} />
               </button>
             </>
           );

@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { Star, Trash2, Upload } from "lucide-react";
 
 import type { CommissionFile, CommissionNode } from "../api/types";
 import { Chip } from "./Chip";
@@ -11,7 +12,6 @@ interface LifecycleStagesListProps {
   currentStage?: string | null;
   coverFileId?: number | null;
   busy?: boolean;
-  moveTargets?: CommissionNode[];
   onMoveFile?: (file: CommissionFile, targetNodeId: number) => void;
   onReorderNode?: (draggedNodeId: number, targetNodeId: number) => void;
   onUpload?: (node: CommissionNode, files: FileList) => void;
@@ -26,7 +26,6 @@ export function LifecycleStagesList({
   currentStage,
   coverFileId,
   busy = false,
-  moveTargets = nodes,
   onMoveFile,
   onReorderNode,
   onUpload,
@@ -53,7 +52,6 @@ export function LifecycleStagesList({
           coverFileId={coverFileId}
           busy={busy}
           filesById={filesById}
-          moveTargets={moveTargets}
           onMoveFile={onMoveFile}
           onReorderNode={onReorderNode}
           onUpload={onUpload}
@@ -73,7 +71,6 @@ function LifecycleStage({
   coverFileId,
   busy,
   filesById,
-  moveTargets,
   onMoveFile,
   onReorderNode,
   onUpload,
@@ -87,7 +84,6 @@ function LifecycleStage({
   coverFileId?: number | null;
   busy: boolean;
   filesById: Map<number, CommissionFile>;
-  moveTargets: CommissionNode[];
   onMoveFile?: (file: CommissionFile, targetNodeId: number) => void;
   onReorderNode?: (draggedNodeId: number, targetNodeId: number) => void;
   onUpload?: (node: CommissionNode, files: FileList) => void;
@@ -168,11 +164,13 @@ function LifecycleStage({
           <>
             <button
               type="button"
-              className="btn sm"
+              className="icon-btn"
               disabled={busy}
               onClick={() => fileInput.current?.click()}
+              title="Upload files"
+              aria-label="Upload files"
             >
-              Upload
+              <Upload size={16} strokeWidth={2} />
             </button>
             <input
               ref={fileInput}
@@ -200,7 +198,6 @@ function LifecycleStage({
               file={file}
               isCover={file.id === coverFileId}
               busy={busy}
-              moveTargets={moveTargets}
               onMoveFile={onMoveFile}
               onSetCover={onSetCover}
               onDeleteFile={onDeleteFile}
@@ -216,7 +213,6 @@ function LifecycleFileTile({
   file,
   isCover,
   busy,
-  moveTargets,
   onMoveFile,
   onSetCover,
   onDeleteFile,
@@ -224,12 +220,11 @@ function LifecycleFileTile({
   file: CommissionFile;
   isCover: boolean;
   busy: boolean;
-  moveTargets: CommissionNode[];
   onMoveFile?: (file: CommissionFile, targetNodeId: number) => void;
   onSetCover?: (file: CommissionFile) => void;
   onDeleteFile?: (file: CommissionFile) => void;
 }) {
-  const editable = Boolean(onSetCover || onDeleteFile || onMoveFile);
+  const editable = Boolean(onSetCover || onDeleteFile);
   return (
     <div
       className="lifecycle-file"
@@ -261,48 +256,27 @@ function LifecycleFileTile({
       <div className="lifecycle-file-label">{file.label || file.format}</div>
       {editable && (
         <div className="lifecycle-file-actions">
-          {onMoveFile && (
-            <select
-              className="field"
-              value=""
-              disabled={busy}
-              title="Move file"
-              onChange={(e) => {
-                const target = Number(e.target.value);
-                if (target) onMoveFile(file, target);
-              }}
-            >
-              <option value="">Move</option>
-              {moveTargets
-                .filter((node) => node.id !== file.node_id)
-                .map((node) => (
-                  <option key={node.id} value={node.id}>
-                    {node.name}
-                  </option>
-                ))}
-            </select>
-          )}
-          {file.is_image && !isCover && onSetCover && (
+          {file.is_image && onSetCover && (
             <button
               type="button"
-              className="btn sm ghost"
-              disabled={busy}
-              onClick={() => onSetCover(file)}
-              title="Set as cover"
+              className={`icon-btn star${isCover ? " is-cover" : ""}`}
+              disabled={busy || isCover}
+              onClick={() => !isCover && onSetCover(file)}
+              title={isCover ? "Current cover" : "Set as cover"}
+              aria-pressed={isCover}
             >
-              ★
+              <Star size={16} strokeWidth={2} fill={isCover ? "currentColor" : "none"} />
             </button>
           )}
-          {isCover && <span className="mono-sm" style={{ color: "var(--accent)" }}>cover</span>}
           {onDeleteFile && (
             <button
               type="button"
-              className="btn sm danger"
+              className="icon-btn danger"
               disabled={busy}
               onClick={() => onDeleteFile(file)}
               title="Delete file"
             >
-              ✕
+              <Trash2 size={16} strokeWidth={2} />
             </button>
           )}
         </div>
