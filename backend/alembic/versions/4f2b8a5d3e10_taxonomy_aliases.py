@@ -45,13 +45,21 @@ def _create_alias_table(table_name: str, parent_table: str, parent_fk_col: str) 
 
 def upgrade() -> None:
     """
-    Create the alias mapping tables used for taxonomy entries.
+    Create case-insensitive canonical-name indexes and taxonomy alias tables.
     
     Creates three tables: `label_aliases` (references `labels.label_id`), `character_aliases` (references `characters.character_id`),
     and `artist_aliases` (references `artists.artist_id`). Each table includes an integer primary key `id`, a non-null foreign-key
     column to its parent table with cascade delete, `alias` and `alias_lower` string columns, a unique constraint on `alias_lower`,
     and an index on the parent foreign-key column.
     """
+    for table_name in ("labels", "characters", "artists"):
+        op.create_index(
+            f"uq_{table_name}_name_lower",
+            table_name,
+            [sa.text("lower(name)")],
+            unique=True,
+        )
+
     _create_alias_table("label_aliases", "labels", "label_id")
     _create_alias_table("character_aliases", "characters", "character_id")
     _create_alias_table("artist_aliases", "artists", "artist_id")
@@ -59,7 +67,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """
-    Revert the migration by dropping each alias table and its per-parent index.
+    Revert the migration by dropping the alias tables and canonical-name indexes.
     
     This removes the indexes named `ix_{table_name}_{parent_fk_col}` and then drops the tables:
     `artist_aliases`, `character_aliases`, and `label_aliases`.
@@ -71,3 +79,6 @@ def downgrade() -> None:
     ):
         op.drop_index(f"ix_{table_name}_{parent_fk_col}", table_name=table_name)
         op.drop_table(table_name)
+
+    for table_name in ("artists", "characters", "labels"):
+        op.drop_index(f"uq_{table_name}_name_lower", table_name=table_name)

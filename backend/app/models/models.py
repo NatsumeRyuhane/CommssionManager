@@ -11,6 +11,7 @@ from sqlalchemy import (
     Enum,
     Float,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
@@ -66,6 +67,7 @@ class Label(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     type: Mapped[LabelType] = mapped_column(Enum(LabelType, name="label_type"), nullable=False)
+    __table_args__ = (Index("uq_labels_name_lower", func.lower(name), unique=True),)
 
     aliases: Mapped[list["LabelAlias"]] = relationship(
         back_populates="label", cascade="all, delete-orphan", order_by="LabelAlias.alias_lower"
@@ -78,6 +80,7 @@ class Character(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
     settings_xml: Mapped[str | None] = mapped_column(Text)
+    __table_args__ = (Index("uq_characters_name_lower", func.lower(name), unique=True),)
 
     aliases: Mapped[list["CharacterAlias"]] = relationship(
         back_populates="character",
@@ -92,6 +95,7 @@ class Artist(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
     info_xml: Mapped[str | None] = mapped_column(Text)
+    __table_args__ = (Index("uq_artists_name_lower", func.lower(name), unique=True),)
 
     aliases: Mapped[list["ArtistAlias"]] = relationship(
         back_populates="artist", cascade="all, delete-orphan", order_by="ArtistAlias.alias_lower"

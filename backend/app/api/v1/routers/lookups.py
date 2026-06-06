@@ -35,6 +35,16 @@ router = APIRouter(tags=["lookups"])
 # ---------------------------------------------------------------- labels
 
 
+def _typeahead_needle(q: str) -> str | None:
+    q_str = q.strip().lower()
+    if not q_str:
+        return None
+    escaped_q_str = (
+        q_str.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    )
+    return f"%{escaped_q_str}%"
+
+
 def _typeahead_label_ids(db: Session, q: str) -> set[int]:
     """
     Find label IDs whose name or aliases contain the given query as a case-insensitive substring.
@@ -45,12 +55,14 @@ def _typeahead_label_ids(db: Session, q: str) -> set[int]:
     Returns:
         set[int]: Set of matching label IDs.
     """
-    needle = f"%{q.strip().lower()}%"
+    needle = _typeahead_needle(q)
+    if needle is None:
+        return set()
     rows = db.scalars(
-        select(Label.id).where(func.lower(Label.name).like(needle))
+        select(Label.id).where(func.lower(Label.name).like(needle, escape="\\"))
     ).all()
     alias_rows = db.scalars(
-        select(LabelAlias.label_id).where(LabelAlias.alias_lower.like(needle))
+        select(LabelAlias.label_id).where(LabelAlias.alias_lower.like(needle, escape="\\"))
     ).all()
     return set(rows) | set(alias_rows)
 
@@ -74,7 +86,7 @@ def list_labels(
     stmt = select(Label).options(selectinload(Label.aliases)).order_by(Label.name)
     if type:
         stmt = stmt.where(Label.type == type)
-    if q:
+    if q is not None:
         ids = _typeahead_label_ids(db, q)
         if not ids:
             return []
@@ -272,12 +284,16 @@ def _typeahead_character_ids(db: Session, q: str) -> set[int]:
     Returns:
         set[int]: Set of Character IDs that match the query in either their name or any alias.
     """
-    needle = f"%{q.strip().lower()}%"
+    needle = _typeahead_needle(q)
+    if needle is None:
+        return set()
     rows = db.scalars(
-        select(Character.id).where(func.lower(Character.name).like(needle))
+        select(Character.id).where(func.lower(Character.name).like(needle, escape="\\"))
     ).all()
     alias_rows = db.scalars(
-        select(CharacterAlias.character_id).where(CharacterAlias.alias_lower.like(needle))
+        select(CharacterAlias.character_id).where(
+            CharacterAlias.alias_lower.like(needle, escape="\\")
+        )
     ).all()
     return set(rows) | set(alias_rows)
 
@@ -296,7 +312,7 @@ def list_characters(q: str | None = None, db: Session = Depends(get_db)):
     	List[Character]: Characters matching the optional query, ordered by name.
     """
     stmt = select(Character).options(selectinload(Character.aliases)).order_by(Character.name)
-    if q:
+    if q is not None:
         ids = _typeahead_character_ids(db, q)
         if not ids:
             return []
@@ -478,12 +494,14 @@ def _typeahead_artist_ids(db: Session, q: str) -> set[int]:
     Returns:
         set[int]: Set of matching Artist IDs from names or alias entries.
     """
-    needle = f"%{q.strip().lower()}%"
+    needle = _typeahead_needle(q)
+    if needle is None:
+        return set()
     rows = db.scalars(
-        select(Artist.id).where(func.lower(Artist.name).like(needle))
+        select(Artist.id).where(func.lower(Artist.name).like(needle, escape="\\"))
     ).all()
     alias_rows = db.scalars(
-        select(ArtistAlias.artist_id).where(ArtistAlias.alias_lower.like(needle))
+        select(ArtistAlias.artist_id).where(ArtistAlias.alias_lower.like(needle, escape="\\"))
     ).all()
     return set(rows) | set(alias_rows)
 
@@ -500,7 +518,7 @@ def list_artists(q: str | None = None, db: Session = Depends(get_db)):
         list[Artist]: Artists ordered by name. If `q` matches no artists, returns an empty list.
     """
     stmt = select(Artist).options(selectinload(Artist.aliases)).order_by(Artist.name)
-    if q:
+    if q is not None:
         ids = _typeahead_artist_ids(db, q)
         if not ids:
             return []

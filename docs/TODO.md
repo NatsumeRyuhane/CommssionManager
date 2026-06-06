@@ -29,6 +29,7 @@
   - [x] list endpoint with search / filter / sort
   - [x] list pagination (`limit`/`offset`) + `X-Total-Count` header
   - [x] `labels`, `characters`, `artists` read
+  - [x] Case-insensitive taxonomy uniqueness and literal typeahead matching
   - [x] file upload -> storage object, image dimension probe
   - [x] lifecycle node management (add/rename/reorder/delete + detached reparenting)
   - [x] `cover_file_id` validation (must be an image file of the commission; cleared on file delete)

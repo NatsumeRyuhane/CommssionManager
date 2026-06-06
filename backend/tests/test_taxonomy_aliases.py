@@ -91,6 +91,36 @@ def test_label_aliases_resolve_to_parent_and_appear_in_typeahead(admin_client: T
     assert [item["name"] for item in by_alias] == ["background"]
 
 
+def test_typeahead_treats_like_wildcards_as_literals(admin_client: TestClient):
+    percent = admin_client.post(
+        "/api/v1/labels", json={"name": "100% complete", "type": "tag"}
+    ).json()
+    underscore = admin_client.post(
+        "/api/v1/labels", json={"name": "underscore parent", "type": "tag"}
+    ).json()
+    slash = admin_client.post(
+        "/api/v1/labels", json={"name": "slash parent", "type": "tag"}
+    ).json()
+    admin_client.post("/api/v1/labels", json={"name": "plain", "type": "tag"})
+    admin_client.post(
+        f"/api/v1/labels/{underscore['id']}/aliases", json={"alias": "under_score"}
+    )
+    admin_client.post(
+        f"/api/v1/labels/{slash['id']}/aliases", json={"alias": r"slash\name"}
+    )
+
+    assert [
+        row["id"] for row in admin_client.get("/api/v1/labels", params={"q": "%"}).json()
+    ] == [percent["id"]]
+    assert [
+        row["id"] for row in admin_client.get("/api/v1/labels", params={"q": "_"}).json()
+    ] == [underscore["id"]]
+    assert [
+        row["id"] for row in admin_client.get("/api/v1/labels", params={"q": "\\"}).json()
+    ] == [slash["id"]]
+    assert admin_client.get("/api/v1/labels", params={"q": "   "}).json() == []
+
+
 def test_label_alias_rejects_collision_with_existing_name(admin_client: TestClient):
     admin_client.post("/api/v1/labels", json={"name": "background", "type": "tag"})
     other = admin_client.post(
@@ -220,6 +250,8 @@ def test_taxonomy_management_requires_auth(client: TestClient):
     ).status_code == 401
     assert client.delete("/api/v1/label-aliases/1").status_code == 401
     assert client.post("/api/v1/characters", json={"name": "x"}).status_code == 401
+    assert client.patch("/api/v1/characters/1", json={"name": "y"}).status_code == 401
+    assert client.delete("/api/v1/characters/1").status_code == 401
     assert client.post(
         "/api/v1/characters/1/aliases", json={"alias": "x"}
     ).status_code == 401
