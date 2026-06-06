@@ -28,9 +28,9 @@ def upgrade() -> None:
         ),
         sa.Column("about", sa.Text(), nullable=True),
         sa.Column(
-            "main_reference_file_id",
+            "main_reference_commission_id",
             sa.Integer(),
-            sa.ForeignKey("commission_files.id", ondelete="SET NULL"),
+            sa.ForeignKey("commissions.id", ondelete="SET NULL"),
             nullable=True,
         ),
         sa.Column(
@@ -88,13 +88,15 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column(
-            "file_id",
+            "commission_id",
             sa.Integer(),
-            sa.ForeignKey("commission_files.id", ondelete="CASCADE"),
+            sa.ForeignKey("commissions.id", ondelete="CASCADE"),
             nullable=False,
         ),
         sa.Column("position", sa.Integer(), nullable=False, server_default="0"),
-        sa.UniqueConstraint("set_id", "file_id", name="uq_character_image_set_items_file"),
+        sa.UniqueConstraint(
+            "set_id", "commission_id", name="uq_character_image_set_items_commission"
+        ),
         sa.UniqueConstraint(
             "set_id", "position", name="uq_character_image_set_items_position"
         ),
@@ -105,15 +107,16 @@ def upgrade() -> None:
         ["set_id"],
     )
     op.create_index(
-        "ix_character_image_set_items_file_id",
+        "ix_character_image_set_items_commission_id",
         "character_image_set_items",
-        ["file_id"],
+        ["commission_id"],
     )
 
 
 def downgrade() -> None:
     op.drop_index(
-        "ix_character_image_set_items_file_id", table_name="character_image_set_items"
+        "ix_character_image_set_items_commission_id",
+        table_name="character_image_set_items",
     )
     op.drop_index(
         "ix_character_image_set_items_set_id", table_name="character_image_set_items"

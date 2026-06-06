@@ -1,4 +1,4 @@
-"""Character page (profile + curated image sets) endpoints."""
+"""Character page (profile + curated commission showcases) endpoints."""
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -18,10 +18,9 @@ from app.models import (
     CommissionFile,
     CommissionMetadata,
     CommissionNode,
-    Visibility,
 )
 from app.schemas import (
-    CharacterPageImage,
+    CharacterPageCommission,
     CharacterPageListItem,
     CharacterPageOut,
     CharacterPageSetCreate,
@@ -68,37 +67,44 @@ def _item_or_404(db: Session, item_id: int) -> CharacterImageSetItem:
     return row
 
 
-def _image_file_or_400(db: Session, file_id: int) -> CommissionFile:
-    file = db.get(CommissionFile, file_id)
-    if file is None or not file.is_image:
+def _commission_or_400(db: Session, commission_id: int) -> Commission:
+    row = db.get(Commission, commission_id)
+    if row is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"file_id={file_id} is not an image file",
+            detail=f"commission_id={commission_id} not found",
         )
-    return file
+    return row
 
 
-def _file_is_visible(file: CommissionFile, context: crud.VisibilityContext) -> bool:
-    commission = file.node.commission
-    return (
-        crud.effective_commission_visibility(commission, context) == Visibility.public
-        and crud.effective_file_visibility(file, context) == Visibility.public
+def _commission_payload(
+    commission: Commission,
+    context: crud.VisibilityContext,
+    public_only: bool,
+) -> CharacterPageCommission | None:
+    """Serialize a commission as it should appear on a character page.
+
+    Returns None when the caller is public-only and the commission has no
+    visible cover image, so the frontend can drop empty tiles.
+    """
+    if public_only:
+        if (
+            crud.effective_commission_visibility(commission, context)
+            != crud.Visibility.public
+        ):
+            return None
+    cover = crud._cover(
+        commission, visibility_context=context, include_private=not public_only
     )
-
-
-def _image_payload(file: CommissionFile) -> CharacterPageImage:
-    commission = file.node.commission
+    if public_only and cover is None:
+        return None
     meta = commission.meta
-    return CharacterPageImage(
-        id=file.id,
-        url=f"/api/v1/files/{file.id}/raw",
-        width=file.width,
-        height=file.height,
-        focal_x=file.focal_x,
-        focal_y=file.focal_y,
+    title = meta.title if meta else f"#{commission.id}"
+    return CharacterPageCommission(
         commission_id=commission.id,
-        commission_title=meta.title if meta else f"#{commission.id}",
-        label=file.label,
+        title=title,
+        cover=cover,
+        completed_at=meta.completed_at if meta else None,
     )
 
 
@@ -111,23 +117,19 @@ def _serialize_page(
     public_only: bool,
 ) -> CharacterPageOut:
     main_ref = None
-    if page.main_reference is not None and (
-        not public_only or _file_is_visible(page.main_reference, context)
-    ):
-        main_ref = _image_payload(page.main_reference)
+    if page.main_reference is not None:
+        main_ref = _commission_payload(page.main_reference, context, public_only)
 
     sets: list[CharacterPageSetOut] = []
-    for s in page.sets:
+    for s in sorted(page.sets, key=lambda x: x.position):
         items: list[CharacterPageSetItemOut] = []
-        for item in s.items:
-            if public_only and not _file_is_visible(item.file, context):
+        for item in sorted(s.items, key=lambda i: i.position):
+            payload = _commission_payload(item.commission, context, public_only)
+            if payload is None:
                 continue
             items.append(
-                CharacterPageSetItemOut(
-                    id=item.id, position=item.position, file=_image_payload(item.file)
-                )
+                CharacterPageSetItemOut(id=item.id, position=item.position, commission=payload)
             )
-        # Skip empty sets on the public view — nothing useful to render.
         if public_only and not items:
             continue
         sets.append(
@@ -162,21 +164,26 @@ def _commission_count(db: Session, character_id: int) -> int:
     )
 
 
+def _commission_loader_opts() -> tuple:
+    """Eager-load everything `_commission_payload` and the cover helper touch."""
+    return (
+        selectinload(Commission.meta),
+        selectinload(Commission.nodes)
+        .selectinload(CommissionNode.files)
+        .selectinload(CommissionFile.storage_object),
+    )
+
+
 def _load_page(db: Session, character_id: int) -> CharacterPage | None:
     return db.scalar(
         select(CharacterPage)
         .where(CharacterPage.character_id == character_id)
         .options(
-            selectinload(CharacterPage.main_reference)
-            .selectinload(CommissionFile.node)
-            .selectinload(CommissionNode.commission)
-            .selectinload(Commission.meta),
+            selectinload(CharacterPage.main_reference).options(*_commission_loader_opts()),
             selectinload(CharacterPage.sets)
             .selectinload(CharacterImageSet.items)
-            .selectinload(CharacterImageSetItem.file)
-            .selectinload(CommissionFile.node)
-            .selectinload(CommissionNode.commission)
-            .selectinload(Commission.meta),
+            .selectinload(CharacterImageSetItem.commission)
+            .options(*_commission_loader_opts()),
         )
     )
 
@@ -195,15 +202,11 @@ def list_character_pages(
             select(CharacterPage)
             .options(
                 selectinload(CharacterPage.character),
-                selectinload(CharacterPage.main_reference)
-                .selectinload(CommissionFile.node)
-                .selectinload(CommissionNode.commission)
-                .selectinload(Commission.meta),
+                selectinload(CharacterPage.main_reference).options(*_commission_loader_opts()),
                 selectinload(CharacterPage.sets)
                 .selectinload(CharacterImageSet.items)
-                .selectinload(CharacterImageSetItem.file)
-                .selectinload(CommissionFile.node)
-                .selectinload(CommissionNode.commission),
+                .selectinload(CharacterImageSetItem.commission)
+                .options(*_commission_loader_opts()),
             )
             .order_by(CharacterPage.id)
         )
@@ -211,24 +214,25 @@ def list_character_pages(
 
     items: list[CharacterPageListItem] = []
     for page in pages:
-        main_ref = None
-        if page.main_reference is not None and (
-            not public_only or _file_is_visible(page.main_reference, context)
-        ):
-            main_ref = _image_payload(page.main_reference)
-        image_count = 0
+        commission_count_total = _commission_count(db, page.character_id)
+        main_ref = (
+            _commission_payload(page.main_reference, context, public_only)
+            if page.main_reference is not None
+            else None
+        )
+        showcased: set[int] = set()
         for s in page.sets:
             for it in s.items:
-                if public_only and not _file_is_visible(it.file, context):
+                if public_only and _commission_payload(it.commission, context, True) is None:
                     continue
-                image_count += 1
+                showcased.add(it.commission_id)
         items.append(
             CharacterPageListItem(
                 character_id=page.character_id,
                 character_name=page.character.name,
                 set_count=len(page.sets),
-                image_count=image_count,
-                commission_count=_commission_count(db, page.character_id),
+                commission_count_total=commission_count_total,
+                commission_count_in_db=len(showcased),
                 main_reference=main_ref,
                 updated_at=page.updated_at,
             )
@@ -275,12 +279,12 @@ def upsert_character_page(
 
     if "about" in body.model_fields_set:
         page.about = body.about
-    if "main_reference_file_id" in body.model_fields_set:
-        if body.main_reference_file_id is None:
-            page.main_reference_file_id = None
+    if "main_reference_commission_id" in body.model_fields_set:
+        if body.main_reference_commission_id is None:
+            page.main_reference_commission_id = None
         else:
-            _image_file_or_400(db, body.main_reference_file_id)
-            page.main_reference_file_id = body.main_reference_file_id
+            _commission_or_400(db, body.main_reference_commission_id)
+            page.main_reference_commission_id = body.main_reference_commission_id
 
     db.commit()
     page = _load_page(db, character_id)
@@ -306,52 +310,51 @@ def delete_character_page(
     db.commit()
 
 
-# ---------------------------------------------------------------- eligible images
+# ---------------------------------------------------------------- eligible commissions
 @router.get(
-    "/characters/{character_id}/page/eligible-images",
-    response_model=list[CharacterPageImage],
+    "/characters/{character_id}/page/eligible-commissions",
+    response_model=list[CharacterPageCommission],
 )
-def list_eligible_images(
+def list_eligible_commissions(
     character_id: int,
     only_tagged: bool = True,
     exclude_set_id: int | None = None,
     db: Session = Depends(get_db),
     _: Principal = Depends(require_edit),
 ):
-    """List image files an admin can curate into the character's sets.
+    """List commissions an admin can add to the character's sets.
 
-    By default returns images from commissions tagged with this character; set
-    `only_tagged=false` to consider every image in the database. When
-    `exclude_set_id` is provided, files already in that set are filtered out so
-    the picker can show only "not in this set" candidates.
+    By default returns commissions tagged with this character; pass
+    `only_tagged=false` to consider every commission. `exclude_set_id`
+    filters out commissions already in the named set so the picker only
+    shows fresh candidates.
     """
     _character_or_404(db, character_id)
 
     stmt = (
-        select(CommissionFile)
-        .join(CommissionNode, CommissionFile.node_id == CommissionNode.id)
-        .join(Commission, CommissionNode.commission_id == Commission.id)
+        select(Commission)
         .join(CommissionMetadata, CommissionMetadata.commission_id == Commission.id)
-        .where(CommissionFile.is_image.is_(True))
-        .options(
-            selectinload(CommissionFile.node)
-            .selectinload(CommissionNode.commission)
-            .selectinload(Commission.meta),
-        )
-        .order_by(CommissionFile.created_at.desc())
+        .options(*_commission_loader_opts())
+        .order_by(CommissionMetadata.completed_at.desc().nulls_last(), Commission.id.desc())
     )
     if only_tagged:
         stmt = stmt.join(
             CommissionCharacter, CommissionCharacter.commission_id == Commission.id
         ).where(CommissionCharacter.character_id == character_id)
     if exclude_set_id is not None:
-        excluded_subq = select(CharacterImageSetItem.file_id).where(
+        excluded_subq = select(CharacterImageSetItem.commission_id).where(
             CharacterImageSetItem.set_id == exclude_set_id
         )
-        stmt = stmt.where(CommissionFile.id.notin_(excluded_subq))
+        stmt = stmt.where(Commission.id.notin_(excluded_subq))
 
-    files = list(db.scalars(stmt))
-    return [_image_payload(f) for f in files]
+    context = crud.load_visibility_context(db)
+    commissions = list(db.scalars(stmt))
+    payloads: list[CharacterPageCommission] = []
+    for c in commissions:
+        payload = _commission_payload(c, context, public_only=False)
+        if payload is not None:
+            payloads.append(payload)
+    return payloads
 
 
 # ---------------------------------------------------------------- sets
@@ -371,6 +374,28 @@ def _next_item_position(db: Session, *, set_id: int) -> int:
         )
     )
     return int(current) + 1
+
+
+def _set_payload(
+    row: CharacterImageSet,
+    context: crud.VisibilityContext,
+    public_only: bool,
+) -> CharacterPageSetOut:
+    items: list[CharacterPageSetItemOut] = []
+    for it in sorted(row.items, key=lambda i: i.position):
+        payload = _commission_payload(it.commission, context, public_only)
+        if payload is None:
+            continue
+        items.append(
+            CharacterPageSetItemOut(id=it.id, position=it.position, commission=payload)
+        )
+    return CharacterPageSetOut(
+        id=row.id,
+        title=row.title,
+        description=row.description,
+        position=row.position,
+        items=items,
+    )
 
 
 @router.post(
@@ -394,13 +419,7 @@ def create_set(
     db.add(row)
     db.commit()
     db.refresh(row)
-    return CharacterPageSetOut(
-        id=row.id,
-        title=row.title,
-        description=row.description,
-        position=row.position,
-        items=[],
-    )
+    return _set_payload(row, crud.load_visibility_context(db), public_only=False)
 
 
 @router.patch("/character-page-sets/{set_id}", response_model=CharacterPageSetOut)
@@ -417,17 +436,7 @@ def update_set(
         row.description = body.description
     db.commit()
     db.refresh(row)
-    items = [
-        CharacterPageSetItemOut(id=it.id, position=it.position, file=_image_payload(it.file))
-        for it in sorted(row.items, key=lambda it: it.position)
-    ]
-    return CharacterPageSetOut(
-        id=row.id,
-        title=row.title,
-        description=row.description,
-        position=row.position,
-        items=items,
-    )
+    return _set_payload(row, crud.load_visibility_context(db), public_only=False)
 
 
 @router.delete("/character-page-sets/{set_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -458,7 +467,6 @@ def reorder_sets(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="set_ids must list every set on this page exactly once",
         )
-    # Two-phase update to avoid colliding with the (page_id, position) unique constraint.
     offset = len(body.set_ids) + 1000
     for i, set_id in enumerate(body.set_ids):
         sets_by_id[set_id].position = offset + i
@@ -466,19 +474,9 @@ def reorder_sets(
     for i, set_id in enumerate(body.set_ids):
         sets_by_id[set_id].position = i
     db.commit()
+    context = crud.load_visibility_context(db)
     return [
-        CharacterPageSetOut(
-            id=s.id,
-            title=s.title,
-            description=s.description,
-            position=s.position,
-            items=[
-                CharacterPageSetItemOut(
-                    id=it.id, position=it.position, file=_image_payload(it.file)
-                )
-                for it in sorted(s.items, key=lambda it: it.position)
-            ],
-        )
+        _set_payload(s, context, public_only=False)
         for s in sorted(page.sets, key=lambda s: s.position)
     ]
 
@@ -496,32 +494,22 @@ def add_set_items(
     _: Principal = Depends(require_edit),
 ):
     row = _set_or_404(db, set_id)
-    existing_file_ids = {it.file_id for it in row.items}
+    existing = {it.commission_id for it in row.items}
     next_pos = _next_item_position(db, set_id=set_id)
-    for file_id in body.file_ids:
-        if file_id in existing_file_ids:
+    for commission_id in body.commission_ids:
+        if commission_id in existing:
             continue
-        _image_file_or_400(db, file_id)
+        _commission_or_400(db, commission_id)
         db.add(
             CharacterImageSetItem(
-                set_id=set_id, file_id=file_id, position=next_pos
+                set_id=set_id, commission_id=commission_id, position=next_pos
             )
         )
-        existing_file_ids.add(file_id)
+        existing.add(commission_id)
         next_pos += 1
     db.commit()
     db.refresh(row)
-    items = [
-        CharacterPageSetItemOut(id=it.id, position=it.position, file=_image_payload(it.file))
-        for it in sorted(row.items, key=lambda it: it.position)
-    ]
-    return CharacterPageSetOut(
-        id=row.id,
-        title=row.title,
-        description=row.description,
-        position=row.position,
-        items=items,
-    )
+    return _set_payload(row, crud.load_visibility_context(db), public_only=False)
 
 
 @router.delete(
@@ -561,14 +549,4 @@ def reorder_set_items(
     for i, item_id in enumerate(body.item_ids):
         items_by_id[item_id].position = i
     db.commit()
-    items = [
-        CharacterPageSetItemOut(id=it.id, position=it.position, file=_image_payload(it.file))
-        for it in sorted(row.items, key=lambda it: it.position)
-    ]
-    return CharacterPageSetOut(
-        id=row.id,
-        title=row.title,
-        description=row.description,
-        position=row.position,
-        items=items,
-    )
+    return _set_payload(row, crud.load_visibility_context(db), public_only=False)

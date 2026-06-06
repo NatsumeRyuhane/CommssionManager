@@ -385,8 +385,8 @@ class CharacterPage(Base):
         ForeignKey("characters.id", ondelete="CASCADE"), nullable=False, unique=True
     )
     about: Mapped[str | None] = mapped_column(Text)
-    main_reference_file_id: Mapped[int | None] = mapped_column(
-        ForeignKey("commission_files.id", ondelete="SET NULL")
+    main_reference_commission_id: Mapped[int | None] = mapped_column(
+        ForeignKey("commissions.id", ondelete="SET NULL")
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
@@ -394,8 +394,8 @@ class CharacterPage(Base):
     )
 
     character: Mapped[Character] = relationship(back_populates="page")
-    main_reference: Mapped[CommissionFile | None] = relationship(
-        foreign_keys=[main_reference_file_id]
+    main_reference: Mapped[Commission | None] = relationship(
+        foreign_keys=[main_reference_commission_id]
     )
     sets: Mapped[list[CharacterImageSet]] = relationship(
         back_populates="page",
@@ -433,7 +433,9 @@ class CharacterImageSet(Base):
 class CharacterImageSetItem(Base):
     __tablename__ = "character_image_set_items"
     __table_args__ = (
-        UniqueConstraint("set_id", "file_id", name="uq_character_image_set_items_file"),
+        UniqueConstraint(
+            "set_id", "commission_id", name="uq_character_image_set_items_commission"
+        ),
         UniqueConstraint("set_id", "position", name="uq_character_image_set_items_position"),
     )
 
@@ -441,13 +443,13 @@ class CharacterImageSetItem(Base):
     set_id: Mapped[int] = mapped_column(
         ForeignKey("character_image_sets.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    file_id: Mapped[int] = mapped_column(
-        ForeignKey("commission_files.id", ondelete="CASCADE"), nullable=False, index=True
+    commission_id: Mapped[int] = mapped_column(
+        ForeignKey("commissions.id", ondelete="CASCADE"), nullable=False, index=True
     )
     position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     image_set: Mapped[CharacterImageSet] = relationship(back_populates="items")
-    file: Mapped[CommissionFile] = relationship()
+    commission: Mapped[Commission] = relationship()
 
 
 # ---------------------------------------------------------------- auth

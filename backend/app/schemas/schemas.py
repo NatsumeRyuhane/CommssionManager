@@ -551,22 +551,19 @@ class WebhookOut(BaseModel):
 
 
 # ---------------------------------------------------------------- character pages
-class CharacterPageImage(BaseModel):
-    id: int
-    url: str
-    width: int | None = None
-    height: int | None = None
-    focal_x: float | None = None
-    focal_y: float | None = None
+class CharacterPageCommission(BaseModel):
+    """A commission as it appears on a character page (its cover image + identity)."""
+
     commission_id: int
-    commission_title: str
-    label: str | None = None
+    title: str
+    cover: CoverOut | None = None
+    completed_at: date | None = None
 
 
 class CharacterPageSetItemOut(BaseModel):
     id: int
     position: int
-    file: CharacterPageImage
+    commission: CharacterPageCommission
 
 
 class CharacterPageSetOut(BaseModel):
@@ -581,7 +578,7 @@ class CharacterPageOut(BaseModel):
     character_id: int
     character_name: str
     about: str | None = None
-    main_reference: CharacterPageImage | None = None
+    main_reference: CharacterPageCommission | None = None
     sets: list[CharacterPageSetOut] = []
     commission_count: int = 0
     updated_at: datetime | None = None
@@ -589,7 +586,7 @@ class CharacterPageOut(BaseModel):
 
 class CharacterPageUpdate(BaseModel):
     about: str | None = None
-    main_reference_file_id: int | None = None
+    main_reference_commission_id: int | None = None
 
 
 class CharacterPageSetCreate(BaseModel):
@@ -617,7 +614,7 @@ class CharacterPageSetReorder(BaseModel):
 
 
 class CharacterPageSetItemsAdd(BaseModel):
-    file_ids: list[int]
+    commission_ids: list[int]
 
 
 class CharacterPageSetItemsReorder(BaseModel):
@@ -628,7 +625,7 @@ class CharacterPageListItem(BaseModel):
     character_id: int
     character_name: str
     set_count: int
-    image_count: int
-    commission_count: int
-    main_reference: CharacterPageImage | None = None
+    commission_count_total: int
+    commission_count_in_db: int
+    main_reference: CharacterPageCommission | None = None
     updated_at: datetime | None = None

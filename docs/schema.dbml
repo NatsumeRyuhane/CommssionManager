@@ -287,12 +287,12 @@ Table commission_artists {
 //----------------------------------------------------------------------
 
 Table character_pages {
-  id                     integer   [pk, increment]
-  character_id           integer   [not null, unique, ref: - characters.id, Note: 'One page per character; cascades when the character is deleted']
-  about                  text      [Note: 'Free-form public bio shown on the page']
-  main_reference_file_id integer   [ref: - commission_files.id, Note: 'Pinned ref-sheet image; on file delete the FK is set to NULL']
-  created_at             timestamp [default: `now()`]
-  updated_at             timestamp [default: `now()`]
+  id                           integer   [pk, increment]
+  character_id                 integer   [not null, unique, ref: - characters.id, Note: 'One page per character; cascades when the character is deleted']
+  about                        text      [Note: 'Free-form public bio shown on the page']
+  main_reference_commission_id integer   [ref: - commissions.id, Note: 'Pinned commission whose cover image is the main reference; on commission delete the FK is set to NULL']
+  created_at                   timestamp [default: `now()`]
+  updated_at                   timestamp [default: `now()`]
 
   Note: 'Public, shareable profile for a character. Presence of a row drives the CharacterOut.has_page flag the frontend uses to mark characters that have pages.'
 }
@@ -310,19 +310,19 @@ Table character_image_sets {
     (page_id, position) [unique]
   }
 
-  Note: 'Curated horizontal "bookshelves" of images on a character page; admin-picked, manually ordered.'
+  Note: 'Curated horizontal "bookshelves" of commissions whose cover images are showcased on a character page; admin-picked, manually ordered.'
 }
 
 Table character_image_set_items {
-  id       integer [pk, increment]
-  set_id   integer [not null, ref: > character_image_sets.id, Note: 'Cascades when the set is deleted']
-  file_id  integer [not null, ref: > commission_files.id, Note: 'Cascades when the underlying commission file is deleted']
-  position integer [not null, default: 0]
+  id            integer [pk, increment]
+  set_id        integer [not null, ref: > character_image_sets.id, Note: 'Cascades when the set is deleted']
+  commission_id integer [not null, ref: > commissions.id, Note: 'Cascades when the commission is deleted; the displayed image is that commission’s cover']
+  position      integer [not null, default: 0]
 
   indexes {
-    (set_id, file_id) [unique]
+    (set_id, commission_id) [unique]
     (set_id, position) [unique]
   }
 
-  Note: 'Files included in a curated set, in admin-defined display order. Each file may only appear once per set.'
+  Note: 'Commissions included in a curated set, in admin-defined display order. Each commission may only appear once per set; the rendered tile uses the commission’s cover image.'
 }

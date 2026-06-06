@@ -43,8 +43,19 @@ def _delivered_node(commission: dict) -> dict:
 
 def _character_id(client: TestClient, name: str) -> int:
     res = client.get("/api/v1/characters", params={"q": name}).json()
-    match = next(c for c in res if c["name"] == name)
-    return match["id"]
+    return next(c for c in res if c["name"] == name)["id"]
+
+
+def _commission_with_cover(
+    admin_client: TestClient,
+    *,
+    title: str,
+    characters: list[str] | None = None,
+) -> dict:
+    """Create a commission and upload a Delivered (public) image so it has a public cover."""
+    commission = _make_commission(admin_client, title=title, characters=characters)
+    _upload_image(admin_client, _delivered_node(commission)["id"], f"{title}.png")
+    return admin_client.get(f"/api/v1/commissions/{commission['id']}").json()
 
 
 def test_character_lookup_has_page_flag_reflects_page_existence(admin_client: TestClient):
@@ -67,59 +78,54 @@ def test_get_page_404_until_created(admin_client: TestClient):
 
 
 def test_upsert_creates_and_updates_page(admin_client: TestClient):
-    commission = _make_commission(admin_client, characters=["Heiyao"])
+    commission = _commission_with_cover(
+        admin_client, title="WithCover", characters=["Heiyao"]
+    )
     char_id = _character_id(admin_client, "Heiyao")
-    ref = _upload_image(admin_client, _delivered_node(commission)["id"])
 
     res = admin_client.put(
         f"/api/v1/characters/{char_id}/page",
-        json={"about": "Primary OC", "main_reference_file_id": ref["id"]},
+        json={
+            "about": "Primary OC",
+            "main_reference_commission_id": commission["id"],
+        },
     )
     assert res.status_code == 200, res.text
     body = res.json()
     assert body["about"] == "Primary OC"
-    assert body["main_reference"]["id"] == ref["id"]
+    assert body["main_reference"]["commission_id"] == commission["id"]
+    assert body["main_reference"]["cover"]["file_id"] == commission["cover"]["file_id"]
     assert body["commission_count"] == 1
 
     res = admin_client.put(
-        f"/api/v1/characters/{char_id}/page",
-        json={"about": "Updated"},
+        f"/api/v1/characters/{char_id}/page", json={"about": "Updated"}
     )
     assert res.status_code == 200
     assert res.json()["about"] == "Updated"
-    assert res.json()["main_reference"]["id"] == ref["id"]
+    assert res.json()["main_reference"]["commission_id"] == commission["id"]
 
     res = admin_client.put(
-        f"/api/v1/characters/{char_id}/page", json={"main_reference_file_id": None}
+        f"/api/v1/characters/{char_id}/page",
+        json={"main_reference_commission_id": None},
     )
     assert res.status_code == 200
     assert res.json()["main_reference"] is None
 
 
-def test_main_reference_rejects_non_image_files(admin_client: TestClient):
-    commission = _make_commission(admin_client, characters=["Heiyao"])
+def test_main_reference_rejects_unknown_commission(admin_client: TestClient):
+    _make_commission(admin_client, characters=["Heiyao"])
     char_id = _character_id(admin_client, "Heiyao")
-    node_id = _delivered_node(commission)["id"]
-    res = admin_client.post(
-        f"/api/v1/nodes/{node_id}/files",
-        files={"upload": ("source.psd", b"raw", "application/octet-stream")},
-    )
-    assert res.status_code == 201
-    psd_id = res.json()["id"]
-
     res = admin_client.put(
         f"/api/v1/characters/{char_id}/page",
-        json={"main_reference_file_id": psd_id},
+        json={"main_reference_commission_id": 9999},
     )
     assert res.status_code == 400
 
 
 def test_set_and_item_crud_round_trip(admin_client: TestClient):
-    commission = _make_commission(admin_client, characters=["Heiyao"])
+    cmsn_a = _commission_with_cover(admin_client, title="A", characters=["Heiyao"])
+    cmsn_b = _commission_with_cover(admin_client, title="B", characters=["Heiyao"])
     char_id = _character_id(admin_client, "Heiyao")
-    node_id = _delivered_node(commission)["id"]
-    file_a = _upload_image(admin_client, node_id, "a.png")
-    file_b = _upload_image(admin_client, node_id, "b.png")
     admin_client.put(f"/api/v1/characters/{char_id}/page", json={"about": "x"})
 
     create = admin_client.post(
@@ -132,20 +138,25 @@ def test_set_and_item_crud_round_trip(admin_client: TestClient):
 
     add = admin_client.post(
         f"/api/v1/character-page-sets/{set_id}/items",
-        json={"file_ids": [file_a["id"], file_b["id"]]},
+        json={"commission_ids": [cmsn_a["id"], cmsn_b["id"]]},
     )
     assert add.status_code == 201, add.text
-    assert [it["file"]["id"] for it in add.json()["items"]] == [file_a["id"], file_b["id"]]
+    assert [it["commission"]["commission_id"] for it in add.json()["items"]] == [
+        cmsn_a["id"],
+        cmsn_b["id"],
+    ]
+    # Each tile carries the commission's cover image.
+    assert all(it["commission"]["cover"] for it in add.json()["items"])
 
-    # adding the same file twice is a no-op
-    add = admin_client.post(
+    # Adding the same commission twice is a no-op.
+    again = admin_client.post(
         f"/api/v1/character-page-sets/{set_id}/items",
-        json={"file_ids": [file_a["id"]]},
+        json={"commission_ids": [cmsn_a["id"]]},
     )
-    assert add.status_code == 201
-    assert len(add.json()["items"]) == 2
+    assert again.status_code == 201
+    assert len(again.json()["items"]) == 2
 
-    item_ids = [it["id"] for it in add.json()["items"]]
+    item_ids = [it["id"] for it in again.json()["items"]]
     reorder = admin_client.post(
         f"/api/v1/character-page-sets/{set_id}/items/reorder",
         json={"item_ids": list(reversed(item_ids))},
@@ -153,7 +164,6 @@ def test_set_and_item_crud_round_trip(admin_client: TestClient):
     assert reorder.status_code == 200
     assert [it["id"] for it in reorder.json()["items"]] == list(reversed(item_ids))
 
-    # delete single item
     delete_item = admin_client.delete(
         f"/api/v1/character-page-set-items/{item_ids[0]}"
     )
@@ -163,7 +173,6 @@ def test_set_and_item_crud_round_trip(admin_client: TestClient):
     assert len(page["sets"]) == 1
     assert [it["id"] for it in page["sets"][0]["items"]] == [item_ids[1]]
 
-    # update set
     patch = admin_client.patch(
         f"/api/v1/character-page-sets/{set_id}",
         json={"title": "Portraits & headshots"},
@@ -202,87 +211,82 @@ def test_set_reorder_validates_ids(admin_client: TestClient):
     assert bad.status_code == 400
 
 
-def test_eligible_images_defaults_to_tagged_only(admin_client: TestClient):
-    tagged = _make_commission(admin_client, title="With Heiyao", characters=["Heiyao"])
-    untagged = _make_commission(admin_client, title="Other", characters=["Other"])
+def test_eligible_commissions_defaults_to_tagged_only(admin_client: TestClient):
+    tagged = _commission_with_cover(
+        admin_client, title="WithHeiyao", characters=["Heiyao"]
+    )
+    untagged = _commission_with_cover(admin_client, title="Other", characters=["Other"])
     char_id = _character_id(admin_client, "Heiyao")
     admin_client.put(f"/api/v1/characters/{char_id}/page", json={})
-
-    tagged_file = _upload_image(admin_client, _delivered_node(tagged)["id"], "yes.png")
-    untagged_file = _upload_image(
-        admin_client, _delivered_node(untagged)["id"], "no.png"
-    )
 
     only_tagged = admin_client.get(
-        f"/api/v1/characters/{char_id}/page/eligible-images"
+        f"/api/v1/characters/{char_id}/page/eligible-commissions"
     ).json()
-    assert [it["id"] for it in only_tagged] == [tagged_file["id"]]
+    assert [c["commission_id"] for c in only_tagged] == [tagged["id"]]
 
-    all_images = admin_client.get(
-        f"/api/v1/characters/{char_id}/page/eligible-images",
+    all_cmsns = admin_client.get(
+        f"/api/v1/characters/{char_id}/page/eligible-commissions",
         params={"only_tagged": "false"},
     ).json()
-    assert sorted(it["id"] for it in all_images) == sorted(
-        [tagged_file["id"], untagged_file["id"]]
+    assert sorted(c["commission_id"] for c in all_cmsns) == sorted(
+        [tagged["id"], untagged["id"]]
     )
 
 
-def test_eligible_images_can_exclude_files_already_in_a_set(admin_client: TestClient):
-    commission = _make_commission(admin_client, characters=["Heiyao"])
+def test_eligible_commissions_can_exclude_set_members(admin_client: TestClient):
+    cmsn_a = _commission_with_cover(admin_client, title="A", characters=["Heiyao"])
+    cmsn_b = _commission_with_cover(admin_client, title="B", characters=["Heiyao"])
     char_id = _character_id(admin_client, "Heiyao")
     admin_client.put(f"/api/v1/characters/{char_id}/page", json={})
-    node_id = _delivered_node(commission)["id"]
-    file_a = _upload_image(admin_client, node_id, "a.png")
-    file_b = _upload_image(admin_client, node_id, "b.png")
     set_row = admin_client.post(
         f"/api/v1/characters/{char_id}/page/sets", json={"title": "Refs"}
     ).json()
     admin_client.post(
         f"/api/v1/character-page-sets/{set_row['id']}/items",
-        json={"file_ids": [file_a["id"]]},
+        json={"commission_ids": [cmsn_a["id"]]},
     )
 
     res = admin_client.get(
-        f"/api/v1/characters/{char_id}/page/eligible-images",
+        f"/api/v1/characters/{char_id}/page/eligible-commissions",
         params={"exclude_set_id": set_row["id"]},
     ).json()
-    assert [it["id"] for it in res] == [file_b["id"]]
+    assert [c["commission_id"] for c in res] == [cmsn_b["id"]]
 
 
-def test_public_view_hides_private_files(admin_client: TestClient):
-    commission = _make_commission(admin_client, characters=["Heiyao"])
+def test_public_view_hides_private_commissions(admin_client: TestClient):
+    public_cmsn = _commission_with_cover(admin_client, title="Public", characters=["Heiyao"])
+    private_cmsn = _commission_with_cover(admin_client, title="Hidden", characters=["Heiyao"])
+    flip = admin_client.patch(
+        f"/api/v1/commissions/{private_cmsn['id']}/visibility",
+        json={"visibility": "private"},
+    )
+    assert flip.status_code == 200, flip.text
+
     char_id = _character_id(admin_client, "Heiyao")
-    public_file = _upload_image(admin_client, _delivered_node(commission)["id"], "p.png")
-
-    # Detached node is private by default; uploads there are private files.
-    detached = next(n for n in commission["nodes"] if n["is_detached"])
-    private_file = _upload_image(admin_client, detached["id"], "secret.png")
-
     admin_client.put(
         f"/api/v1/characters/{char_id}/page",
-        json={"main_reference_file_id": private_file["id"]},
+        json={"main_reference_commission_id": private_cmsn["id"]},
     )
     set_row = admin_client.post(
         f"/api/v1/characters/{char_id}/page/sets", json={"title": "Mix"}
     ).json()
     admin_client.post(
         f"/api/v1/character-page-sets/{set_row['id']}/items",
-        json={"file_ids": [public_file["id"], private_file["id"]]},
+        json={"commission_ids": [public_cmsn["id"], private_cmsn["id"]]},
     )
 
     admin_view = admin_client.get(f"/api/v1/characters/{char_id}/page").json()
-    assert admin_view["main_reference"]["id"] == private_file["id"]
-    assert [it["file"]["id"] for it in admin_view["sets"][0]["items"]] == [
-        public_file["id"],
-        private_file["id"],
-    ]
+    assert admin_view["main_reference"]["commission_id"] == private_cmsn["id"]
+    assert [
+        it["commission"]["commission_id"] for it in admin_view["sets"][0]["items"]
+    ] == [public_cmsn["id"], private_cmsn["id"]]
 
     assert admin_client.post("/api/v1/auth/logout").status_code == 200
     public_view = admin_client.get(f"/api/v1/characters/{char_id}/page").json()
     assert public_view["main_reference"] is None
-    assert [it["file"]["id"] for it in public_view["sets"][0]["items"]] == [
-        public_file["id"]
-    ]
+    assert [
+        it["commission"]["commission_id"] for it in public_view["sets"][0]["items"]
+    ] == [public_cmsn["id"]]
 
 
 def test_character_pages_directory_lists_pages_alphabetically(admin_client: TestClient):
@@ -291,11 +295,11 @@ def test_character_pages_directory_lists_pages_alphabetically(admin_client: Test
     banzhi = _character_id(admin_client, "Banzhi")
     heiyao = _character_id(admin_client, "Heiyao")
 
-    # Only Heiyao has a published page; the directory should not list Banzhi.
     admin_client.put(f"/api/v1/characters/{heiyao}/page", json={"about": "OC"})
     directory = admin_client.get("/api/v1/character-pages").json()
     assert [it["character_id"] for it in directory] == [heiyao]
-    assert directory[0]["commission_count"] == 1
+    assert directory[0]["commission_count_total"] == 1
+    assert directory[0]["commission_count_in_db"] == 0
 
     admin_client.put(f"/api/v1/characters/{banzhi}/page", json={"about": "Other"})
     directory = admin_client.get("/api/v1/character-pages").json()
@@ -313,7 +317,7 @@ def test_page_endpoints_require_auth(client: TestClient):
     ).status_code == 401
     assert client.delete("/api/v1/character-page-sets/1").status_code == 401
     assert client.post(
-        "/api/v1/character-page-sets/1/items", json={"file_ids": []}
+        "/api/v1/character-page-sets/1/items", json={"commission_ids": []}
     ).status_code == 401
     assert client.delete("/api/v1/character-page-set-items/1").status_code == 401
 
@@ -329,8 +333,6 @@ def test_set_position_unique_constraint_survives_reorder(admin_client: TestClien
         )
         ids.append(res.json()["id"])
 
-    # Identity-order reorder should still succeed; if the two-phase update is wrong
-    # we'd hit the unique (page_id, position) constraint here.
     res = admin_client.post(
         f"/api/v1/characters/{char_id}/page/sets/reorder", json={"set_ids": ids}
     )
