@@ -304,6 +304,14 @@ def update_commission_visibility(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="nodes contains ids outside this commission",
             )
+        if any(
+            nodes_by_id[node_id].is_detached and visibility == Visibility.public
+            for node_id, visibility in body.nodes.items()
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="The detached node must remain private",
+            )
         for node_id, visibility in body.nodes.items():
             nodes_by_id[node_id].visibility_override = visibility
     if body.files is not None:
@@ -312,6 +320,14 @@ def update_commission_visibility(
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="files contains ids outside this commission",
+            )
+        if any(
+            files_by_id[file_id].node.is_detached and visibility == Visibility.public
+            for file_id, visibility in body.files.items()
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Files in the detached node must remain private",
             )
         for file_id, visibility in body.files.items():
             files_by_id[file_id].visibility_override = visibility

@@ -86,6 +86,7 @@ def test_private_commission_is_hidden_from_public_list_detail_and_raw_file(admin
     assert public_list.status_code == 200
     assert public_list.json() == []
     assert admin_client.get(f"/api/v1/commissions/{commission['id']}").status_code == 404
+    assert admin_client.get(f"/api/v1/commissions/{commission['id']}/nodes").status_code == 404
     assert admin_client.get(image["url"]).status_code == 404
     assert admin_client.get(f"/api/v1/commissions/{commission['id']}/files").status_code == 401
     assert admin_client.get(f"/api/v1/commissions/{commission['id']}/copy-json").status_code == 401
@@ -101,6 +102,94 @@ def test_private_commission_is_hidden_from_public_list_detail_and_raw_file(admin
     all_files = admin_client.get(f"/api/v1/commissions/{commission['id']}/files")
     assert all_files.status_code == 200
     assert [item["id"] for item in all_files.json()] == [image["id"]]
+
+
+def test_public_lifecycle_omits_private_stages_and_files(admin_client: TestClient):
+    created = admin_client.post(
+        "/api/v1/commissions",
+        json={"title": "Public lifecycle test", "node_names": ["Delivered", "Review"]},
+    )
+    assert created.status_code == 201, created.text
+    commission = created.json()
+    delivered = _node(commission, "Delivered")
+    review = _node(commission, "Review")
+    public_image = _upload_image(admin_client, delivered["id"], "public.png", "#111111")
+    hidden_image = _upload_image(admin_client, delivered["id"], "hidden.png", "#222222")
+    review_image = _upload_image(admin_client, review["id"], "review.png", "#333333")
+
+    patched = admin_client.patch(
+        f"/api/v1/commissions/{commission['id']}/visibility",
+        json={"files": {hidden_image["id"]: "private"}},
+    )
+    assert patched.status_code == 200, patched.text
+
+    admin_detail = admin_client.get(f"/api/v1/commissions/{commission['id']}").json()
+    assert [node["name"] for node in admin_detail["nodes"] if not node["is_detached"]] == [
+        "Delivered",
+        "Review",
+    ]
+    assert {
+        file["id"] for node in admin_detail["nodes"] for file in node["files"]
+    } == {public_image["id"], hidden_image["id"], review_image["id"]}
+    assert admin_detail["current_stage"] == "Review"
+
+    admin_client.cookies.clear()
+
+    public_detail = admin_client.get(f"/api/v1/commissions/{commission['id']}")
+    assert public_detail.status_code == 200
+    body = public_detail.json()
+    assert [node["name"] for node in body["nodes"]] == ["Delivered"]
+    assert [file["id"] for file in body["nodes"][0]["files"]] == [public_image["id"]]
+    assert body["current_stage"] == "Delivered"
+
+    public_nodes = admin_client.get(f"/api/v1/commissions/{commission['id']}/nodes")
+    assert public_nodes.status_code == 200
+    assert [node["name"] for node in public_nodes.json()] == ["Delivered"]
+    assert [file["id"] for file in public_nodes.json()[0]["files"]] == [public_image["id"]]
+
+    public_images = admin_client.get(f"/api/v1/commissions/{commission['id']}/images")
+    assert public_images.status_code == 200
+    assert [image["id"] for image in public_images.json()] == [public_image["id"]]
+    assert admin_client.get(hidden_image["url"]).status_code == 404
+    assert admin_client.get(review_image["url"]).status_code == 404
+
+
+def test_detached_node_and_files_cannot_be_public(admin_client: TestClient):
+    created = admin_client.post(
+        "/api/v1/commissions",
+        json={"title": "Detached privacy test", "node_names": ["Delivered"]},
+    )
+    assert created.status_code == 201, created.text
+    commission = created.json()
+    detached = next(node for node in commission["nodes"] if node["is_detached"])
+    detached_image = _upload_image(admin_client, detached["id"], "detached.png", "#111111")
+
+    publish_node = admin_client.patch(
+        f"/api/v1/commissions/{commission['id']}/visibility",
+        json={"nodes": {detached["id"]: "public"}},
+    )
+    assert publish_node.status_code == 422
+    assert publish_node.json()["detail"] == "The detached node must remain private"
+
+    publish_file = admin_client.patch(
+        f"/api/v1/commissions/{commission['id']}/visibility",
+        json={"files": {detached_image["id"]: "public"}},
+    )
+    assert publish_file.status_code == 422
+    assert publish_file.json()["detail"] == "Files in the detached node must remain private"
+
+    visibility = admin_client.get(f"/api/v1/commissions/{commission['id']}/visibility").json()
+    detached_visibility = next(node for node in visibility["nodes"] if node["is_detached"])
+    assert detached_visibility["effective_visibility"] == "private"
+    assert detached_visibility["files"][0]["effective_visibility"] == "private"
+
+    admin_client.cookies.clear()
+    assert admin_client.get(detached_image["url"]).status_code == 404
+    assert admin_client.get(f"/api/v1/commissions/{commission['id']}/images").json() == []
+    assert all(
+        not node["is_detached"]
+        for node in admin_client.get(f"/api/v1/commissions/{commission['id']}").json()["nodes"]
+    )
 
 
 def test_public_detail_redacts_fields_marked_private(admin_client: TestClient):

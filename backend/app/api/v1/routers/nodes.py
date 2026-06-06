@@ -7,9 +7,9 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.v1 import crud
-from app.auth.deps import Principal, require_edit
+from app.auth.deps import Principal, get_principal, require_edit
 from app.db import get_db
-from app.models import Commission, CommissionFile, CommissionNode
+from app.models import Commission, CommissionFile, CommissionNode, Visibility
 from app.schemas import NodeCreate, NodeOut, NodeReorder, NodeUpdate
 
 router = APIRouter(tags=["nodes"])
@@ -36,14 +36,21 @@ def _node_or_404(db: Session, node_id: int) -> CommissionNode:
 
 
 @router.get("/commissions/{commission_id}/nodes", response_model=list[NodeOut])
-def list_nodes(commission_id: int, db: Session = Depends(get_db)):
+def list_nodes(
+    commission_id: int,
+    db: Session = Depends(get_db),
+    principal: Principal | None = Depends(get_principal),
+):
     commission = _commission_or_404(db, commission_id)
     visibility_context = crud.load_visibility_context(db)
-    detached = [n for n in commission.nodes if n.is_detached]
-    return [
-        crud.node_out(n, visibility_context=visibility_context)
-        for n in detached + crud.ordered_nodes(commission)
-    ]
+    include_private = principal is not None and principal.can_write
+    if (
+        not include_private
+        and crud.effective_commission_visibility(commission, visibility_context)
+        != Visibility.public
+    ):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Commission not found")
+    return crud.serialize_nodes(commission, visibility_context, include_private)
 
 
 @router.post(

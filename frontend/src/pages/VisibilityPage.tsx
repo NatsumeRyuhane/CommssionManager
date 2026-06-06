@@ -237,6 +237,7 @@ export function VisibilityPage() {
                       value={node.visibility}
                       effective={node.effective_visibility}
                       onChange={(next) => setNode(node.id, next)}
+                      disabled={node.is_detached}
                     />
                   </div>
                   {node.files.length === 0 ? (
@@ -257,6 +258,7 @@ export function VisibilityPage() {
                             value={file.visibility}
                             effective={file.effective_visibility}
                             onChange={(next) => setFile(file.id, next)}
+                            disabled={node.is_detached}
                           />
                         </div>
                       );
@@ -266,7 +268,8 @@ export function VisibilityPage() {
               ))}
             </div>
             <div className="settings-note" style={{ marginTop: 14 }}>
-              <strong>Precedence:</strong> global preset → this commission → stage → file.
+              <strong>Precedence:</strong> global preset → this commission → stage → file.{" "}
+              Detached and its files always remain private.
             </div>
           </section>
         </div>
@@ -279,17 +282,20 @@ function VisibilitySelect({
   value,
   effective,
   onChange,
+  disabled = false,
 }: {
   value: Visibility | null;
   effective: Visibility;
   onChange: (value: Visibility | null) => void;
+  disabled?: boolean;
 }) {
   return (
     <select
       className="field visibility-select"
       value={value ?? ""}
       onChange={(e) => onChange((e.target.value || null) as Visibility | null)}
-      title={`Effective: ${effective}`}
+      title={disabled ? "Detached content is always private" : `Effective: ${effective}`}
+      disabled={disabled}
     >
       <option value="">Inherit ({effective})</option>
       <option value="public">Public</option>
