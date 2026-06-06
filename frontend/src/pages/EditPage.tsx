@@ -6,11 +6,11 @@ import type { CommissionCreate, Rating } from "../api/types";
 import { Chip } from "../components/Chip";
 import { CoverFocalEditor } from "../components/CoverFocalEditor";
 import { StagesEditor } from "../components/StagesEditor";
+import { TaxonomyPicker } from "../components/TaxonomyPicker";
 import { TopBar } from "../components/TopBar";
 import { useAuth } from "../hooks/useAuth";
 
 const splitList = (s: string) => s.split(",").map((x) => x.trim()).filter(Boolean);
-const joinList = (xs: string[]) => xs.join(", ");
 
 const RATINGS: { value: Rating; label: string }[] = [
   { value: "general", label: "General" },
@@ -31,10 +31,10 @@ export function EditPage() {
   const [priceAmount, setPriceAmount] = useState("");
   const [priceCurrency, setPriceCurrency] = useState("USD");
   const [rating, setRating] = useState<Rating>("general");
-  const [categories, setCategories] = useState("");
-  const [tags, setTags] = useState("");
-  const [characters, setCharacters] = useState("");
-  const [artists, setArtists] = useState("");
+  const [categories, setCategories] = useState<string[]>([]);
+  const [tags, setTags] = useState<string[]>([]);
+  const [characters, setCharacters] = useState<string[]>([]);
+  const [artists, setArtists] = useState<string[]>([]);
   const [nodes, setNodes] = useState("Sketching, Lineart, Color, Delivered");
 
   const [busy, setBusy] = useState(false);
@@ -52,10 +52,10 @@ export function EditPage() {
       setPriceAmount(d.price_amount ?? "");
       setPriceCurrency(d.price_currency ?? "USD");
       setRating(d.rating ?? "general");
-      setCategories(joinList(d.categories));
-      setTags(joinList(d.tags));
-      setCharacters(joinList(d.characters));
-      setArtists(joinList(d.artists));
+      setCategories(d.categories);
+      setTags(d.tags);
+      setCharacters(d.characters);
+      setArtists(d.artists);
     });
   }, [id, isEdit]);
 
@@ -86,10 +86,10 @@ export function EditPage() {
       price_amount: priceAmount || null,
       price_currency: priceAmount ? priceCurrency : null,
       rating,
-      category_names: splitList(categories),
-      tag_names: splitList(tags),
-      character_names: splitList(characters),
-      artist_names: splitList(artists),
+      category_names: categories,
+      tag_names: tags,
+      character_names: characters,
+      artist_names: artists,
     };
     try {
       if (isEdit && id) {
@@ -236,40 +236,16 @@ export function EditPage() {
           </FieldGroup>
 
           <FieldGroup label="Categories">
-            <input
-              className="field"
-              value={categories}
-              onChange={(e) => setCategories(e.target.value)}
-              placeholder="comma-separated"
-            />
-            <ChipPreview kind="cat" values={splitList(categories)} />
+            <TaxonomyPicker kind="category" values={categories} onChange={setCategories} />
           </FieldGroup>
           <FieldGroup label="Tags">
-            <input
-              className="field"
-              value={tags}
-              onChange={(e) => setTags(e.target.value)}
-              placeholder="comma-separated"
-            />
-            <ChipPreview kind="tag" values={splitList(tags)} />
+            <TaxonomyPicker kind="tag" values={tags} onChange={setTags} />
           </FieldGroup>
           <FieldGroup label="Characters">
-            <input
-              className="field"
-              value={characters}
-              onChange={(e) => setCharacters(e.target.value)}
-              placeholder="comma-separated"
-            />
-            <ChipPreview kind="char" values={splitList(characters)} />
+            <TaxonomyPicker kind="character" values={characters} onChange={setCharacters} />
           </FieldGroup>
           <FieldGroup label="Artists">
-            <input
-              className="field"
-              value={artists}
-              onChange={(e) => setArtists(e.target.value)}
-              placeholder="comma-separated"
-            />
-            <ChipPreview kind="artist" values={splitList(artists)} />
+            <TaxonomyPicker kind="artist" values={artists} onChange={setArtists} />
           </FieldGroup>
 
           {isEdit && id && (
@@ -288,25 +264,6 @@ function FieldGroup({ label, children }: { label: string; children: React.ReactN
     <div className="edit-field-group">
       <div className="label">{label}</div>
       {children}
-    </div>
-  );
-}
-
-function ChipPreview({
-  kind,
-  values,
-}: {
-  kind: "cat" | "tag" | "char" | "artist";
-  values: string[];
-}) {
-  if (values.length === 0) return null;
-  return (
-    <div className="row wrap gap-4" style={{ marginTop: 6 }}>
-      {values.map((v) => (
-        <Chip key={v} kind={kind}>
-          {v}
-        </Chip>
-      ))}
     </div>
   );
 }
