@@ -375,7 +375,6 @@ export function CharacterPage() {
               <Link
                 to={`/commissions/${data.main_reference.commission_id}`}
                 className="char-main-ref"
-                style={{ display: "block" }}
               >
                 <Cover cover={data.main_reference.cover} rounded={false} />
               </Link>
