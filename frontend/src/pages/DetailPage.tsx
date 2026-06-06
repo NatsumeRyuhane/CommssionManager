@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { api } from "../api/client";
-import type { CommissionDetail } from "../api/types";
+import type { Character, CommissionDetail } from "../api/types";
 import { Chip } from "../components/Chip";
 import { Cover } from "../components/Cover";
 import { LifecycleStagesList } from "../components/LifecycleStagesList";
@@ -40,11 +40,38 @@ export function DetailPage() {
   const { canWrite } = useAuth();
   const [data, setData] = useState<CommissionDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [characterIndex, setCharacterIndex] = useState<Map<string, Character>>(new Map());
 
   useEffect(() => {
     if (!id) return;
     api.getCommission(Number(id)).then(setData).catch((e) => setError(String(e)));
   }, [id]);
+
+  useEffect(() => {
+    if (!data?.characters.length) return;
+    let cancelled = false;
+    api
+      .characters()
+      .then((rows) => {
+        if (cancelled) return;
+        const next = new Map<string, Character>();
+        for (const row of rows) next.set(row.name.toLowerCase(), row);
+        setCharacterIndex(next);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [data?.characters]);
+
+  const characterChips = useMemo(
+    () =>
+      (data?.characters ?? []).map((name) => {
+        const match = characterIndex.get(name.toLowerCase());
+        return { name, id: match?.id, hasPage: match?.has_page ?? false };
+      }),
+    [data?.characters, characterIndex],
+  );
 
   async function onDelete() {
     if (!data) return;
@@ -178,7 +205,16 @@ export function DetailPage() {
 
           {data.characters.length > 0 && (
             <MetaBlock label="Characters">
-              {data.characters.map((c) => <Chip key={c} kind="char">{c}</Chip>)}
+              {characterChips.map((c) => (
+                <Chip
+                  key={c.name}
+                  kind="char"
+                  to={c.id != null ? `/characters/${c.id}` : undefined}
+                  hasPage={c.hasPage}
+                >
+                  {c.name}
+                </Chip>
+              ))}
             </MetaBlock>
           )}
           {data.artists.length > 0 && (

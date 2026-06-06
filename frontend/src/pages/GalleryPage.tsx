@@ -83,6 +83,9 @@ export function GalleryPage() {
     <div className="app">
       <TopBar>
         <span className="mono-sm muted">{total} works</span>
+        <Link to="/characters" className="btn sm">
+          Characters
+        </Link>
         <div style={{ position: "relative" }}>
           <button className="btn sm" onClick={() => setFilterOpen((v) => !v)}>
             🔍 Search &amp; filter

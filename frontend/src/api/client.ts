@@ -6,6 +6,13 @@ import type {
   ArtistCreate,
   ArtistUpdate,
   Character,
+  CharacterPage,
+  CharacterPageCommission,
+  CharacterPageDirectoryItem,
+  CharacterPageSet,
+  CharacterPageSetCreate,
+  CharacterPageSetUpdate,
+  CharacterPageUpdate,
   CommissionCreate,
   CommissionDetail,
   CommissionFile,
@@ -260,4 +267,58 @@ export const api = {
     }),
   deleteArtistAlias: (aliasId: number) =>
     request<void>(`/artist-aliases/${aliasId}`, { method: "DELETE" }),
+
+  // character pages
+  listCharacterPages: () =>
+    request<CharacterPageDirectoryItem[]>("/character-pages"),
+  getCharacterPage: (characterId: number) =>
+    request<CharacterPage>(`/characters/${characterId}/page`),
+  upsertCharacterPage: (characterId: number, body: CharacterPageUpdate) =>
+    request<CharacterPage>(`/characters/${characterId}/page`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+  deleteCharacterPage: (characterId: number) =>
+    request<void>(`/characters/${characterId}/page`, { method: "DELETE" }),
+  listEligibleCommissions: (
+    characterId: number,
+    params: { onlyTagged?: boolean; excludeSetId?: number } = {},
+  ) => {
+    const sp = new URLSearchParams();
+    if (params.onlyTagged === false) sp.set("only_tagged", "false");
+    if (params.excludeSetId != null) sp.set("exclude_set_id", String(params.excludeSetId));
+    const qs = sp.toString();
+    return request<CharacterPageCommission[]>(
+      `/characters/${characterId}/page/eligible-commissions${qs ? `?${qs}` : ""}`,
+    );
+  },
+  createCharacterPageSet: (characterId: number, body: CharacterPageSetCreate) =>
+    request<CharacterPageSet>(`/characters/${characterId}/page/sets`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  updateCharacterPageSet: (setId: number, body: CharacterPageSetUpdate) =>
+    request<CharacterPageSet>(`/character-page-sets/${setId}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  deleteCharacterPageSet: (setId: number) =>
+    request<void>(`/character-page-sets/${setId}`, { method: "DELETE" }),
+  reorderCharacterPageSets: (characterId: number, setIds: number[]) =>
+    request<CharacterPageSet[]>(`/characters/${characterId}/page/sets/reorder`, {
+      method: "POST",
+      body: JSON.stringify({ set_ids: setIds }),
+    }),
+  addCharacterPageSetItems: (setId: number, commissionIds: number[]) =>
+    request<CharacterPageSet>(`/character-page-sets/${setId}/items`, {
+      method: "POST",
+      body: JSON.stringify({ commission_ids: commissionIds }),
+    }),
+  deleteCharacterPageSetItem: (itemId: number) =>
+    request<void>(`/character-page-set-items/${itemId}`, { method: "DELETE" }),
+  reorderCharacterPageSetItems: (setId: number, itemIds: number[]) =>
+    request<CharacterPageSet>(`/character-page-sets/${setId}/items/reorder`, {
+      method: "POST",
+      body: JSON.stringify({ item_ids: itemIds }),
+    }),
 };

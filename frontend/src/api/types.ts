@@ -256,3 +256,59 @@ export interface CommissionVisibilityUpdate {
   nodes?: Record<number, Visibility | null>;
   files?: Record<number, Visibility | null>;
 }
+
+export interface CharacterPageCommission {
+  commission_id: number;
+  title: string;
+  cover: Cover | null;
+  completed_at: string | null;
+}
+
+export interface CharacterPageSetItem {
+  id: number;
+  position: number;
+  commission: CharacterPageCommission;
+}
+
+export interface CharacterPageSet {
+  id: number;
+  title: string;
+  description: string | null;
+  position: number;
+  items: CharacterPageSetItem[];
+}
+
+export interface CharacterPage {
+  character_id: number;
+  character_name: string;
+  about: string | null;
+  main_reference: CharacterPageCommission | null;
+  sets: CharacterPageSet[];
+  commission_count: number;
+  updated_at: string | null;
+}
+
+export interface CharacterPageUpdate {
+  about?: string | null;
+  main_reference_commission_id?: number | null;
+}
+
+export interface CharacterPageSetCreate {
+  title: string;
+  description?: string | null;
+}
+
+export interface CharacterPageSetUpdate {
+  title?: string | null;
+  description?: string | null;
+}
+
+export interface CharacterPageDirectoryItem {
+  character_id: number;
+  character_name: string;
+  set_count: number;
+  commission_count_total: number;
+  commission_count_in_db: number;
+  main_reference: CharacterPageCommission | null;
+  updated_at: string | null;
+}

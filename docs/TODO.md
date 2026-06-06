@@ -89,11 +89,14 @@
   privacy-marked meta rows, chip blocks); edit page two-column layout (borderless title, sticky
   meta rail with chip previews + inline price/confirmed fields); filter popover arrow
 - [x] Factory lifecycle stage defaults use chronological order
-- [ ] Character pages: shareable profile, main ref, curated image "bookshelves" + picker
-  - When character pages land, surface a visual marker on every Character chip / card /
-    typeahead row distinguishing "has a page" from "no page yet"; the `CharacterOut`
-    payload already carries a `has_page` flag (always `false` until this lands) so the
-    frontend can wire it once the page model exists.
+- [x] Character pages: shareable profile, main ref, curated commission "bookshelves" + picker
+  - Sets and the main reference reference whole commissions; each tile renders that
+    commission's cover image. `CharacterOut.has_page` is now truthful and drives the
+    page marker on character chips, the taxonomy management panel, and the directory.
+  - Public viewers see only commissions whose effective visibility is public; admins see
+    everything in the picker (defaulting to commissions tagged with the character).
+  - Still to do: drag-to-reorder of sets and tiles from the UI (backend endpoints exist),
+    typeahead/picker `has_page` marker, mobile character page polish.
 - [x] Artist management: multi-platform handles, paste-to-match, no-match resolve dialog
 - [ ] Mobile views for every section
 - [x] Focal-point reticle editor on cover image

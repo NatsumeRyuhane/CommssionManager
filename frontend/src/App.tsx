@@ -1,6 +1,8 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
 import { AuthProvider } from "./hooks/useAuth";
+import { CharacterPage } from "./pages/CharacterPage";
+import { CharactersDirectoryPage } from "./pages/CharactersDirectoryPage";
 import { DetailPage } from "./pages/DetailPage";
 import { EditPage } from "./pages/EditPage";
 import { GalleryPage } from "./pages/GalleryPage";
@@ -31,6 +33,8 @@ export default function App() {
           <Route path="/commissions/:id" element={<DetailPage />} />
           <Route path="/commissions/:id/edit" element={<EditPage />} />
           <Route path="/commissions/:id/visibility" element={<VisibilityPage />} />
+          <Route path="/characters" element={<CharactersDirectoryPage />} />
+          <Route path="/characters/:id" element={<CharacterPage />} />
           <Route path="/artists" element={<Navigate to="/settings" replace />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>
