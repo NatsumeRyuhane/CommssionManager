@@ -31,8 +31,8 @@ Known drift from `requirements.xml`:
   `commission_labels`.
 - Settings are limited to character and artist XML blobs in Phase 1; full settings pages, outfits,
   weapons, webhooks, export flows, and richer visibility/privacy rules are deferred.
-- Public image listing is implemented as stage-ordered image files that ignore detached nodes;
-  per-stage and per-file visibility filtering remains a stub.
+- Public image listing is implemented as stage-ordered image files that ignore detached nodes and
+  enforce per-stage/per-file visibility.
 
 ## Auth model
 
@@ -57,10 +57,11 @@ enum value, no schema change. The "commission folder" is a local-backend convent
 See `docs/schema.dbml` for the canonical schema. App-layer invariants:
 - Exactly one `rating` per commission (stored on `commission_metadata.rating`).
 - Each commission auto-creates one **detached node** (`is_detached=true`); deleting a regular
-  node reparents its files there.
+  node reparents its files there. Detached nodes and their files are always private.
 - `cover_file_id` must point to an `is_image=true` file; deleting that file clears the explicit
   cover reference.
-- Detail page shows public displayable images in stage (timeline) order, ignoring detached.
+- Public lifecycle responses omit private stages and files. Detail pages show public displayable
+  images in stage (timeline) order, ignoring detached.
 
 ## Agent integration
 

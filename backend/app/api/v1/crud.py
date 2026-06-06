@@ -474,12 +474,16 @@ def effective_commission_visibility(
 
 
 def effective_node_visibility(node: CommissionNode, context: VisibilityContext) -> Visibility:
+    if node.is_detached:
+        return Visibility.private
     if node.visibility_override is not None:
         return node.visibility_override
     return default_stage_visibility(node.name, context)
 
 
 def effective_file_visibility(file, context: VisibilityContext) -> Visibility:
+    if file.node.is_detached:
+        return Visibility.private
     if file.visibility_override is not None:
         return file.visibility_override
     return effective_node_visibility(file.node, context)
@@ -529,9 +533,28 @@ def ordered_nodes(commission: Commission) -> list[CommissionNode]:
     return regular
 
 
-def _current_stage(commission: Commission) -> str | None:
+def _current_stage(
+    commission: Commission,
+    visibility_context: VisibilityContext | None = None,
+    include_private: bool = True,
+) -> str | None:
     nodes = ordered_nodes(commission)
-    with_files = [n for n in nodes if n.files]
+    if not include_private and visibility_context is not None:
+        nodes = [
+            node
+            for node in nodes
+            if effective_node_visibility(node, visibility_context) == Visibility.public
+        ]
+    with_files = [
+        node
+        for node in nodes
+        if any(
+            include_private
+            or visibility_context is None
+            or effective_file_visibility(file, visibility_context) == Visibility.public
+            for file in node.files
+        )
+    ]
     if with_files:
         return with_files[-1].name
     return nodes[-1].name if nodes else None
@@ -633,7 +656,7 @@ def serialize_list_item(
             else []
         ),
         formats=formats_of(commission, visibility_context, include_private),
-        current_stage=_current_stage(commission),
+        current_stage=_current_stage(commission, visibility_context, include_private),
         cover=_cover(commission, visibility_context, include_private),
     )
 
@@ -666,7 +689,15 @@ def node_out(
     node: CommissionNode,
     cover_file_id: int | None = None,
     visibility_context: VisibilityContext | None = None,
+    include_private: bool = True,
 ) -> NodeOut:
+    files = node.files
+    if not include_private and visibility_context is not None:
+        files = [
+            file
+            for file in files
+            if effective_file_visibility(file, visibility_context) == Visibility.public
+        ]
     return NodeOut(
         id=node.id,
         name=node.name,
@@ -679,8 +710,28 @@ def node_out(
             if visibility_context is not None
             else None
         ),
-        files=[file_out(f, cover_file_id, visibility_context) for f in node.files],
+        files=[file_out(f, cover_file_id, visibility_context) for f in files],
     )
+
+
+def serialize_nodes(
+    commission: Commission,
+    visibility_context: VisibilityContext,
+    include_private: bool = True,
+) -> list[NodeOut]:
+    # detached pinned first (anomalies surface first), then regular stages by position
+    nodes = [n for n in commission.nodes if n.is_detached] + ordered_nodes(commission)
+    if not include_private:
+        nodes = [
+            node
+            for node in nodes
+            if effective_node_visibility(node, visibility_context) == Visibility.public
+        ]
+    cover_file_id = commission.meta.cover_file_id if commission.meta else None
+    return [
+        node_out(node, cover_file_id, visibility_context, include_private)
+        for node in nodes
+    ]
 
 
 def serialize_detail(
@@ -691,14 +742,6 @@ def serialize_detail(
     visibility_context = visibility_context or fallback_visibility_context()
     base = serialize_list_item(commission, visibility_context, include_private).model_dump()
     meta = commission.meta
-    cover_file_id = meta.cover_file_id if meta else None
-
-    # detached pinned first (anomalies surface first), then regular stages by position
-    detached = [n for n in commission.nodes if n.is_detached]
-    nodes = [
-        node_out(n, cover_file_id, visibility_context)
-        for n in detached + ordered_nodes(commission)
-    ]
 
     return CommissionDetail(
         **base,
@@ -726,7 +769,7 @@ def serialize_detail(
             and (include_private or _effective_field_public(commission, "price", visibility_context))
             else None
         ),
-        nodes=nodes,
+        nodes=serialize_nodes(commission, visibility_context, include_private),
         created_at=commission.created_at,
         updated_at=commission.updated_at,
     )

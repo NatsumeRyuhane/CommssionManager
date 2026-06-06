@@ -79,7 +79,8 @@
 - [x] Settings (admin): frontend UI for site title, API keys, visibility presets, and storage config
 - [ ] Settings (admin): frontend UI for webhooks (excluded from this round)
 - [x] Backend visibility/privacy: global preset -> per-commission -> per-stage -> per-file
-  precedence, public metadata redaction, raw-file privacy, and `/images?visibility=` filtering
+  precedence, public metadata redaction, public lifecycle stage/file omission, raw-file privacy,
+  and `/images?visibility=` filtering
 - [x] Visibility/privacy: frontend controls for global defaults and per-commission/stage/file
   overrides
 - [x] Lifecycle: shared component, draggable stage reorder handle, drag-and-drop files between
@@ -111,7 +112,8 @@
 ## Notes / gotchas
 - `commission_metadata.rating` is the single rating source for a commission; `commission_labels`
   currently stores categories and tags.
-- Each commission has exactly one system-managed **detached node** (`is_detached=true`), auto-created; deleting a node reparents its files to detached.
+- Each commission has exactly one system-managed **detached node** (`is_detached=true`),
+  auto-created and forced private; deleting a node reparents its files to detached.
 - `cover_file_id` must point to a `commission_files` row with `is_image=true`; deleting that file clears the explicit cover so fallback cover selection can run.
 - Public image listing shows displayable images in **timeline (stage) order**, ignoring detached,
   and filters by effective file visibility.

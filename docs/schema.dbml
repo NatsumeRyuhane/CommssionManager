@@ -212,7 +212,7 @@ Table commission_files {
   height            integer   [Note: 'Pixel height; null when is_image = false']
   focal_x           float     [Note: 'Relative X of the main subject center (0.0–1.0) for thumbnail cropping; null when is_image = false']
   focal_y           float     [Note: 'Relative Y of the main subject center (0.0–1.0) for thumbnail cropping; null when is_image = false']
-  visibility_override visibility [Note: 'Nullable file-level override. Highest-precedence visibility control for public image filtering.']
+  visibility_override visibility [Note: 'Nullable file-level override. Highest-precedence visibility control for public image filtering, except files in detached nodes are always private.']
   created_at        timestamp [default: `now()`]
 
   Note: 'Any file received as part of a commission: rendered images, source files, design docs, etc. Only files with is_image = true are eligible as cover art.'
@@ -228,7 +228,7 @@ Table commission_nodes {
   name          varchar   [not null, Note: 'Stage name, e.g. "Sketching", "Lineart", "Delivered"']
   position      integer   [Note: 'Admin-defined ordering; lower values come first. NULL for the detached node.']
   started_at    timestamp [Note: 'When this stage began. NULL for the detached node.']
-  is_detached   boolean   [not null, default: false, Note: 'True for the one system-managed detached node per commission. Detached nodes cannot be deleted or reordered.']
+  is_detached   boolean   [not null, default: false, Note: 'True for the one system-managed detached node per commission. Detached nodes cannot be deleted, reordered, or made public.']
   visibility_override visibility [Note: 'Nullable stage-level override. Null inherits the matching visibility_stage_defaults row or app_settings.default_stage_visibility.']
 
   indexes {
