@@ -44,14 +44,9 @@ export function TopBar({ children, siteTitle }: { children?: ReactNode; siteTitl
         <>
           <span className="mono-sm muted">🔓 {me?.kind === "admin" ? "admin" : me?.label}</span>
           {me?.kind === "admin" && (
-            <>
-              <Link to="/artists" className="btn sm">
-                Artists
-              </Link>
-              <Link to="/settings" className="btn sm">
-                Settings
-              </Link>
-            </>
+            <Link to="/settings" className="btn sm">
+              Settings
+            </Link>
           )}
           <button className="btn sm" onClick={() => void logout()}>
             Sign out

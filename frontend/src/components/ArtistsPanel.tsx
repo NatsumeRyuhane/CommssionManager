@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
+import { Pencil, Plus, Trash2, X } from "lucide-react";
 
 import { api } from "../api/client";
 import type { Artist } from "../api/types";
-import { Chip } from "../components/Chip";
-import { TopBar } from "../components/TopBar";
-import { useAuth } from "../hooks/useAuth";
+import { Chip } from "./Chip";
 
 interface ArtistHandle {
   platform: string;
@@ -21,8 +20,7 @@ const PLATFORMS = [
   "other",
 ];
 
-export function ArtistsPage() {
-  const { canWrite, loading: authLoading } = useAuth();
+export function ArtistsPanel() {
   const [artists, setArtists] = useState<Artist[]>([]);
   const [query, setQuery] = useState("");
   const [resolveQuery, setResolveQuery] = useState<string | null>(null);
@@ -30,6 +28,9 @@ export function ArtistsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Per-artist inline alias-add state.
+  const [aliasingId, setAliasingId] = useState<number | null>(null);
+  const [aliasText, setAliasText] = useState("");
 
   async function reload() {
     setLoading(true);
@@ -44,9 +45,8 @@ export function ArtistsPage() {
   }
 
   useEffect(() => {
-    if (!authLoading && canWrite) void reload();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authLoading, canWrite]);
+    void reload();
+  }, []);
 
   const rows = useMemo(
     () => artists.map((artist) => ({ artist, handles: parseHandles(artist.info_xml) })),
@@ -58,24 +58,18 @@ export function ArtistsPage() {
     if (!needle) return [];
     return rows.flatMap((row) => {
       const nameMatch = normalize(row.artist.name).includes(needle);
-      const handleMatches = row.handles.filter((handle) => normalize(handle.handle).includes(needle));
-      if (nameMatch && handleMatches.length === 0) {
+      const aliasMatch = row.artist.aliases.some((a) =>
+        normalize(a.alias).includes(needle)
+      );
+      const handleMatches = row.handles.filter((handle) =>
+        normalize(handle.handle).includes(needle)
+      );
+      if ((nameMatch || aliasMatch) && handleMatches.length === 0) {
         return [{ artist: row.artist, handle: null as ArtistHandle | null }];
       }
       return handleMatches.map((handle) => ({ artist: row.artist, handle }));
     });
   }, [query, rows]);
-
-  if (!authLoading && !canWrite) {
-    return (
-      <div className="app">
-        <TopBar />
-        <div style={{ padding: 48, textAlign: "center" }} className="muted">
-          Artist management requires admin sign-in.
-        </div>
-      </div>
-    );
-  }
 
   async function renameArtist(artist: Artist) {
     const name = window.prompt("Artist name", artist.name);
@@ -93,7 +87,7 @@ export function ArtistsPage() {
   }
 
   async function deleteArtist(artist: Artist) {
-    if (!confirm(`Delete artist “${artist.name}”? Existing commission links will be removed.`)) return;
+    if (!confirm(`Delete artist "${artist.name}"? Existing commission links will be removed.`)) return;
     setSaving(true);
     setError(null);
     try {
@@ -106,114 +100,220 @@ export function ArtistsPage() {
     }
   }
 
+  async function addAlias(artist: Artist) {
+    const alias = aliasText.trim();
+    if (!alias) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await api.addArtistAlias(artist.id, alias);
+      setArtists((items) => items.map((item) => (item.id === updated.id ? updated : item)));
+      setAliasingId(null);
+      setAliasText("");
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function removeAlias(aliasId: number) {
+    setSaving(true);
+    setError(null);
+    try {
+      await api.deleteArtistAlias(aliasId);
+      await reload();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
-    <div className="app">
-      <TopBar>
+    <section>
+      <div className="settings-heading">
+        <div>
+          <h1>Artists</h1>
+          <div className="mono-sm muted">
+            {artists.length} configured · platform handles stored in artist info XML; aliases resolve typed names
+          </div>
+        </div>
         <button
-          className="btn sm primary"
+          className="btn primary"
           onClick={() => {
             setInitialArtistId(null);
             setResolveQuery("");
           }}
         >
-          + New artist
+          <Plus size={14} strokeWidth={2.5} /> New artist
         </button>
-      </TopBar>
+      </div>
 
-      <main className="artists-page">
-        <div className="settings-heading">
-          <div>
-            <h1>Artists</h1>
-            <div className="mono-sm muted">
-              {artists.length} configured artists · handles are stored in artist info XML
-            </div>
-          </div>
-        </div>
+      {error && <div className="error-text" style={{ marginBottom: 12 }}>{error}</div>}
 
-        {error && <div className="error-text" style={{ marginBottom: 12 }}>{error}</div>}
-
-        <section className="artist-search-panel">
-          <label className="label">Add / find by handle</label>
-          <div className="artist-search">
-            <input
-              className="field"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && query.trim()) {
-                  e.preventDefault();
-                  setInitialArtistId(matches[0]?.artist.id ?? null);
-                  setResolveQuery(query.trim());
-                }
-              }}
-              placeholder="Paste handle, URL, or artist name"
-            />
-            <button
-              className="btn"
-              disabled={!query.trim()}
-              onClick={() => {
+      <section className="artist-search-panel">
+        <label className="label">Add / find by handle or alias</label>
+        <div className="artist-search">
+          <input
+            className="field"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && query.trim()) {
+                e.preventDefault();
                 setInitialArtistId(matches[0]?.artist.id ?? null);
                 setResolveQuery(query.trim());
-              }}
-            >
-              Resolve
-            </button>
+              }
+            }}
+            placeholder="Paste handle, URL, alias, or artist name"
+          />
+          <button
+            className="btn"
+            disabled={!query.trim()}
+            onClick={() => {
+              setInitialArtistId(matches[0]?.artist.id ?? null);
+              setResolveQuery(query.trim());
+            }}
+          >
+            Resolve
+          </button>
+        </div>
+        {query.trim() && (
+          <div className="artist-match-list">
+            {matches.length > 0 ? (
+              matches.slice(0, 8).map((match, index) => (
+                <button
+                  type="button"
+                  className="artist-match-row"
+                  key={`${match.artist.id}-${match.handle?.platform ?? "name"}-${index}`}
+                  onClick={() => {
+                    setInitialArtistId(match.artist.id);
+                    setResolveQuery(match.handle?.handle ?? query.trim());
+                  }}
+                >
+                  {match.handle ? <PlatformBadge platform={match.handle.platform} /> : <span />}
+                  <span className="mono">{match.handle?.handle ?? match.artist.name}</span>
+                  <span className="mono-sm muted">→</span>
+                  <Chip kind="artist">{match.artist.name}</Chip>
+                </button>
+              ))
+            ) : (
+              <div className="artist-no-match">
+                <span>No artist matches.</span>
+                <button className="btn sm primary" onClick={() => setResolveQuery(query.trim())}>
+                  Resolve
+                </button>
+              </div>
+            )}
           </div>
-          {query.trim() && (
-            <div className="artist-match-list">
-              {matches.length > 0 ? (
-                matches.slice(0, 8).map((match, index) => (
-                  <button
-                    type="button"
-                    className="artist-match-row"
-                    key={`${match.artist.id}-${match.handle?.platform ?? "name"}-${index}`}
-                    onClick={() => {
-                      setInitialArtistId(match.artist.id);
-                      setResolveQuery(match.handle?.handle ?? query.trim());
-                    }}
-                  >
-                    {match.handle ? <PlatformBadge platform={match.handle.platform} /> : <span />}
-                    <span className="mono">{match.handle?.handle ?? match.artist.name}</span>
-                    <span className="mono-sm muted">→</span>
-                    <Chip kind="artist">{match.artist.name}</Chip>
-                  </button>
-                ))
-              ) : (
-                <div className="artist-no-match">
-                  <span>No artist matches this handle.</span>
-                  <button className="btn sm primary" onClick={() => setResolveQuery(query.trim())}>
-                    Resolve
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-        </section>
+        )}
+      </section>
 
-        {loading ? (
-          <div className="mono-sm muted">Loading artists…</div>
-        ) : (
-          <section className="artist-card-grid">
-            {rows.map(({ artist, handles }) => (
-              <article className="artist-card" key={artist.id}>
-                <div className="artist-card-head">
-                  <div className="artist-avatar">{artist.name.slice(0, 1).toUpperCase()}</div>
-                  <div>
-                    <strong>{artist.name}</strong>
-                    <div className="mono-sm muted">{handles.length} handles</div>
+      {loading ? (
+        <div className="mono-sm muted">Loading artists…</div>
+      ) : (
+        <section className="artist-card-grid">
+          {rows.map(({ artist, handles }) => (
+            <article className="artist-card" key={artist.id}>
+              <div className="artist-card-head">
+                <div className="artist-avatar">{artist.name.slice(0, 1).toUpperCase()}</div>
+                <div>
+                  <strong>{artist.name}</strong>
+                  <div className="mono-sm muted">
+                    {handles.length} handles · {artist.aliases.length} aliases
                   </div>
-                  <span className="spacer" />
-                  <button className="btn sm" disabled={saving} onClick={() => void renameArtist(artist)}>
-                    Rename
-                  </button>
-                  <button
-                    className="btn sm danger"
-                    disabled={saving}
-                    onClick={() => void deleteArtist(artist)}
-                  >
-                    Delete
-                  </button>
                 </div>
+                <span className="spacer" />
+                <button
+                  className="icon-btn"
+                  disabled={saving}
+                  onClick={() => void renameArtist(artist)}
+                  title="Rename artist"
+                  aria-label="Rename artist"
+                >
+                  <Pencil size={14} strokeWidth={2} />
+                </button>
+                <button
+                  className="icon-btn danger"
+                  disabled={saving}
+                  onClick={() => void deleteArtist(artist)}
+                  title="Delete artist"
+                  aria-label="Delete artist"
+                >
+                  <Trash2 size={14} strokeWidth={2} />
+                </button>
+              </div>
+
+              <div className="artist-card-section">
+                <div className="label">Aliases</div>
+                <div className="row wrap gap-4">
+                  {artist.aliases.map((a) => (
+                    <Chip kind="artist" ghost key={a.id} onRemove={() => void removeAlias(a.id)}>
+                      {a.alias}
+                    </Chip>
+                  ))}
+                  {aliasingId === artist.id ? (
+                    <span className="row gap-4">
+                      <input
+                        className="field"
+                        style={{ width: 140 }}
+                        value={aliasText}
+                        autoFocus
+                        onChange={(e) => setAliasText(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            void addAlias(artist);
+                          } else if (e.key === "Escape") {
+                            setAliasingId(null);
+                            setAliasText("");
+                          }
+                        }}
+                        placeholder="alias…"
+                        disabled={saving}
+                      />
+                      <button
+                        type="button"
+                        className="btn sm primary"
+                        disabled={saving || !aliasText.trim()}
+                        onClick={() => void addAlias(artist)}
+                      >
+                        Save
+                      </button>
+                      <button
+                        type="button"
+                        className="icon-btn"
+                        onClick={() => {
+                          setAliasingId(null);
+                          setAliasText("");
+                        }}
+                        title="Cancel"
+                        aria-label="Cancel"
+                      >
+                        <X size={14} strokeWidth={2} />
+                      </button>
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      className="icon-btn"
+                      disabled={saving}
+                      onClick={() => {
+                        setAliasingId(artist.id);
+                        setAliasText("");
+                      }}
+                      title="Add alias"
+                      aria-label="Add alias"
+                    >
+                      <Plus size={14} strokeWidth={2} />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="artist-card-section">
+                <div className="label">Platform handles</div>
                 <div className="artist-handle-list">
                   {handles.length === 0 && <div className="mono-sm muted">No handles configured.</div>}
                   {handles.map((handle, index) => (
@@ -232,13 +332,13 @@ export function ArtistsPage() {
                     setResolveQuery("");
                   }}
                 >
-                  + Add handle
+                  <Plus size={12} strokeWidth={2.5} /> Add handle
                 </button>
-              </article>
-            ))}
-          </section>
-        )}
-      </main>
+              </div>
+            </article>
+          ))}
+        </section>
+      )}
 
       {resolveQuery !== null && (
         <ArtistResolveDialog
@@ -265,9 +365,11 @@ export function ArtistsPage() {
           setBusy={setSaving}
         />
       )}
-    </div>
+    </section>
   );
 }
+
+// ---------------------------------------------------------------- handle resolver
 
 function ArtistResolveDialog({
   query,
@@ -335,8 +437,8 @@ function ArtistResolveDialog({
             <strong>{query ? "Resolve handle" : "New artist"}</strong>
             <div className="mono-sm muted">Create a profile or attach the handle to an existing artist.</div>
           </div>
-          <button className="btn sm ghost" onClick={onClose}>
-            Close
+          <button className="icon-btn" onClick={onClose} title="Cancel" aria-label="Cancel">
+            <X size={14} strokeWidth={2} />
           </button>
         </div>
 

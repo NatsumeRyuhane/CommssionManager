@@ -10,12 +10,22 @@ import type {
   VisibilityPreset,
   VisibilitySettings,
 } from "../api/types";
+import { ArtistsPanel } from "../components/ArtistsPanel";
 import { Chip } from "../components/Chip";
+import { TaxonomyManagementPanel } from "../components/TaxonomyManagementPanel";
 import { ToggleSwitch } from "../components/ToggleSwitch";
 import { TopBar } from "../components/TopBar";
 import { useAuth } from "../hooks/useAuth";
 
-type Tab = "site" | "api" | "visibility" | "storage";
+type Tab =
+  | "site"
+  | "categories"
+  | "tags"
+  | "characters"
+  | "artists"
+  | "api"
+  | "visibility"
+  | "storage";
 
 const FIELD_ROWS: { key: VisibilityFieldKey; label: string; note?: string }[] = [
   { key: "title", label: "Title" },
@@ -107,17 +117,46 @@ export function SettingsPage() {
       </TopBar>
       <div className="settings-shell">
         <aside className="settings-sidebar">
+          <div className="settings-section-label">General</div>
           <button className={`settings-tab ${tab === "site" ? "active" : ""}`} onClick={() => setTab("site")}>
             Site
-          </button>
-          <button className={`settings-tab ${tab === "api" ? "active" : ""}`} onClick={() => setTab("api")}>
-            API keys
           </button>
           <button
             className={`settings-tab ${tab === "visibility" ? "active" : ""}`}
             onClick={() => setTab("visibility")}
           >
             Visibility
+          </button>
+
+          <div className="settings-section-label">Taxonomy</div>
+          <button
+            className={`settings-tab ${tab === "categories" ? "active" : ""}`}
+            onClick={() => setTab("categories")}
+          >
+            Categories
+          </button>
+          <button
+            className={`settings-tab ${tab === "tags" ? "active" : ""}`}
+            onClick={() => setTab("tags")}
+          >
+            Tags
+          </button>
+          <button
+            className={`settings-tab ${tab === "characters" ? "active" : ""}`}
+            onClick={() => setTab("characters")}
+          >
+            Characters
+          </button>
+          <button
+            className={`settings-tab ${tab === "artists" ? "active" : ""}`}
+            onClick={() => setTab("artists")}
+          >
+            Artists
+          </button>
+
+          <div className="settings-section-label">System</div>
+          <button className={`settings-tab ${tab === "api" ? "active" : ""}`} onClick={() => setTab("api")}>
+            API keys
           </button>
           <button
             className={`settings-tab ${tab === "storage" ? "active" : ""}`}
@@ -206,6 +245,28 @@ export function SettingsPage() {
             />
           )}
           {!loading && !error && tab === "storage" && storage && <StoragePanel storage={storage} />}
+          {tab === "categories" && (
+            <TaxonomyManagementPanel
+              kind="category"
+              title="Categories"
+              description="Top-level buckets for commissions. Categories use the green chip and cannot be reused as tags."
+            />
+          )}
+          {tab === "tags" && (
+            <TaxonomyManagementPanel
+              kind="tag"
+              title="Tags"
+              description="Free-form tags applied to commissions. Aliases resolve to the canonical tag when typed in the picker."
+            />
+          )}
+          {tab === "characters" && (
+            <TaxonomyManagementPanel
+              kind="character"
+              title="Characters"
+              description="Named characters that appear in commissions. Aliases let alternative names (i18n, nicknames) resolve to the same row."
+            />
+          )}
+          {tab === "artists" && <ArtistsPanel />}
         </main>
       </div>
     </div>
