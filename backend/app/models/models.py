@@ -67,6 +67,10 @@ class Label(Base):
     name: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     type: Mapped[LabelType] = mapped_column(Enum(LabelType, name="label_type"), nullable=False)
 
+    aliases: Mapped[list["LabelAlias"]] = relationship(
+        back_populates="label", cascade="all, delete-orphan", order_by="LabelAlias.alias_lower"
+    )
+
 
 class Character(Base):
     __tablename__ = "characters"
@@ -75,6 +79,12 @@ class Character(Base):
     name: Mapped[str] = mapped_column(String, nullable=False)
     settings_xml: Mapped[str | None] = mapped_column(Text)
 
+    aliases: Mapped[list["CharacterAlias"]] = relationship(
+        back_populates="character",
+        cascade="all, delete-orphan",
+        order_by="CharacterAlias.alias_lower",
+    )
+
 
 class Artist(Base):
     __tablename__ = "artists"
@@ -82,6 +92,51 @@ class Artist(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
     info_xml: Mapped[str | None] = mapped_column(Text)
+
+    aliases: Mapped[list["ArtistAlias"]] = relationship(
+        back_populates="artist", cascade="all, delete-orphan", order_by="ArtistAlias.alias_lower"
+    )
+
+
+# Aliases: case-insensitive secondary names that resolve to the same parent row.
+# `alias_lower` is the lowercased form, uniqueness is enforced on that column.
+class LabelAlias(Base):
+    __tablename__ = "label_aliases"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    label_id: Mapped[int] = mapped_column(
+        ForeignKey("labels.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    alias: Mapped[str] = mapped_column(String, nullable=False)
+    alias_lower: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+
+    label: Mapped[Label] = relationship(back_populates="aliases")
+
+
+class CharacterAlias(Base):
+    __tablename__ = "character_aliases"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    character_id: Mapped[int] = mapped_column(
+        ForeignKey("characters.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    alias: Mapped[str] = mapped_column(String, nullable=False)
+    alias_lower: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+
+    character: Mapped[Character] = relationship(back_populates="aliases")
+
+
+class ArtistAlias(Base):
+    __tablename__ = "artist_aliases"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    artist_id: Mapped[int] = mapped_column(
+        ForeignKey("artists.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    alias: Mapped[str] = mapped_column(String, nullable=False)
+    alias_lower: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+
+    artist: Mapped[Artist] = relationship(back_populates="aliases")
 
 
 # ---------------------------------------------------------------- storage

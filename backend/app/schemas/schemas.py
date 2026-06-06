@@ -20,17 +20,79 @@ class TokenResponse(BaseModel):
 
 
 # ---------------------------------------------------------------- lookups
+def _strip_required(name: str) -> str:
+    name = name.strip()
+    if not name:
+        raise ValueError("name must not be empty")
+    return name
+
+
+def _strip_optional(name: str | None) -> str | None:
+    if name is None:
+        return None
+    return _strip_required(name)
+
+
+class _AliasOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    alias: str
+
+
 class LabelOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     name: str
     type: LabelType
+    aliases: list[_AliasOut] = []
+
+
+class LabelCreate(BaseModel):
+    name: str
+    type: LabelType
+
+    @field_validator("name")
+    @classmethod
+    def _strip(cls, name: str) -> str:
+        return _strip_required(name)
+
+
+class LabelUpdate(BaseModel):
+    name: str | None = None
+    type: LabelType | None = None
+
+    @field_validator("name")
+    @classmethod
+    def _strip(cls, name: str | None) -> str | None:
+        return _strip_optional(name)
 
 
 class CharacterOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     name: str
+    aliases: list[_AliasOut] = []
+    # Frontend reads this to decide whether to render the "has character page"
+    # marker. Always false today; the page model lands in a later phase.
+    has_page: bool = False
+
+
+class CharacterCreate(BaseModel):
+    name: str
+
+    @field_validator("name")
+    @classmethod
+    def _strip(cls, name: str) -> str:
+        return _strip_required(name)
+
+
+class CharacterUpdate(BaseModel):
+    name: str | None = None
+
+    @field_validator("name")
+    @classmethod
+    def _strip(cls, name: str | None) -> str | None:
+        return _strip_optional(name)
 
 
 class ArtistOut(BaseModel):
@@ -38,6 +100,7 @@ class ArtistOut(BaseModel):
     id: int
     name: str
     info_xml: str | None = None
+    aliases: list[_AliasOut] = []
 
 
 class ArtistCreate(BaseModel):
@@ -46,11 +109,8 @@ class ArtistCreate(BaseModel):
 
     @field_validator("name")
     @classmethod
-    def name_must_not_be_empty(cls, name: str) -> str:
-        name = name.strip()
-        if not name:
-            raise ValueError("name must not be empty")
-        return name
+    def _strip(cls, name: str) -> str:
+        return _strip_required(name)
 
 
 class ArtistUpdate(BaseModel):
@@ -59,13 +119,17 @@ class ArtistUpdate(BaseModel):
 
     @field_validator("name")
     @classmethod
-    def name_must_not_be_empty(cls, name: str | None) -> str | None:
-        if name is None:
-            return None
-        name = name.strip()
-        if not name:
-            raise ValueError("name must not be empty")
-        return name
+    def _strip(cls, name: str | None) -> str | None:
+        return _strip_optional(name)
+
+
+class AliasCreate(BaseModel):
+    alias: str
+
+    @field_validator("alias")
+    @classmethod
+    def _strip(cls, alias: str) -> str:
+        return _strip_required(alias)
 
 
 # ---------------------------------------------------------------- files / nodes

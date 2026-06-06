@@ -84,6 +84,10 @@
   privacy-marked meta rows, chip blocks); edit page two-column layout (borderless title, sticky
   meta rail with chip previews + inline price/confirmed fields); filter popover arrow
 - [ ] Character pages: shareable profile, main ref, curated image "bookshelves" + picker
+  - When character pages land, surface a visual marker on every Character chip / card /
+    typeahead row distinguishing "has a page" from "no page yet"; the `CharacterOut`
+    payload already carries a `has_page` flag (always `false` until this lands) so the
+    frontend can wire it once the page model exists.
 - [x] Artist management: multi-platform handles, paste-to-match, no-match resolve dialog
 - [ ] Mobile views for every section
 - [x] Focal-point reticle editor on cover image
