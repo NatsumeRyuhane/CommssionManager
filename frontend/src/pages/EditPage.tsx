@@ -18,6 +18,13 @@ const RATINGS: { value: Rating; label: string }[] = [
   { value: "adult", label: "Adult" },
 ];
 
+/**
+ * Render the commission creation and edit page, including form fields, taxonomy pickers, cover/stages editors, and submission handling.
+ *
+ * The component reads an optional `id` route param to determine edit mode, loads existing commission data when editing, enforces write authorization, manages local form state (title, description, dates, price, rating, taxonomies, nodes), and submits a create or update request that navigates to the appropriate commission route on success.
+ *
+ * @returns The React element for the commission create/edit page.
+ */
 export function EditPage() {
   const { id } = useParams();
   const isEdit = Boolean(id);
@@ -259,6 +266,13 @@ export function EditPage() {
   );
 }
 
+/**
+ * Renders a labeled wrapper for a form section.
+ *
+ * @param label - The text shown as the group's label
+ * @param children - The contents of the field group
+ * @returns A JSX element containing the label and the group's children
+ */
 function FieldGroup({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="edit-field-group">

@@ -25,10 +25,22 @@ interface Adapter {
   plural: string;
 }
 
+/**
+ * Normalize a backend `Label` or `Character` response into the component's `Item` shape.
+ *
+ * @param row - The backend `Label` or `Character` object to convert.
+ * @returns An `Item` with `id`, `name`, and `aliases` taken from `row`.
+ */
 function toItem(row: Label | Character): Item {
   return { id: row.id, name: row.name, aliases: row.aliases };
 }
 
+/**
+ * Create an Adapter for managing the specified taxonomy kind.
+ *
+ * @param kind - The managed kind to adapt operations for: "category", "tag", or "character".
+ * @returns An Adapter that performs listing, creation, renaming, deletion, and alias management for the given kind and exposes `chipKind`, `singular`, and `plural` metadata for UI rendering.
+ */
 function adapterFor(kind: ManagedKind): Adapter {
   if (kind === "category" || kind === "tag") {
     const labelType: LabelType = kind;
@@ -63,6 +75,16 @@ interface PanelProps {
   description: string;
 }
 
+/**
+ * Panel UI for managing taxonomy items of a given kind (categories, tags, or characters).
+ *
+ * Renders controls to list, filter, create, rename, delete items and manage their aliases; displays loading and error states and disables actions while operations are in flight.
+ *
+ * @param kind - Which taxonomy kind to manage: "category", "tag", or "character"
+ * @param title - Heading text shown at the top of the panel
+ * @param description - Subheading/description text shown under the title
+ * @returns The rendered React element for the taxonomy management panel
+ */
 export function TaxonomyManagementPanel({ kind, title, description }: PanelProps) {
   const adapter = useMemo(() => adapterFor(kind), [kind]);
   const [items, setItems] = useState<Item[]>([]);

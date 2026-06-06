@@ -29,6 +29,11 @@ def test_create_label_rejects_clashing_name_regardless_of_type(admin_client: Tes
 
 
 def test_update_label_blocks_tag_to_category(admin_client: TestClient):
+    """
+    Verify that labels of type "tag" cannot be changed to "category", while labels created as "category" can be changed to "tag".
+    
+    Creates a label with type "tag" and asserts a PATCH to change it to "category" is rejected with HTTP 400 and the error detail contains "Tags cannot be promoted". Then creates a label with type "category", patches it to "tag", and asserts the change succeeds with HTTP 200 and the updated label's `type` is "tag".
+    """
     created = admin_client.post(
         "/api/v1/labels", json={"name": "rendered", "type": "tag"}
     )
@@ -46,6 +51,11 @@ def test_update_label_blocks_tag_to_category(admin_client: TestClient):
 
 
 def test_label_aliases_resolve_to_parent_and_appear_in_typeahead(admin_client: TestClient):
+    """
+    Verifies that label aliases attach to their parent label, resolve during commission creation, and appear in label typeahead searches.
+    
+    Creates a tag label, adds an alias, and asserts the alias is returned by the alias endpoint. Submits a commission using the alias and asserts the commission records the canonical label name and no duplicate label is created. Confirms typeahead queries match both the canonical name and the alias.
+    """
     label = admin_client.post(
         "/api/v1/labels", json={"name": "background", "type": "tag"}
     ).json()
@@ -93,6 +103,11 @@ def test_label_alias_rejects_collision_with_existing_name(admin_client: TestClie
 
 
 def test_delete_label_alias(admin_client: TestClient):
+    """
+    Verifies that removing a label alias deletes it from typeahead search while preserving the canonical label.
+    
+    Creates a label and an alias, deletes the alias, asserts the delete returns HTTP 204, confirms a typeahead query for the alias returns no results, and confirms the canonical label still exists and has no aliases.
+    """
     label = admin_client.post(
         "/api/v1/labels", json={"name": "background", "type": "tag"}
     ).json()
@@ -149,6 +164,12 @@ def test_character_alias_resolves_in_commission_write(admin_client: TestClient):
 
 
 def test_character_alias_typeahead_matches_aliases(admin_client: TestClient):
+    """
+    Verifies that searching characters by an alias returns the canonical character.
+    
+    Creates a character, adds an alias, and asserts that a typeahead query for the alias
+    returns the canonical character name "Aki".
+    """
     aki = admin_client.post("/api/v1/characters", json={"name": "Aki"}).json()
     admin_client.post(
         f"/api/v1/characters/{aki['id']}/aliases", json={"alias": "アキ"}
@@ -161,6 +182,11 @@ def test_character_alias_typeahead_matches_aliases(admin_client: TestClient):
 
 
 def test_artist_alias_resolves_in_commission_write(admin_client: TestClient):
+    """
+    Verifies that an artist alias resolves to the canonical artist name when creating a commission.
+    
+    Creates an artist, adds an alias, submits a commission using the alias, and asserts the commission records the canonical artist name "TouMeiSheep".
+    """
     art = admin_client.post(
         "/api/v1/artists", json={"name": "TouMeiSheep"}
     ).json()

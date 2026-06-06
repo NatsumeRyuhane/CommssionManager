@@ -21,6 +21,22 @@ interface LifecycleStagesListProps {
   renderStageActions?: (node: CommissionNode, index: number) => ReactNode;
 }
 
+/**
+ * Renders a list of lifecycle stage sections for the provided nodes.
+ *
+ * @param nodes - Array of stage nodes to render; each node's files are shown within its stage
+ * @param currentStage - Name of the current stage (used to mark the active stage)
+ * @param coverFileId - ID of the file currently used as the commission cover
+ * @param busy - When true, interactive controls are disabled
+ * @param onMoveFile - Optional callback invoked when a file is moved into a different stage
+ * @param onReorderNode - Optional callback invoked when a stage is reordered
+ * @param onUpload - Optional callback invoked with (node, files) when files are uploaded to a stage
+ * @param onSetCover - Optional callback invoked when a file is set as the cover
+ * @param onDeleteFile - Optional callback invoked when a file is deleted
+ * @param onEditDate - Optional callback invoked when the stage date edit action is triggered
+ * @param renderStageActions - Optional renderer for per-stage extra action elements; called with (node, index)
+ * @returns A React element representing the lifecycle stages list
+ */
 export function LifecycleStagesList({
   nodes,
   currentStage,
@@ -65,6 +81,26 @@ export function LifecycleStagesList({
   );
 }
 
+/**
+ * Render a lifecycle stage panel with header controls and a grid of file tiles.
+ *
+ * The panel supports optional drag-and-drop reordering/moving, file upload, date editing,
+ * and per-file actions (set cover, delete) depending on the provided callbacks and node state.
+ *
+ * @param node - The lifecycle node/stage data to render (name, files, flags, dates).
+ * @param currentStage - The name of the currently active stage, used to show a "current" chip.
+ * @param coverFileId - File id treated as the stage cover; used to mark the cover tile.
+ * @param busy - When true, disables user interactions (drag handles, buttons).
+ * @param filesById - Map of file id → file used to resolve files during drop operations.
+ * @param onMoveFile - Called when a file is moved into this stage: `(file, targetNodeId)`.
+ * @param onReorderNode - Called when a stage is reordered via drag handle: `(draggedNodeId, targetNodeId)`.
+ * @param onUpload - Called when files are selected for upload into this stage: `(node, files)`.
+ * @param onSetCover - Called to mark a specific file as the stage cover: `(file)`.
+ * @param onDeleteFile - Called to delete a file from the stage: `(file)`.
+ * @param onEditDate - Called to request editing the stage's start date: `(node)`.
+ * @param stageActions - Optional React node inserted into the stage header for custom actions.
+ * @returns A JSX element representing the rendered lifecycle stage panel.
+ */
 function LifecycleStage({
   node,
   currentStage,
@@ -209,6 +245,17 @@ function LifecycleStage({
   );
 }
 
+/**
+ * Renders a file tile showing a preview (image or placeholder), label, and optional action buttons.
+ *
+ * @param file - The CommissionFile to display
+ * @param isCover - Whether this file is the stage's current cover
+ * @param busy - When true, interactive controls are disabled
+ * @param onMoveFile - Optional callback invoked as `onMoveFile(file, targetNodeId)` when the file is dragged to another stage
+ * @param onSetCover - Optional callback invoked with the file when the user sets it as the cover
+ * @param onDeleteFile - Optional callback invoked with the file when the user requests deletion
+ * @returns A JSX element representing the file tile with preview, label, and conditional action buttons
+ */
 function LifecycleFileTile({
   file,
   isCover,

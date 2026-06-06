@@ -59,6 +59,13 @@ const PRESETS: { value: VisibilityPreset; label: string; desc: string }[] = [
   },
 ];
 
+/**
+ * Render the admin settings page with tabbed controls for site, API keys, visibility, storage, taxonomy, artists, and exports.
+ *
+ * Displays an admin-only UI that loads settings (site, API keys, visibility, storage) from the server, provides per-tab panels for editing and saving, and shows a brief message when the current user is not an admin.
+ *
+ * @returns The settings page UI as a React element.
+ */
 export function SettingsPage() {
   const { me, loading: authLoading } = useAuth();
   const [tab, setTab] = useState<Tab>("site");

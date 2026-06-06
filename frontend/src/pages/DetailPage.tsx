@@ -24,6 +24,16 @@ function CopyJsonButton({ id }: { id: number }) {
   );
 }
 
+/**
+ * Render the commission detail page, fetching a commission by route `id` and exposing view and management UI.
+ *
+ * Fetches commission data from the API based on the `id` route param, shows loading and error states, and when data
+ * is available displays commission metadata, cover, lifecycle stages, and a side rail of metadata. If the current
+ * user has write permission, exposes actions to copy JSON, edit visibility, export files, edit, and delete the
+ * commission (delete prompts for confirmation and navigates to the gallery on success).
+ *
+ * @returns The commission detail page UI as a JSX element
+ */
 export function DetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -204,6 +214,14 @@ export function DetailPage() {
   );
 }
 
+/**
+ * Render a labeled metadata row that displays a value alongside a publication status icon.
+ *
+ * @param label - The row label text shown on the left.
+ * @param value - The metadata value displayed on the right.
+ * @param pub - If `true`, displays a globe icon (public) styled with the accent color; if `false`, displays a lock icon (private) styled with the warning color.
+ * @returns The rendered JSX element for the metadata row.
+ */
 function MetaRow({ label, value, pub }: { label: string; value: string; pub: boolean }) {
   return (
     <div className="detail-meta-row">
@@ -218,6 +236,13 @@ function MetaRow({ label, value, pub }: { label: string; value: string; pub: boo
   );
 }
 
+/**
+ * Renders a titled metadata block that displays its children in a wrapped row.
+ *
+ * @param label - The block title shown above the content
+ * @param children - Elements to render inside the block's wrapped row (e.g., chips or meta items)
+ * @returns A JSX element containing the labeled metadata block
+ */
 function MetaBlock({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="detail-meta-block">

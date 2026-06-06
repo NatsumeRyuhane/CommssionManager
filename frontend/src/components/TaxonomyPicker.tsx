@@ -21,6 +21,12 @@ interface Adapter {
   label: string;
 }
 
+/**
+ * Convert an API row (with alias objects) into a `Match` with plain alias strings.
+ *
+ * @param row - API row containing `id`, `name`, and `aliases` as objects of shape `{ alias: string }`
+ * @returns A `Match` object with the same `id` and `name`, and `aliases` as a string array
+ */
 function toMatch(row: {
   id: number;
   name: string;
@@ -29,6 +35,17 @@ function toMatch(row: {
   return { id: row.id, name: row.name, aliases: row.aliases.map((a) => a.alias) };
 }
 
+/**
+ * Create an Adapter that exposes search/create/addAlias operations and UI metadata for the specified taxonomy kind.
+ *
+ * @param kind - The taxonomy kind to adapt (`"category"`, `"tag"`, `"character"`, or `"artist"`).
+ * @returns An Adapter object with:
+ *  - `search(q)` — finds matching `Match` entries for the given query.
+ *  - `create(name)` — creates a new entry with the given name and returns its canonical `Match`.
+ *  - `addAlias(id, alias)` — adds `alias` to the entry identified by `id` and returns the updated `Match`.
+ *  - `chipKind` — UI chip type for the kind.
+ *  - `label` — human-readable label for the kind.
+ */
 function adapterFor(kind: TaxonomyKind): Adapter {
   switch (kind) {
     case "category":
@@ -72,6 +89,16 @@ interface TaxonomyPickerProps {
   placeholder?: string;
 }
 
+/**
+ * Render a multi-value taxonomy picker that supports debounced searching, selecting existing matches,
+ * creating new taxonomy entries, and adding an alias to an existing entry.
+ *
+ * @param kind - Which taxonomy to operate on (`"category" | "tag" | "character" | "artist"`). Chooses API endpoints and UI labels.
+ * @param values - Current list of selected canonical names.
+ * @param onChange - Called with the updated list of canonical names when selection changes.
+ * @param placeholder - Optional input placeholder text; if omitted a sensible default based on `kind` is used.
+ * @returns A React element that renders the taxonomy picker UI.
+ */
 export function TaxonomyPicker({ kind, values, onChange, placeholder }: TaxonomyPickerProps) {
   const adapter = useMemo(() => adapterFor(kind), [kind]);
   const [q, setQ] = useState("");
@@ -249,6 +276,17 @@ interface CreateOrAliasDialogProps {
   onResolved: (canonicalName: string) => void;
 }
 
+/**
+ * Modal dialog that lets the user either create a new taxonomy entry or add the current name as an alias to an existing entry.
+ *
+ * Presents two modes: "create" (creates a new entry via `adapter.create`) and "alias" (select an existing entry and link the name via `adapter.addAlias`). Displays async busy/error states, calls `onResolved(canonicalName)` when an operation succeeds, and calls `onCancel` when the dialog is dismissed.
+ *
+ * @param adapter - Adapter providing `search`, `create`, `addAlias`, and UI metadata for the current taxonomy kind
+ * @param name - The candidate name to create or add as an alias
+ * @param onCancel - Called when the user cancels or closes the dialog
+ * @param onResolved - Called with the canonical name after a successful create or alias operation
+ * @returns The modal dialog element for creating or aliasing a taxonomy value
+ */
 function CreateOrAliasDialog({
   adapter,
   name,
@@ -406,6 +444,17 @@ interface AliasParentPickerProps {
   onSelect: (m: Match) => void;
 }
 
+/**
+ * Renders a small searchable picker to choose an existing taxonomy entry as the parent for a new alias.
+ *
+ * Uses the provided `adapter` to perform a debounced search as the user types, shows a loading state,
+ * displays “no matches” when appropriate, and lets the user select a match.
+ *
+ * @param adapter - Adapter providing `search` and `label` for the current taxonomy kind.
+ * @param selected - Currently selected `Match`, if any; its row will be highlighted.
+ * @param onSelect - Called with the `Match` the user chooses.
+ * @returns The picker UI containing an input, optional loading / empty-state messages, and a selectable list of matches.
+ */
 function AliasParentPicker({ adapter, selected, onSelect }: AliasParentPickerProps) {
   const [q, setQ] = useState("");
   const [matches, setMatches] = useState<Match[]>([]);
