@@ -51,6 +51,12 @@ def test_visibility_settings_are_admin_only_and_patchable(admin_client: TestClie
     assert data["default_commission_visibility"] == "public"
     assert data["default_stage_visibility"] == "private"
     assert data["fields"]["confirmed_at"] is False
+    assert [row["stage_name"] for row in data["stage_defaults"]] == [
+        "Sketching",
+        "Lineart",
+        "Color",
+        "Delivered",
+    ]
     assert {row["stage_name"]: row["visibility"] for row in data["stage_defaults"]}[
         "Delivered"
     ] == "public"

@@ -37,6 +37,9 @@
 - [x] Pytest harness + API coverage (auth, API keys, CRUD, filters/sort, files, nodes, cover, lookups, pagination)
 - [x] Self-contained tests: ephemeral Postgres via `testcontainers` (no dependency on the dev
   compose stack; `CMGR_TEST_DATABASE_URL` overrides for CI)
+- [x] GitHub Actions CI on pull requests and pushes to `main`: backend `ruff check` + `pytest`
+  (against a Postgres service container) and frontend `pnpm build` (typecheck + bundle) run in
+  parallel
 - [x] Config: all settings required from env / `.env` (no in-code defaults); `.env.example` committed
 - [x] Wire frontend gallery to read `X-Total-Count` (paginate beyond 60)
 
@@ -84,6 +87,7 @@
 - [x] Design polish to match the wireframe handoff: detail page hero + side rail (breadcrumb,
   privacy-marked meta rows, chip blocks); edit page two-column layout (borderless title, sticky
   meta rail with chip previews + inline price/confirmed fields); filter popover arrow
+- [x] Factory lifecycle stage defaults use chronological order
 - [ ] Character pages: shareable profile, main ref, curated image "bookshelves" + picker
   - When character pages land, surface a visual marker on every Character chip / card /
     typeahead row distinguishing "has a page" from "no page yet"; the `CharacterOut`

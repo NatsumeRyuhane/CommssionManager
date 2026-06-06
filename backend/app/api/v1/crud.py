@@ -63,28 +63,28 @@ FIELD_OVERRIDE_ATTRS = {field: f"{field}_public_override" for field in FIELD_DEF
 
 STAGE_DEFAULTS: list[dict[str, object]] = [
     {
-        "stage_name": "Delivered",
-        "visibility": Visibility.public,
-        "position": 0,
-        "note": "final deliverables - public by default",
-    },
-    {
-        "stage_name": "Color",
+        "stage_name": "Sketching",
         "visibility": Visibility.private,
-        "position": 1,
+        "position": 0,
         "note": "WIP - private by default",
     },
     {
         "stage_name": "Lineart",
         "visibility": Visibility.private,
+        "position": 1,
+        "note": "WIP - private by default",
+    },
+    {
+        "stage_name": "Color",
+        "visibility": Visibility.private,
         "position": 2,
         "note": "WIP - private by default",
     },
     {
-        "stage_name": "Sketching",
-        "visibility": Visibility.private,
+        "stage_name": "Delivered",
+        "visibility": Visibility.public,
         "position": 3,
-        "note": "WIP - private by default",
+        "note": "final deliverables - public by default",
     },
 ]
 
