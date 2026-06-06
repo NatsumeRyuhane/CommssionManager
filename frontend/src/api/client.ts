@@ -5,6 +5,7 @@ import type {
   Artist,
   ArtistCreate,
   ArtistUpdate,
+  Character,
   CommissionCreate,
   CommissionDetail,
   CommissionFile,
@@ -13,6 +14,8 @@ import type {
   CommissionUpdate,
   CommissionVisibility,
   CommissionVisibilityUpdate,
+  Label,
+  LabelType,
   ListParams,
   MeResponse,
   Paged,
@@ -190,12 +193,71 @@ export const api = {
     return uploadForm<CommissionFile>(`/files/${fileId}/focal`, form, "PATCH");
   },
 
-  labels: () => request<{ id: number; name: string; type: string }[]>("/labels"),
-  characters: () => request<{ id: number; name: string }[]>("/characters"),
-  artists: () => request<Artist[]>("/artists"),
+  // taxonomy: labels (categories + tags)
+  labels: (params: { q?: string; type?: LabelType } = {}) => {
+    const sp = new URLSearchParams();
+    if (params.q) sp.set("q", params.q);
+    if (params.type) sp.set("type", params.type);
+    const qs = sp.toString();
+    return request<Label[]>(`/labels${qs ? `?${qs}` : ""}`);
+  },
+  createLabel: (name: string, type: LabelType) =>
+    request<Label>("/labels", { method: "POST", body: JSON.stringify({ name, type }) }),
+  updateLabel: (id: number, body: { name?: string; type?: LabelType }) =>
+    request<Label>(`/labels/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteLabel: (id: number) => request<void>(`/labels/${id}`, { method: "DELETE" }),
+  addLabelAlias: (id: number, alias: string) =>
+    request<Label>(`/labels/${id}/aliases`, {
+      method: "POST",
+      body: JSON.stringify({ alias }),
+    }),
+  deleteLabelAlias: (aliasId: number) =>
+    request<void>(`/label-aliases/${aliasId}`, { method: "DELETE" }),
+
+  // taxonomy: characters
+  characters: (params: { q?: string } = {}) => {
+    const sp = new URLSearchParams();
+    if (params.q) sp.set("q", params.q);
+    const qs = sp.toString();
+    return request<Character[]>(`/characters${qs ? `?${qs}` : ""}`);
+  },
+  createCharacter: (name: string) =>
+    request<Character>("/characters", {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    }),
+  updateCharacter: (id: number, body: { name?: string }) =>
+    request<Character>(`/characters/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  deleteCharacter: (id: number) =>
+    request<void>(`/characters/${id}`, { method: "DELETE" }),
+  addCharacterAlias: (id: number, alias: string) =>
+    request<Character>(`/characters/${id}/aliases`, {
+      method: "POST",
+      body: JSON.stringify({ alias }),
+    }),
+  deleteCharacterAlias: (aliasId: number) =>
+    request<void>(`/character-aliases/${aliasId}`, { method: "DELETE" }),
+
+  // taxonomy: artists
+  artists: (params: { q?: string } = {}) => {
+    const sp = new URLSearchParams();
+    if (params.q) sp.set("q", params.q);
+    const qs = sp.toString();
+    return request<Artist[]>(`/artists${qs ? `?${qs}` : ""}`);
+  },
   createArtist: (body: ArtistCreate) =>
     request<Artist>("/artists", { method: "POST", body: JSON.stringify(body) }),
   updateArtist: (id: number, body: ArtistUpdate) =>
     request<Artist>(`/artists/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   deleteArtist: (id: number) => request<void>(`/artists/${id}`, { method: "DELETE" }),
+  addArtistAlias: (id: number, alias: string) =>
+    request<Artist>(`/artists/${id}/aliases`, {
+      method: "POST",
+      body: JSON.stringify({ alias }),
+    }),
+  deleteArtistAlias: (aliasId: number) =>
+    request<void>(`/artist-aliases/${aliasId}`, { method: "DELETE" }),
 };

@@ -10,12 +10,24 @@ import type {
   VisibilityPreset,
   VisibilitySettings,
 } from "../api/types";
+import { ArtistsPanel } from "../components/ArtistsPanel";
 import { Chip } from "../components/Chip";
+import { ExportsPanel } from "../components/ExportsPanel";
+import { TaxonomyManagementPanel } from "../components/TaxonomyManagementPanel";
 import { ToggleSwitch } from "../components/ToggleSwitch";
 import { TopBar } from "../components/TopBar";
 import { useAuth } from "../hooks/useAuth";
 
-type Tab = "site" | "api" | "visibility" | "storage";
+type Tab =
+  | "site"
+  | "categories"
+  | "tags"
+  | "characters"
+  | "artists"
+  | "api"
+  | "visibility"
+  | "storage"
+  | "exports";
 
 const FIELD_ROWS: { key: VisibilityFieldKey; label: string; note?: string }[] = [
   { key: "title", label: "Title" },
@@ -47,6 +59,13 @@ const PRESETS: { value: VisibilityPreset; label: string; desc: string }[] = [
   },
 ];
 
+/**
+ * Render the admin settings page with tabbed controls for site, API keys, visibility, storage, taxonomy, artists, and exports.
+ *
+ * Displays an admin-only UI that loads settings (site, API keys, visibility, storage) from the server, provides per-tab panels for editing and saving, and shows a brief message when the current user is not an admin.
+ *
+ * @returns The settings page UI as a React element.
+ */
 export function SettingsPage() {
   const { me, loading: authLoading } = useAuth();
   const [tab, setTab] = useState<Tab>("site");
@@ -107,11 +126,9 @@ export function SettingsPage() {
       </TopBar>
       <div className="settings-shell">
         <aside className="settings-sidebar">
+          <div className="settings-section-label">General</div>
           <button className={`settings-tab ${tab === "site" ? "active" : ""}`} onClick={() => setTab("site")}>
             Site
-          </button>
-          <button className={`settings-tab ${tab === "api" ? "active" : ""}`} onClick={() => setTab("api")}>
-            API keys
           </button>
           <button
             className={`settings-tab ${tab === "visibility" ? "active" : ""}`}
@@ -119,11 +136,48 @@ export function SettingsPage() {
           >
             Visibility
           </button>
+
+          <div className="settings-section-label">Taxonomy</div>
+          <button
+            className={`settings-tab ${tab === "categories" ? "active" : ""}`}
+            onClick={() => setTab("categories")}
+          >
+            Categories
+          </button>
+          <button
+            className={`settings-tab ${tab === "tags" ? "active" : ""}`}
+            onClick={() => setTab("tags")}
+          >
+            Tags
+          </button>
+          <button
+            className={`settings-tab ${tab === "characters" ? "active" : ""}`}
+            onClick={() => setTab("characters")}
+          >
+            Characters
+          </button>
+          <button
+            className={`settings-tab ${tab === "artists" ? "active" : ""}`}
+            onClick={() => setTab("artists")}
+          >
+            Artists
+          </button>
+
+          <div className="settings-section-label">System</div>
+          <button className={`settings-tab ${tab === "api" ? "active" : ""}`} onClick={() => setTab("api")}>
+            API keys
+          </button>
           <button
             className={`settings-tab ${tab === "storage" ? "active" : ""}`}
             onClick={() => setTab("storage")}
           >
             Storage
+          </button>
+          <button
+            className={`settings-tab ${tab === "exports" ? "active" : ""}`}
+            onClick={() => setTab("exports")}
+          >
+            Exports
           </button>
         </aside>
 
@@ -206,6 +260,29 @@ export function SettingsPage() {
             />
           )}
           {!loading && !error && tab === "storage" && storage && <StoragePanel storage={storage} />}
+          {tab === "categories" && (
+            <TaxonomyManagementPanel
+              kind="category"
+              title="Categories"
+              description="Top-level buckets for commissions. Categories use the green chip and cannot be reused as tags."
+            />
+          )}
+          {tab === "tags" && (
+            <TaxonomyManagementPanel
+              kind="tag"
+              title="Tags"
+              description="Free-form tags applied to commissions. Aliases resolve to the canonical tag when typed in the picker."
+            />
+          )}
+          {tab === "characters" && (
+            <TaxonomyManagementPanel
+              kind="character"
+              title="Characters"
+              description="Named characters that appear in commissions. Aliases let alternative names (i18n, nicknames) resolve to the same row."
+            />
+          )}
+          {tab === "artists" && <ArtistsPanel />}
+          {tab === "exports" && <ExportsPanel />}
         </main>
       </div>
     </div>

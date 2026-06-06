@@ -1,18 +1,32 @@
 import { useCallback, useEffect, useState } from "react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 
 import { api } from "../api/client";
 import type { CommissionDetail, CommissionFile, CommissionNode } from "../api/types";
-import { FocalPointModal } from "./FocalPointModal";
 import { LifecycleStagesList } from "./LifecycleStagesList";
 import { NodeDateModal } from "./NodeDateModal";
 
-/** Edit-mode panel for managing lifecycle stages, files, cover, and focal points. */
-export function StagesEditor({ commissionId }: { commissionId: number }) {
+/**
+ * Edit-mode panel for managing commission lifecycle stages, their files, and cover selection.
+ *
+ * Renders controls to add, rename, delete, and reorder stages; upload, move, and delete files;
+ * choose a cover file; and edit per-stage dates. Upon any successful operation that changes
+ * commission data, the component reloads its state and calls the optional `onChange` callback.
+ *
+ * @param commissionId - ID of the commission being edited
+ * @param onChange - Optional callback invoked after successful mutations and reloads
+ */
+export function StagesEditor({
+  commissionId,
+  onChange,
+}: {
+  commissionId: number;
+  onChange?: () => void;
+}) {
   const [detail, setDetail] = useState<CommissionDetail | null>(null);
   const [newStage, setNewStage] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [focalFile, setFocalFile] = useState<CommissionFile | null>(null);
   const [dateNode, setDateNode] = useState<CommissionNode | null>(null);
 
   const reload = useCallback(async () => {
@@ -27,12 +41,19 @@ export function StagesEditor({ commissionId }: { commissionId: number }) {
     void reload();
   }, [reload]);
 
+  /**
+   * Execute an async operation while managing busy and error state, reload the commission data on success, and invoke the optional `onChange` callback.
+   *
+   * @param op - The asynchronous operation to perform.
+   * @returns Nothing.
+   */
   async function run(op: () => Promise<unknown>) {
     setBusy(true);
     setError(null);
     try {
       await op();
       await reload();
+      onChange?.();
     } catch (e) {
       setError(String(e));
     } finally {
@@ -47,8 +68,13 @@ export function StagesEditor({ commissionId }: { commissionId: number }) {
   const regular = detail.nodes.filter((n) => !n.is_detached);
   const detached = detail.nodes.find((n) => n.is_detached);
   const displayNodes = detached ? [detached, ...regular] : regular;
-  const moveTargets = displayNodes;
 
+  /**
+   * Create a new stage from the current `newStage` input and clear the input field.
+   *
+   * If the trimmed `newStage` is empty, the function does nothing. Otherwise it creates
+   * a stage using the trimmed name and resets `newStage` to an empty string.
+   */
   function addStage() {
     if (!newStage.trim()) return;
     void run(async () => {
@@ -87,19 +113,24 @@ export function StagesEditor({ commissionId }: { commissionId: number }) {
     });
   }
 
+  /**
+   * Moves a commission file to another node (stage).
+   *
+   * If the file is already assigned to the target node, no action is taken.
+   *
+   * @param file - The commission file to move
+   * @param targetNodeId - ID of the destination node
+   */
   function moveFile(file: CommissionFile, targetNodeId: number) {
     if (file.node_id === targetNodeId) return;
     void run(() => api.moveFile(file.id, targetNodeId));
   }
 
-  function saveFocal(x: number, y: number) {
-    if (!focalFile) return;
-    void run(async () => {
-      await api.setFocal(focalFile.id, x, y);
-      setFocalFile(null);
-    });
-  }
-
+  /**
+   * Update the currently selected node's date and close the node date modal.
+   *
+   * @param date - The date to set as an ISO date string, or `null` to remove the date
+   */
   function saveNodeDate(date: string | null) {
     if (!dateNode) return;
     void run(async () => {
@@ -112,8 +143,9 @@ export function StagesEditor({ commissionId }: { commissionId: number }) {
     <section style={{ marginTop: 28 }}>
       <h2 style={{ fontSize: 18, margin: "0 0 4px" }}>Stages &amp; files</h2>
       <div className="mono-sm muted" style={{ marginBottom: 12 }}>
-        Detached files appear first for review. Upload per stage, drag files between stages, set
-        covers, and adjust image focal points. Deleted-stage files move to Detached.
+        Detached files appear first for review. Upload per stage, drag files between stages, and
+        pick a cover (★). Deleted-stage files move to Detached. The cover&rsquo;s focal point is
+        edited from the right rail.
       </div>
 
       <div className="row gap-8" style={{ marginBottom: 12 }}>
@@ -125,8 +157,15 @@ export function StagesEditor({ commissionId }: { commissionId: number }) {
           onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addStage())}
           style={{ maxWidth: 280 }}
         />
-        <button type="button" className="btn sm" onClick={addStage} disabled={busy}>
-          + Add stage
+        <button
+          type="button"
+          className="icon-btn add"
+          onClick={addStage}
+          disabled={busy || !newStage.trim()}
+          title="Add stage"
+          aria-label="Add stage"
+        >
+          <Plus size={18} strokeWidth={2.5} />
         </button>
       </div>
 
@@ -135,7 +174,6 @@ export function StagesEditor({ commissionId }: { commissionId: number }) {
         currentStage={detail.current_stage}
         coverFileId={detail.cover?.file_id ?? null}
         busy={busy}
-        moveTargets={moveTargets}
         onMoveFile={moveFile}
         onReorderNode={reorderStage}
         onUpload={upload}
@@ -145,17 +183,30 @@ export function StagesEditor({ commissionId }: { commissionId: number }) {
             void run(() => api.deleteFile(file.id));
           }
         }}
-        onEditFocal={setFocalFile}
         onEditDate={setDateNode}
         renderStageActions={(node) => {
           if (node.is_detached) return null;
           return (
             <>
-              <button type="button" className="btn sm" onClick={() => rename(node)} disabled={busy}>
-                Rename
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={() => rename(node)}
+                disabled={busy}
+                title="Rename stage"
+                aria-label="Rename stage"
+              >
+                <Pencil size={16} strokeWidth={2} />
               </button>
-              <button type="button" className="btn sm danger" onClick={() => remove(node)} disabled={busy}>
-                Delete
+              <button
+                type="button"
+                className="icon-btn danger"
+                onClick={() => remove(node)}
+                disabled={busy}
+                title="Delete stage"
+                aria-label="Delete stage"
+              >
+                <Trash2 size={16} strokeWidth={2} />
               </button>
             </>
           );
@@ -163,14 +214,6 @@ export function StagesEditor({ commissionId }: { commissionId: number }) {
       />
 
       {error && <div className="error-text" style={{ marginTop: 10 }}>{error}</div>}
-      {focalFile && (
-        <FocalPointModal
-          file={focalFile}
-          busy={busy}
-          onSave={saveFocal}
-          onClose={() => setFocalFile(null)}
-        />
-      )}
       {dateNode && (
         <NodeDateModal
           node={dateNode}

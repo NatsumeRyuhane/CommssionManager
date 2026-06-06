@@ -20,17 +20,145 @@ class TokenResponse(BaseModel):
 
 
 # ---------------------------------------------------------------- lookups
+def _strip_required(name: str) -> str:
+    """
+    Strip leading and trailing whitespace from `name` and ensure the result is not empty.
+    
+    Parameters:
+        name (str): String to trim.
+    
+    Returns:
+        str: The trimmed string.
+    
+    Raises:
+        ValueError: If the trimmed string is empty.
+    """
+    name = name.strip()
+    if not name:
+        raise ValueError("name must not be empty")
+    return name
+
+
+def _strip_optional(name: str | None) -> str | None:
+    """
+    Return the given string with surrounding whitespace removed, or None if the input is None.
+    
+    Parameters:
+        name (str | None): The input string to trim, or None.
+    
+    Returns:
+        str | None: The trimmed string, or None when `name` is None.
+    
+    Raises:
+        ValueError: If `name` is not None and is empty after trimming.
+    """
+    if name is None:
+        return None
+    return _strip_required(name)
+
+
+class _AliasOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    alias: str
+
+
 class LabelOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     name: str
     type: LabelType
+    aliases: list[_AliasOut] = []
+
+
+class LabelCreate(BaseModel):
+    name: str
+    type: LabelType
+
+    @field_validator("name")
+    @classmethod
+    def _strip(cls, name: str) -> str:
+        """
+        Strip surrounding whitespace from `name` and ensure the result is not empty.
+        
+        Returns:
+            The trimmed `name` string.
+        """
+        return _strip_required(name)
+
+
+class LabelUpdate(BaseModel):
+    name: str | None = None
+    type: LabelType | None = None
+
+    @field_validator("name")
+    @classmethod
+    def _strip(cls, name: str | None) -> str | None:
+        """
+        Trim a possibly-None string and enforce non-empty when present.
+        
+        If `name` is `None`, returns `None`. Otherwise strips surrounding whitespace and returns the result.
+        Raises `ValueError("name must not be empty")` if the stripped string is empty.
+        
+        Parameters:
+            name (str | None): The input string to normalize.
+        
+        Returns:
+            str | None: The trimmed string, or `None` when input is `None`.
+        
+        Raises:
+            ValueError: If the input is not `None` and the trimmed string is empty.
+        """
+        return _strip_optional(name)
 
 
 class CharacterOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     name: str
+    aliases: list[_AliasOut] = []
+    # Frontend reads this to decide whether to render the "has character page"
+    # marker. Always false today; the page model lands in a later phase.
+    has_page: bool = False
+
+
+class CharacterCreate(BaseModel):
+    name: str
+
+    @field_validator("name")
+    @classmethod
+    def _strip(cls, name: str) -> str:
+        """
+        Strip surrounding whitespace from `name` and ensure the result is not empty.
+        
+        Returns:
+            The trimmed `name` string.
+        """
+        return _strip_required(name)
+
+
+class CharacterUpdate(BaseModel):
+    name: str | None = None
+
+    @field_validator("name")
+    @classmethod
+    def _strip(cls, name: str | None) -> str | None:
+        """
+        Trim a possibly-None string and enforce non-empty when present.
+        
+        If `name` is `None`, returns `None`. Otherwise strips surrounding whitespace and returns the result.
+        Raises `ValueError("name must not be empty")` if the stripped string is empty.
+        
+        Parameters:
+            name (str | None): The input string to normalize.
+        
+        Returns:
+            str | None: The trimmed string, or `None` when input is `None`.
+        
+        Raises:
+            ValueError: If the input is not `None` and the trimmed string is empty.
+        """
+        return _strip_optional(name)
 
 
 class ArtistOut(BaseModel):
@@ -38,6 +166,7 @@ class ArtistOut(BaseModel):
     id: int
     name: str
     info_xml: str | None = None
+    aliases: list[_AliasOut] = []
 
 
 class ArtistCreate(BaseModel):
@@ -46,11 +175,14 @@ class ArtistCreate(BaseModel):
 
     @field_validator("name")
     @classmethod
-    def name_must_not_be_empty(cls, name: str) -> str:
-        name = name.strip()
-        if not name:
-            raise ValueError("name must not be empty")
-        return name
+    def _strip(cls, name: str) -> str:
+        """
+        Strip surrounding whitespace from `name` and ensure the result is not empty.
+        
+        Returns:
+            The trimmed `name` string.
+        """
+        return _strip_required(name)
 
 
 class ArtistUpdate(BaseModel):
@@ -59,13 +191,44 @@ class ArtistUpdate(BaseModel):
 
     @field_validator("name")
     @classmethod
-    def name_must_not_be_empty(cls, name: str | None) -> str | None:
-        if name is None:
-            return None
-        name = name.strip()
-        if not name:
-            raise ValueError("name must not be empty")
-        return name
+    def _strip(cls, name: str | None) -> str | None:
+        """
+        Trim a possibly-None string and enforce non-empty when present.
+        
+        If `name` is `None`, returns `None`. Otherwise strips surrounding whitespace and returns the result.
+        Raises `ValueError("name must not be empty")` if the stripped string is empty.
+        
+        Parameters:
+            name (str | None): The input string to normalize.
+        
+        Returns:
+            str | None: The trimmed string, or `None` when input is `None`.
+        
+        Raises:
+            ValueError: If the input is not `None` and the trimmed string is empty.
+        """
+        return _strip_optional(name)
+
+
+class AliasCreate(BaseModel):
+    alias: str
+
+    @field_validator("alias")
+    @classmethod
+    def _strip(cls, alias: str) -> str:
+        """
+        Strip whitespace from `alias` and ensure the result is not empty.
+        
+        Parameters:
+            alias (str): The alias string to normalize.
+        
+        Returns:
+            str: The alias with leading and trailing whitespace removed.
+        
+        Raises:
+            ValueError: If the stripped alias is empty.
+        """
+        return _strip_required(alias)
 
 
 # ---------------------------------------------------------------- files / nodes

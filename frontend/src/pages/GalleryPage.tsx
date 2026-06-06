@@ -10,6 +10,15 @@ import { useAuth } from "../hooks/useAuth";
 
 const PAGE_SIZE = 24;
 
+/**
+ * Render the gallery page with search, category and rating filters, sorting controls, and paginated commission results.
+ *
+ * The component loads available category labels, fetches a paged list of commissions based on the current
+ * query/filters/sort/limit, and displays loading, error, empty-state, or a gallery with "Load more" pagination.
+ * If the current user can write, a "+ New" link is shown.
+ *
+ * @returns The gallery page element that contains filter/search UI, sort controls, commission gallery, and pagination controls.
+ */
 export function GalleryPage() {
   const { canWrite } = useAuth();
   const [items, setItems] = useState<CommissionListItem[]>([]);
@@ -151,16 +160,6 @@ export function GalleryPage() {
         >
           Sort: {sort} {order === "desc" ? "↓" : "↑"}
         </button>
-        {canWrite && (
-          <a className="btn sm" href={api.databaseExportUrl()} download>
-            Export DB
-          </a>
-        )}
-        {canWrite && (
-          <a className="btn sm" href={api.filesExportUrl()} download>
-            Export files
-          </a>
-        )}
         {canWrite && (
           <Link to="/commissions/new" className="btn sm primary">
             + New

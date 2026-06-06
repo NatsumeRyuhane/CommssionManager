@@ -139,10 +139,30 @@ export interface ApiKeyCreate {
   scopes: string[];
 }
 
+export interface AliasOut {
+  id: number;
+  alias: string;
+}
+
+export interface Label {
+  id: number;
+  name: string;
+  type: LabelType;
+  aliases: AliasOut[];
+}
+
+export interface Character {
+  id: number;
+  name: string;
+  aliases: AliasOut[];
+  has_page: boolean;
+}
+
 export interface Artist {
   id: number;
   name: string;
   info_xml: string | null;
+  aliases: AliasOut[];
 }
 
 export interface ArtistCreate {

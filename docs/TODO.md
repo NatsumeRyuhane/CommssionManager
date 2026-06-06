@@ -29,6 +29,7 @@
   - [x] list endpoint with search / filter / sort
   - [x] list pagination (`limit`/`offset`) + `X-Total-Count` header
   - [x] `labels`, `characters`, `artists` read
+  - [x] Case-insensitive taxonomy uniqueness and literal typeahead matching
   - [x] file upload -> storage object, image dimension probe
   - [x] lifecycle node management (add/rename/reorder/delete + detached reparenting)
   - [x] `cover_file_id` validation (must be an image file of the commission; cleared on file delete)
@@ -83,8 +84,15 @@
   overrides
 - [x] Lifecycle: shared component, draggable stage reorder handle, drag-and-drop files between
   stages, detached-first exception handling
+- [x] Design polish to match the wireframe handoff: detail page hero + side rail (breadcrumb,
+  privacy-marked meta rows, chip blocks); edit page two-column layout (borderless title, sticky
+  meta rail with chip previews + inline price/confirmed fields); filter popover arrow
 - [x] Factory lifecycle stage defaults use chronological order
 - [ ] Character pages: shareable profile, main ref, curated image "bookshelves" + picker
+  - When character pages land, surface a visual marker on every Character chip / card /
+    typeahead row distinguishing "has a page" from "no page yet"; the `CharacterOut`
+    payload already carries a `has_page` flag (always `false` until this lands) so the
+    frontend can wire it once the page model exists.
 - [x] Artist management: multi-platform handles, paste-to-match, no-match resolve dialog
 - [ ] Mobile views for every section
 - [x] Focal-point reticle editor on cover image

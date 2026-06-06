@@ -1,0 +1,532 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Plus, X } from "lucide-react";
+
+import { api } from "../api/client";
+import type { LabelType } from "../api/types";
+import { Chip } from "./Chip";
+
+export type TaxonomyKind = "category" | "tag" | "character" | "artist";
+
+interface Match {
+  id: number;
+  name: string;
+  aliases: string[];
+}
+
+interface Adapter {
+  search(q: string): Promise<Match[]>;
+  create(name: string): Promise<Match>;
+  addAlias(id: number, alias: string): Promise<Match>;
+  chipKind: "cat" | "tag" | "char" | "artist";
+  label: string;
+}
+
+/**
+ * Convert an API row (with alias objects) into a `Match` with plain alias strings.
+ *
+ * @param row - API row containing `id`, `name`, and `aliases` as objects of shape `{ alias: string }`
+ * @returns A `Match` object with the same `id` and `name`, and `aliases` as a string array
+ */
+function toMatch(row: {
+  id: number;
+  name: string;
+  aliases: { alias: string }[];
+}): Match {
+  return { id: row.id, name: row.name, aliases: row.aliases.map((a) => a.alias) };
+}
+
+/**
+ * Create an Adapter that exposes search/create/addAlias operations and UI metadata for the specified taxonomy kind.
+ *
+ * @param kind - The taxonomy kind to adapt (`"category"`, `"tag"`, `"character"`, or `"artist"`).
+ * @returns An Adapter object with:
+ *  - `search(q)` — finds matching `Match` entries for the given query.
+ *  - `create(name)` — creates a new entry with the given name and returns its canonical `Match`.
+ *  - `addAlias(id, alias)` — adds `alias` to the entry identified by `id` and returns the updated `Match`.
+ *  - `chipKind` — UI chip type for the kind.
+ *  - `label` — human-readable label for the kind.
+ */
+function adapterFor(kind: TaxonomyKind): Adapter {
+  switch (kind) {
+    case "category":
+    case "tag": {
+      const labelType: LabelType = kind === "category" ? "category" : "tag";
+      return {
+        search: async (q) =>
+          (await api.labels({ q, type: labelType })).map(toMatch),
+        create: async (name) => toMatch(await api.createLabel(name, labelType)),
+        addAlias: async (id, alias) => toMatch(await api.addLabelAlias(id, alias)),
+        chipKind: kind === "category" ? "cat" : "tag",
+        label: kind,
+      };
+    }
+    case "character":
+      return {
+        search: async (q) => (await api.characters({ q })).map(toMatch),
+        create: async (name) => toMatch(await api.createCharacter(name)),
+        addAlias: async (id, alias) =>
+          toMatch(await api.addCharacterAlias(id, alias)),
+        chipKind: "char",
+        label: "character",
+      };
+    case "artist":
+      return {
+        search: async (q) => (await api.artists({ q })).map(toMatch),
+        create: async (name) =>
+          toMatch(await api.createArtist({ name })),
+        addAlias: async (id, alias) =>
+          toMatch(await api.addArtistAlias(id, alias)),
+        chipKind: "artist",
+        label: "artist",
+      };
+  }
+}
+
+interface TaxonomyPickerProps {
+  kind: TaxonomyKind;
+  values: string[];
+  onChange: (next: string[]) => void;
+  placeholder?: string;
+}
+
+/**
+ * Render a multi-value taxonomy picker that supports debounced searching, selecting existing matches,
+ * creating new taxonomy entries, and adding an alias to an existing entry.
+ *
+ * @param kind - Which taxonomy to operate on (`"category" | "tag" | "character" | "artist"`). Chooses API endpoints and UI labels.
+ * @param values - Current list of selected canonical names.
+ * @param onChange - Called with the updated list of canonical names when selection changes.
+ * @param placeholder - Optional input placeholder text; if omitted a sensible default based on `kind` is used.
+ * @returns A React element that renders the taxonomy picker UI.
+ */
+export function TaxonomyPicker({ kind, values, onChange, placeholder }: TaxonomyPickerProps) {
+  const adapter = useMemo(() => adapterFor(kind), [kind]);
+  const [q, setQ] = useState("");
+  const [matches, setMatches] = useState<Match[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [pendingName, setPendingName] = useState<string | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const searchRequestIdRef = useRef(0);
+
+  const lowerValues = useMemo(
+    () => new Set(values.map((v) => v.toLowerCase())),
+    [values]
+  );
+
+  // Debounced search
+  useEffect(() => {
+    const requestId = ++searchRequestIdRef.current;
+    const needle = q.trim();
+    if (!needle) {
+      setMatches([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    const t = window.setTimeout(async () => {
+      try {
+        const m = await adapter.search(needle);
+        if (searchRequestIdRef.current === requestId) setMatches(m);
+      } catch {
+        if (searchRequestIdRef.current === requestId) setMatches([]);
+      } finally {
+        if (searchRequestIdRef.current === requestId) setLoading(false);
+      }
+    }, 200);
+    return () => {
+      window.clearTimeout(t);
+      if (searchRequestIdRef.current === requestId) searchRequestIdRef.current += 1;
+    };
+  }, [q, adapter]);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!open) return;
+    function onDocDown(e: MouseEvent) {
+      if (!containerRef.current?.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onDocDown);
+    return () => document.removeEventListener("mousedown", onDocDown);
+  }, [open]);
+
+  function add(name: string) {
+    if (!lowerValues.has(name.toLowerCase())) {
+      onChange([...values, name]);
+    }
+    setQ("");
+    setMatches([]);
+    setOpen(false);
+  }
+
+  function remove(name: string) {
+    onChange(values.filter((v) => v !== name));
+  }
+
+  function handleEnter() {
+    const trimmed = q.trim();
+    if (!trimmed) return;
+    if (matches.length > 0) {
+      // Pick top match; its canonical name is what gets added even if user
+      // typed an alias.
+      add(matches[0].name);
+      return;
+    }
+    setPendingName(trimmed);
+  }
+
+  function aliasHint(m: Match): string | null {
+    const needle = q.trim().toLowerCase();
+    if (!needle) return null;
+    if (m.name.toLowerCase().includes(needle)) return null;
+    return m.aliases.find((a) => a.toLowerCase().includes(needle)) ?? null;
+  }
+
+  const needle = q.trim();
+  const hasExactName = matches.some(
+    (m) => m.name.toLowerCase() === needle.toLowerCase()
+  );
+
+  return (
+    <div className="taxonomy-picker" ref={containerRef}>
+      <div className="taxonomy-picker-chips row wrap gap-4">
+        {values.map((v) => (
+          <Chip key={v} kind={adapter.chipKind} onRemove={() => remove(v)}>
+            {v}
+          </Chip>
+        ))}
+      </div>
+      <input
+        className="field taxonomy-picker-input"
+        value={q}
+        onChange={(e) => {
+          setQ(e.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => q.trim() && setOpen(true)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            handleEnter();
+          } else if (e.key === "Escape") {
+            setOpen(false);
+          } else if (e.key === "Backspace" && !q && values.length > 0) {
+            remove(values[values.length - 1]);
+          }
+        }}
+        placeholder={placeholder ?? `Search or add ${adapter.label}…`}
+      />
+      {open && needle && (
+        <div className="taxonomy-picker-dropdown">
+          {matches.map((m) => {
+            const via = aliasHint(m);
+            const already = lowerValues.has(m.name.toLowerCase());
+            return (
+              <button
+                type="button"
+                key={m.id}
+                className="taxonomy-picker-row"
+                disabled={already}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => add(m.name)}
+              >
+                <span className="taxonomy-picker-row-name">{m.name}</span>
+                {via && (
+                  <span className="mono-sm muted">via &ldquo;{via}&rdquo;</span>
+                )}
+                {already && <span className="mono-sm muted">added</span>}
+              </button>
+            );
+          })}
+          {loading && (
+            <div className="taxonomy-picker-row mono-sm muted">Searching…</div>
+          )}
+          {!loading && !hasExactName && (
+            <button
+              type="button"
+              className="taxonomy-picker-row taxonomy-picker-create"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => setPendingName(needle)}
+            >
+              <Plus size={14} strokeWidth={2.5} />
+              <span>
+                Add &ldquo;{needle}&rdquo; as a new {adapter.label}…
+              </span>
+            </button>
+          )}
+        </div>
+      )}
+
+      {pendingName !== null && (
+        <CreateOrAliasDialog
+          adapter={adapter}
+          name={pendingName}
+          onCancel={() => setPendingName(null)}
+          onResolved={(canonicalName) => {
+            setPendingName(null);
+            add(canonicalName);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- dialog
+
+interface CreateOrAliasDialogProps {
+  adapter: Adapter;
+  name: string;
+  onCancel: () => void;
+  onResolved: (canonicalName: string) => void;
+}
+
+/**
+ * Modal dialog that lets the user either create a new taxonomy entry or add the current name as an alias to an existing entry.
+ *
+ * Presents two modes: "create" (creates a new entry via `adapter.create`) and "alias" (select an existing entry and link the name via `adapter.addAlias`). Displays async busy/error states, calls `onResolved(canonicalName)` when an operation succeeds, and calls `onCancel` when the dialog is dismissed.
+ *
+ * @param adapter - Adapter providing `search`, `create`, `addAlias`, and UI metadata for the current taxonomy kind
+ * @param name - The candidate name to create or add as an alias
+ * @param onCancel - Called when the user cancels or closes the dialog
+ * @param onResolved - Called with the canonical name after a successful create or alias operation
+ * @returns The modal dialog element for creating or aliasing a taxonomy value
+ */
+function CreateOrAliasDialog({
+  adapter,
+  name,
+  onCancel,
+  onResolved,
+}: CreateOrAliasDialogProps) {
+  const [mode, setMode] = useState<"create" | "alias">("create");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [aliasParent, setAliasParent] = useState<Match | null>(null);
+
+  async function submitCreate() {
+    setBusy(true);
+    setError(null);
+    try {
+      const created = await adapter.create(name);
+      onResolved(created.name);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitAlias() {
+    if (!aliasParent) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const updated = await adapter.addAlias(aliasParent.id, name);
+      onResolved(updated.name);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="modal-overlay" onMouseDown={onCancel}>
+      <div
+        className="modal taxonomy-modal"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <div className="row" style={{ justifyContent: "space-between" }}>
+          <strong style={{ fontSize: 15 }}>
+            No match for &ldquo;{name}&rdquo;
+          </strong>
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={onCancel}
+            title="Cancel"
+            aria-label="Cancel"
+          >
+            <X size={16} strokeWidth={2} />
+          </button>
+        </div>
+
+        <div className="taxonomy-modal-tabs">
+          <button
+            type="button"
+            className={`taxonomy-modal-tab${mode === "create" ? " active" : ""}`}
+            onClick={() => setMode("create")}
+          >
+            Create new {adapter.label}
+          </button>
+          <button
+            type="button"
+            className={`taxonomy-modal-tab${mode === "alias" ? " active" : ""}`}
+            onClick={() => setMode("alias")}
+          >
+            Add as alias of existing
+          </button>
+        </div>
+
+        {mode === "create" && (
+          <div className="col gap-8">
+            <p className="muted" style={{ margin: 0, fontSize: 13 }}>
+              Create a brand-new {adapter.label} named{" "}
+              <span style={{ color: "var(--ink)" }}>
+                &ldquo;{name}&rdquo;
+              </span>
+              .
+            </p>
+            {error && <div className="error-text">{error}</div>}
+            <div className="row" style={{ justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                className="btn ghost"
+                onClick={onCancel}
+                disabled={busy}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn primary"
+                disabled={busy}
+                onClick={() => void submitCreate()}
+              >
+                {busy ? "Creating…" : "Create"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {mode === "alias" && (
+          <div className="col gap-8">
+            <p className="muted" style={{ margin: 0, fontSize: 13 }}>
+              Link &ldquo;{name}&rdquo; as an alias of an existing{" "}
+              {adapter.label}. Future picks of either name will resolve to the
+              same row.
+            </p>
+            <AliasParentPicker
+              adapter={adapter}
+              selected={aliasParent}
+              onSelect={setAliasParent}
+            />
+            {error && <div className="error-text">{error}</div>}
+            <div className="row" style={{ justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                className="btn ghost"
+                onClick={onCancel}
+                disabled={busy}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn primary"
+                disabled={busy || !aliasParent}
+                onClick={() => void submitAlias()}
+              >
+                {busy
+                  ? "Linking…"
+                  : aliasParent
+                  ? `Add as alias of "${aliasParent.name}"`
+                  : "Pick a parent first"}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- alias-parent sub-picker
+
+interface AliasParentPickerProps {
+  adapter: Adapter;
+  selected: Match | null;
+  onSelect: (m: Match) => void;
+}
+
+/**
+ * Renders a small searchable picker to choose an existing taxonomy entry as the parent for a new alias.
+ *
+ * Uses the provided `adapter` to perform a debounced search as the user types, shows a loading state,
+ * displays “no matches” when appropriate, and lets the user select a match.
+ *
+ * @param adapter - Adapter providing `search` and `label` for the current taxonomy kind.
+ * @param selected - Currently selected `Match`, if any; its row will be highlighted.
+ * @param onSelect - Called with the `Match` the user chooses.
+ * @returns The picker UI containing an input, optional loading / empty-state messages, and a selectable list of matches.
+ */
+function AliasParentPicker({ adapter, selected, onSelect }: AliasParentPickerProps) {
+  const [q, setQ] = useState("");
+  const [matches, setMatches] = useState<Match[]>([]);
+  const [loading, setLoading] = useState(false);
+  const searchRequestIdRef = useRef(0);
+
+  useEffect(() => {
+    const requestId = ++searchRequestIdRef.current;
+    const needle = q.trim();
+    if (!needle) {
+      setMatches([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    const t = window.setTimeout(async () => {
+      try {
+        const nextMatches = await adapter.search(needle);
+        if (searchRequestIdRef.current === requestId) setMatches(nextMatches);
+      } catch {
+        if (searchRequestIdRef.current === requestId) setMatches([]);
+      } finally {
+        if (searchRequestIdRef.current === requestId) setLoading(false);
+      }
+    }, 200);
+    return () => {
+      window.clearTimeout(t);
+      if (searchRequestIdRef.current === requestId) searchRequestIdRef.current += 1;
+    };
+  }, [q, adapter]);
+
+  return (
+    <div className="alias-parent-picker">
+      <input
+        className="field"
+        placeholder={`Search ${adapter.label}…`}
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        autoFocus
+      />
+      {loading && <div className="mono-sm muted">Searching…</div>}
+      {!loading && q.trim() && matches.length === 0 && (
+        <div className="mono-sm muted">
+          No existing {adapter.label} matches &ldquo;{q.trim()}&rdquo;.
+        </div>
+      )}
+      {matches.length > 0 && (
+        <div className="alias-parent-list">
+          {matches.map((m) => (
+            <button
+              type="button"
+              key={m.id}
+              className={`alias-parent-row${
+                selected?.id === m.id ? " selected" : ""
+              }`}
+              onClick={() => onSelect(m)}
+            >
+              <span>{m.name}</span>
+              {m.aliases.length > 0 && (
+                <span className="mono-sm muted">
+                  alias: {m.aliases.join(", ")}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

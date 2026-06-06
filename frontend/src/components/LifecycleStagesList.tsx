@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { Star, Trash2, Upload } from "lucide-react";
 
 import type { CommissionFile, CommissionNode } from "../api/types";
 import { Chip } from "./Chip";
@@ -11,29 +12,41 @@ interface LifecycleStagesListProps {
   currentStage?: string | null;
   coverFileId?: number | null;
   busy?: boolean;
-  moveTargets?: CommissionNode[];
   onMoveFile?: (file: CommissionFile, targetNodeId: number) => void;
   onReorderNode?: (draggedNodeId: number, targetNodeId: number) => void;
   onUpload?: (node: CommissionNode, files: FileList) => void;
   onSetCover?: (file: CommissionFile) => void;
   onDeleteFile?: (file: CommissionFile) => void;
-  onEditFocal?: (file: CommissionFile) => void;
   onEditDate?: (node: CommissionNode) => void;
   renderStageActions?: (node: CommissionNode, index: number) => ReactNode;
 }
 
+/**
+ * Renders a list of lifecycle stage sections for the provided nodes.
+ *
+ * @param nodes - Array of stage nodes to render; each node's files are shown within its stage
+ * @param currentStage - Name of the current stage (used to mark the active stage)
+ * @param coverFileId - ID of the file currently used as the commission cover
+ * @param busy - When true, interactive controls are disabled
+ * @param onMoveFile - Optional callback invoked when a file is moved into a different stage
+ * @param onReorderNode - Optional callback invoked when a stage is reordered
+ * @param onUpload - Optional callback invoked with (node, files) when files are uploaded to a stage
+ * @param onSetCover - Optional callback invoked when a file is set as the cover
+ * @param onDeleteFile - Optional callback invoked when a file is deleted
+ * @param onEditDate - Optional callback invoked when the stage date edit action is triggered
+ * @param renderStageActions - Optional renderer for per-stage extra action elements; called with (node, index)
+ * @returns A React element representing the lifecycle stages list
+ */
 export function LifecycleStagesList({
   nodes,
   currentStage,
   coverFileId,
   busy = false,
-  moveTargets = nodes,
   onMoveFile,
   onReorderNode,
   onUpload,
   onSetCover,
   onDeleteFile,
-  onEditFocal,
   onEditDate,
   renderStageActions,
 }: LifecycleStagesListProps) {
@@ -55,13 +68,11 @@ export function LifecycleStagesList({
           coverFileId={coverFileId}
           busy={busy}
           filesById={filesById}
-          moveTargets={moveTargets}
           onMoveFile={onMoveFile}
           onReorderNode={onReorderNode}
           onUpload={onUpload}
           onSetCover={onSetCover}
           onDeleteFile={onDeleteFile}
-          onEditFocal={onEditFocal}
           onEditDate={onEditDate}
           stageActions={renderStageActions?.(node, index)}
         />
@@ -70,19 +81,37 @@ export function LifecycleStagesList({
   );
 }
 
+/**
+ * Render a lifecycle stage panel with header controls and a grid of file tiles.
+ *
+ * The panel supports optional drag-and-drop reordering/moving, file upload, date editing,
+ * and per-file actions (set cover, delete) depending on the provided callbacks and node state.
+ *
+ * @param node - The lifecycle node/stage data to render (name, files, flags, dates).
+ * @param currentStage - The name of the currently active stage, used to show a "current" chip.
+ * @param coverFileId - File id treated as the stage cover; used to mark the cover tile.
+ * @param busy - When true, disables user interactions (drag handles, buttons).
+ * @param filesById - Map of file id → file used to resolve files during drop operations.
+ * @param onMoveFile - Called when a file is moved into this stage: `(file, targetNodeId)`.
+ * @param onReorderNode - Called when a stage is reordered via drag handle: `(draggedNodeId, targetNodeId)`.
+ * @param onUpload - Called when files are selected for upload into this stage: `(node, files)`.
+ * @param onSetCover - Called to mark a specific file as the stage cover: `(file)`.
+ * @param onDeleteFile - Called to delete a file from the stage: `(file)`.
+ * @param onEditDate - Called to request editing the stage's start date: `(node)`.
+ * @param stageActions - Optional React node inserted into the stage header for custom actions.
+ * @returns A JSX element representing the rendered lifecycle stage panel.
+ */
 function LifecycleStage({
   node,
   currentStage,
   coverFileId,
   busy,
   filesById,
-  moveTargets,
   onMoveFile,
   onReorderNode,
   onUpload,
   onSetCover,
   onDeleteFile,
-  onEditFocal,
   onEditDate,
   stageActions,
 }: {
@@ -91,13 +120,11 @@ function LifecycleStage({
   coverFileId?: number | null;
   busy: boolean;
   filesById: Map<number, CommissionFile>;
-  moveTargets: CommissionNode[];
   onMoveFile?: (file: CommissionFile, targetNodeId: number) => void;
   onReorderNode?: (draggedNodeId: number, targetNodeId: number) => void;
   onUpload?: (node: CommissionNode, files: FileList) => void;
   onSetCover?: (file: CommissionFile) => void;
   onDeleteFile?: (file: CommissionFile) => void;
-  onEditFocal?: (file: CommissionFile) => void;
   onEditDate?: (node: CommissionNode) => void;
   stageActions?: ReactNode;
 }) {
@@ -173,11 +200,13 @@ function LifecycleStage({
           <>
             <button
               type="button"
-              className="btn sm"
+              className="icon-btn"
               disabled={busy}
               onClick={() => fileInput.current?.click()}
+              title="Upload files"
+              aria-label="Upload files"
             >
-              Upload
+              <Upload size={16} strokeWidth={2} />
             </button>
             <input
               ref={fileInput}
@@ -205,11 +234,9 @@ function LifecycleStage({
               file={file}
               isCover={file.id === coverFileId}
               busy={busy}
-              moveTargets={moveTargets}
               onMoveFile={onMoveFile}
               onSetCover={onSetCover}
               onDeleteFile={onDeleteFile}
-              onEditFocal={onEditFocal}
             />
           ))}
         </div>
@@ -218,26 +245,33 @@ function LifecycleStage({
   );
 }
 
+/**
+ * Renders a file tile showing a preview (image or placeholder), label, and optional action buttons.
+ *
+ * @param file - The CommissionFile to display
+ * @param isCover - Whether this file is the stage's current cover
+ * @param busy - When true, interactive controls are disabled
+ * @param onMoveFile - Optional callback invoked as `onMoveFile(file, targetNodeId)` when the file is dragged to another stage
+ * @param onSetCover - Optional callback invoked with the file when the user sets it as the cover
+ * @param onDeleteFile - Optional callback invoked with the file when the user requests deletion
+ * @returns A JSX element representing the file tile with preview, label, and conditional action buttons
+ */
 function LifecycleFileTile({
   file,
   isCover,
   busy,
-  moveTargets,
   onMoveFile,
   onSetCover,
   onDeleteFile,
-  onEditFocal,
 }: {
   file: CommissionFile;
   isCover: boolean;
   busy: boolean;
-  moveTargets: CommissionNode[];
   onMoveFile?: (file: CommissionFile, targetNodeId: number) => void;
   onSetCover?: (file: CommissionFile) => void;
   onDeleteFile?: (file: CommissionFile) => void;
-  onEditFocal?: (file: CommissionFile) => void;
 }) {
-  const editable = Boolean(onSetCover || onDeleteFile || onMoveFile || onEditFocal);
+  const editable = Boolean(onSetCover || onDeleteFile);
   return (
     <div
       className="lifecycle-file"
@@ -269,59 +303,27 @@ function LifecycleFileTile({
       <div className="lifecycle-file-label">{file.label || file.format}</div>
       {editable && (
         <div className="lifecycle-file-actions">
-          {onMoveFile && (
-            <select
-              className="field"
-              value=""
-              disabled={busy}
-              title="Move file"
-              onChange={(e) => {
-                const target = Number(e.target.value);
-                if (target) onMoveFile(file, target);
-              }}
-            >
-              <option value="">Move</option>
-              {moveTargets
-                .filter((node) => node.id !== file.node_id)
-                .map((node) => (
-                  <option key={node.id} value={node.id}>
-                    {node.name}
-                  </option>
-                ))}
-            </select>
-          )}
-          {file.is_image && !isCover && onSetCover && (
+          {file.is_image && onSetCover && (
             <button
               type="button"
-              className="btn sm ghost"
-              disabled={busy}
-              onClick={() => onSetCover(file)}
-              title="Set as cover"
+              className={`icon-btn star${isCover ? " is-cover" : ""}`}
+              disabled={busy || isCover}
+              onClick={() => !isCover && onSetCover(file)}
+              title={isCover ? "Current cover" : "Set as cover"}
+              aria-pressed={isCover}
             >
-              ★
+              <Star size={16} strokeWidth={2} fill={isCover ? "currentColor" : "none"} />
             </button>
           )}
-          {file.is_image && onEditFocal && (
-            <button
-              type="button"
-              className="btn sm ghost"
-              disabled={busy}
-              onClick={() => onEditFocal(file)}
-              title="Edit focal point"
-            >
-              ⊕
-            </button>
-          )}
-          {isCover && <span className="mono-sm" style={{ color: "var(--accent)" }}>cover</span>}
           {onDeleteFile && (
             <button
               type="button"
-              className="btn sm danger"
+              className="icon-btn danger"
               disabled={busy}
               onClick={() => onDeleteFile(file)}
               title="Delete file"
             >
-              ✕
+              <Trash2 size={16} strokeWidth={2} />
             </button>
           )}
         </div>

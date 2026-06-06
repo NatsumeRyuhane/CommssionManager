@@ -3,18 +3,22 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from fastapi import HTTPException, status
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models import (
     AppSettings,
     Artist,
+    ArtistAlias,
     Character,
+    CharacterAlias,
     Commission,
     CommissionMetadata,
     CommissionNode,
     Label,
+    LabelAlias,
     LabelType,
     Visibility,
     VisibilityPreset,
@@ -95,30 +99,158 @@ class VisibilityContext:
 
 
 # ---------------------------------------------------------------- get-or-create lookups
+# Resolution rules: an input string matches a row when it equals (case-insensitive)
+# either the row's `name` or one of its aliases. Names are stored as the user typed
+# them; the lowercased form is compared via func.lower / the alias_lower column.
+
+
+def resolve_label(db: Session, name: str) -> Label | None:
+    """
+    Resolve a Label by its canonical name or any alias, matching case-insensitively.
+    
+    Parameters:
+        name (str): The label name or alias to look up; leading and trailing whitespace are ignored.
+    
+    Returns:
+        Label | None: `Label` if a matching canonical name or alias exists, `None` otherwise.
+    """
+    needle = name.strip().lower()
+    if not needle:
+        return None
+    row = db.scalar(select(Label).where(func.lower(Label.name) == needle))
+    if row is not None:
+        return row
+    alias = db.scalar(select(LabelAlias).where(LabelAlias.alias_lower == needle))
+    return alias.label if alias is not None else None
+
+
+def resolve_character(db: Session, name: str) -> Character | None:
+    """
+    Resolve a character by its name or alias and return the canonical Character if found.
+    
+    Parameters:
+        name (str): The character name or alias to resolve; leading/trailing whitespace is ignored and matching is case-insensitive.
+    
+    Returns:
+        Character | None: The matched `Character` when a name or alias matches, `None` if the input is empty or no match exists.
+    """
+    needle = name.strip().lower()
+    if not needle:
+        return None
+    row = db.scalar(select(Character).where(func.lower(Character.name) == needle))
+    if row is not None:
+        return row
+    alias = db.scalar(select(CharacterAlias).where(CharacterAlias.alias_lower == needle))
+    return alias.character if alias is not None else None
+
+
+def resolve_artist(db: Session, name: str) -> Artist | None:
+    """
+    Resolve an artist by canonical name or stored alias using case-insensitive matching.
+    
+    Parameters:
+        name (str): Artist name or alias; leading and trailing whitespace are ignored. An empty or whitespace-only name returns no match.
+    
+    Returns:
+        Artist | None: The matched Artist if found, `None` otherwise.
+    """
+    needle = name.strip().lower()
+    if not needle:
+        return None
+    row = db.scalar(select(Artist).where(func.lower(Artist.name) == needle))
+    if row is not None:
+        return row
+    alias = db.scalar(select(ArtistAlias).where(ArtistAlias.alias_lower == needle))
+    return alias.artist if alias is not None else None
+
+
 def get_or_create_label(db: Session, name: str, type_: LabelType) -> Label:
-    row = db.scalar(select(Label).where(Label.name == name))
-    if row is None:
-        row = Label(name=name, type=type_)
-        db.add(row)
-        db.flush()
+    """
+    Ensure a Label with the given name and type exists, returning the existing row or creating a new one.
+    
+    Parameters:
+        name (str): Label name; leading and trailing whitespace are removed before lookup.
+        type_ (LabelType): Desired label category (e.g., category or tag).
+    
+    Returns:
+        Label: The existing matching Label or the newly created Label.
+    
+    Raises:
+        HTTPException: 400 if the trimmed `name` is empty.
+        HTTPException: 400 if a label with the same name exists but has a different `type_`.
+    """
+    name = name.strip()
+    if not name:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Label name is empty")
+    existing = resolve_label(db, name)
+    if existing is not None:
+        if existing.type != type_:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"\"{name}\" already exists as a {existing.type.value}; "
+                    f"it cannot also be a {type_.value}. "
+                    "Reclassify or alias it in label management first."
+                ),
+            )
+        return existing
+    row = Label(name=name, type=type_)
+    db.add(row)
+    db.flush()
     return row
 
 
 def get_or_create_character(db: Session, name: str) -> Character:
-    row = db.scalar(select(Character).where(Character.name == name))
-    if row is None:
-        row = Character(name=name)
-        db.add(row)
-        db.flush()
+    """
+    Return an existing Character matching `name` (case-insensitive via aliases) or create, persist, and return a new Character with that name.
+    
+    Parameters:
+        name (str): Character name; leading and trailing whitespace are trimmed. Must not be empty.
+    
+    Returns:
+        Character: The existing or newly created Character row.
+    
+    Raises:
+        HTTPException: If `name` is empty after trimming (400 Bad Request).
+    """
+    name = name.strip()
+    if not name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Character name is empty"
+        )
+    existing = resolve_character(db, name)
+    if existing is not None:
+        return existing
+    row = Character(name=name)
+    db.add(row)
+    db.flush()
     return row
 
 
 def get_or_create_artist(db: Session, name: str) -> Artist:
-    row = db.scalar(select(Artist).where(Artist.name == name))
-    if row is None:
-        row = Artist(name=name)
-        db.add(row)
-        db.flush()
+    """
+    Return an existing Artist matching the provided name (case-insensitive against canonical names and aliases) or create and return a new Artist.
+    
+    Parameters:
+        name (str): Artist name; leading/trailing whitespace is trimmed.
+    
+    Returns:
+        Artist: The existing or newly created Artist instance. The returned instance is added to the database session and flushed (so it will have an assigned id).
+    
+    Raises:
+        HTTPException: If `name` is empty after trimming (status 400).
+    """
+    name = name.strip()
+    if not name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Artist name is empty"
+        )
+    existing = resolve_artist(db, name)
+    if existing is not None:
+        return existing
+    row = Artist(name=name)
+    db.add(row)
+    db.flush()
     return row
 
 

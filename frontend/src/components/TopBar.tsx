@@ -7,6 +7,15 @@ import { LoginModal } from "./LoginModal";
 
 const DEFAULT_SITE_TITLE = "Commissions";
 
+/**
+ * Render the application's top navigation bar including the site title, optional children, and authentication controls.
+ *
+ * If `siteTitle` is provided (including an empty string), it will be used (falling back to the default title when falsy). If `siteTitle` is omitted, site settings are fetched and the returned `site_title` is used, falling back to the default title on error.
+ *
+ * @param children - Optional nodes rendered between the title and the authentication controls
+ * @param siteTitle - Optional explicit site title; when omitted the component will fetch site settings to determine the title
+ * @returns The top bar element containing the resolved title, any `children`, and sign-in/sign-out/admin controls
+ */
 export function TopBar({ children, siteTitle }: { children?: ReactNode; siteTitle?: string }) {
   const { canWrite, me, logout } = useAuth();
   const [showLogin, setShowLogin] = useState(false);
@@ -44,14 +53,9 @@ export function TopBar({ children, siteTitle }: { children?: ReactNode; siteTitl
         <>
           <span className="mono-sm muted">🔓 {me?.kind === "admin" ? "admin" : me?.label}</span>
           {me?.kind === "admin" && (
-            <>
-              <Link to="/artists" className="btn sm">
-                Artists
-              </Link>
-              <Link to="/settings" className="btn sm">
-                Settings
-              </Link>
-            </>
+            <Link to="/settings" className="btn sm">
+              Settings
+            </Link>
           )}
           <button className="btn sm" onClick={() => void logout()}>
             Sign out
