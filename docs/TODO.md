@@ -59,6 +59,7 @@
 ### Deploy
 - [x] `deploy/docker-compose.dev.yml` (Postgres for local dev)
 - [x] `deploy/docker-compose.yml` (full stack: db + api + web)
+- [x] `deploy/.env.example` production configuration template
 - [x] Backend + frontend Dockerfiles, nginx for web
 - [x] Reproducible frontend image: pin `packageManager` (pnpm) + `.npmrc` so the build doesn't
   float pnpm versions or fail on the minimum-release-age supply-chain gate

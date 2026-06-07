@@ -117,18 +117,15 @@ The full stack (`deploy/docker-compose.yml`, compose project `cmgr`) builds and 
 the API + an nginx container that serves the built SPA and proxies `/api` to the API. It is
 isolated from the dev Postgres (project `deploy`), so the two can run side by side.
 
-1. **Set strong secrets.** The compose file reads these from the environment (with insecure
-   fallbacks for convenience — **override them for any real deployment**). Put them in a
-   `deploy/.env` file (Compose auto-loads it for variable substitution) or export them:
+1. **Set strong secrets.** Copy the production environment template, then replace its
+   placeholders. Compose auto-loads `deploy/.env` for variable substitution:
    ```sh
-   # deploy/.env
-   POSTGRES_PASSWORD=<strong-db-password>
-   ADMIN_USERNAME=<your-admin>
-   ADMIN_PASSWORD=<strong-admin-password>
-   SECRET_KEY=<openssl rand -hex 32>          # JWT signing key, >= 32 bytes
-   CORS_ORIGINS=["https://your.domain"]        # JSON array of allowed origins
-   # optional: ACCESS_TOKEN_EXPIRE_MINUTES, STORAGE_BACKEND
+   cp deploy/.env.example deploy/.env
+   openssl rand -hex 32  # generate URL-safe values for POSTGRES_PASSWORD and SECRET_KEY
    ```
+   Set `CORS_ORIGINS` to a JSON array containing the public app origin. The compose file has
+   insecure fallback values for convenience, so **override every required value for any real
+   deployment**. You may export the same variables instead of creating `deploy/.env`.
 2. **Build and start** (build context is the repo root):
    ```sh
    docker compose -f deploy/docker-compose.yml up -d --build
