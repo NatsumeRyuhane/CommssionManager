@@ -1,8 +1,14 @@
 import io
-from concurrent.futures import ThreadPoolExecutor
+import random
+import time
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
+from threading import Event
 
+import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
+
+from app.storage import get_storage
 
 
 def _png(width: int = 30, height: int = 40, color: str = "#abcabc") -> bytes:
@@ -39,6 +45,22 @@ def _upload(
     return res.json()
 
 
+def _block_storage_save(monkeypatch: pytest.MonkeyPatch) -> tuple[Event, Event]:
+    save_started = Event()
+    release_save = Event()
+    storage = get_storage()
+    original_save = storage.save
+
+    def blocked_save(key: str, data: bytes):
+        save_started.set()
+        if not release_save.wait(timeout=5):
+            raise TimeoutError("test did not release blocked storage save")
+        return original_save(key, data)
+
+    monkeypatch.setattr(storage, "save", blocked_save)
+    return save_started, release_save
+
+
 def test_upload_records_image_metadata_and_serves_raw_bytes(admin_client: TestClient):
     _, node_id = _commission(admin_client)
     raw = _png(width=31, height=47)
@@ -67,22 +89,108 @@ def test_upload_records_image_metadata_and_serves_raw_bytes(admin_client: TestCl
     assert served.content == raw
 
 
-def test_parallel_uploads_receive_distinct_positions(admin_client: TestClient):
+@pytest.mark.parametrize("seed", [7, 41, 20260607])
+def test_randomized_parallel_uploads_receive_distinct_positions(
+    admin_client: TestClient, seed: int
+):
     commission_id, node_id = _commission(admin_client)
+    randomizer = random.Random(seed)
+    upload_ids = list(range(8))
+    randomizer.shuffle(upload_ids)
+    delays = {upload_id: randomizer.uniform(0, 0.03) for upload_id in upload_ids}
 
     def upload(index: int):
+        time.sleep(delays[index])
         return admin_client.post(
             f"/api/v1/nodes/{node_id}/files",
             files={"upload": (f"parallel-{index}.png", _png(), "image/png")},
         )
 
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        results = list(executor.map(upload, range(4)))
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        results = list(executor.map(upload, upload_ids))
 
-    assert [result.status_code for result in results] == [201, 201, 201, 201]
+    assert [result.status_code for result in results] == [201] * len(upload_ids)
     detail = admin_client.get(f"/api/v1/commissions/{commission_id}").json()
     files = next(node for node in detail["nodes"] if node["id"] == node_id)["files"]
-    assert [file["position"] for file in files] == [0, 1, 2, 3]
+    assert [file["position"] for file in files] == list(range(len(upload_ids)))
+
+
+def test_move_waits_for_in_flight_upload_to_source_node(
+    admin_client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    res = admin_client.post(
+        "/api/v1/commissions",
+        json={"title": "Concurrent move test", "node_names": ["Sketching", "Delivered"]},
+    )
+    commission = res.json()
+    source = next(node for node in commission["nodes"] if node["name"] == "Sketching")
+    target = next(node for node in commission["nodes"] if node["name"] == "Delivered")
+    existing = _upload(admin_client, source["id"], "existing.png", _png(), "image/png")
+    save_started, release_save = _block_storage_save(monkeypatch)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        upload_future = executor.submit(
+            admin_client.post,
+            f"/api/v1/nodes/{source['id']}/files",
+            files={"upload": ("concurrent.png", _png(), "image/png")},
+        )
+        assert save_started.wait(timeout=2)
+        move_future = executor.submit(
+            admin_client.patch,
+            f"/api/v1/files/{existing['id']}/node",
+            json={"node_id": target["id"]},
+        )
+        try:
+            with pytest.raises(FutureTimeoutError):
+                move_future.result(timeout=0.2)
+        finally:
+            release_save.set()
+        assert upload_future.result(timeout=5).status_code == 201
+        assert move_future.result(timeout=5).status_code == 200
+
+    detail = admin_client.get(f"/api/v1/commissions/{commission['id']}").json()
+    source_files = next(node for node in detail["nodes"] if node["id"] == source["id"])["files"]
+    target_files = next(node for node in detail["nodes"] if node["id"] == target["id"])["files"]
+    assert [file["position"] for file in source_files] == [0]
+    assert [file["id"] for file in target_files] == [existing["id"]]
+    assert [file["position"] for file in target_files] == [0]
+
+
+def test_delete_and_reorder_wait_for_in_flight_upload(
+    admin_client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    commission_id, node_id = _commission(admin_client)
+    first = _upload(admin_client, node_id, "first.png", _png(), "image/png")
+    second = _upload(admin_client, node_id, "second.png", _png(), "image/png")
+    save_started, release_save = _block_storage_save(monkeypatch)
+
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        upload_future = executor.submit(
+            admin_client.post,
+            f"/api/v1/nodes/{node_id}/files",
+            files={"upload": ("concurrent.png", _png(), "image/png")},
+        )
+        assert save_started.wait(timeout=2)
+        delete_future = executor.submit(admin_client.delete, f"/api/v1/files/{first['id']}")
+        reorder_future = executor.submit(
+            admin_client.post,
+            f"/api/v1/nodes/{node_id}/files/reorder",
+            json={"file_ids": [second["id"], first["id"]]},
+        )
+        try:
+            with pytest.raises(FutureTimeoutError):
+                delete_future.result(timeout=0.2)
+            with pytest.raises(FutureTimeoutError):
+                reorder_future.result(timeout=0.2)
+        finally:
+            release_save.set()
+        assert upload_future.result(timeout=5).status_code == 201
+        assert delete_future.result(timeout=5).status_code == 204
+        assert reorder_future.result(timeout=5).status_code == 400
+
+    detail = admin_client.get(f"/api/v1/commissions/{commission_id}").json()
+    files = next(node for node in detail["nodes"] if node["id"] == node_id)["files"]
+    assert [file["position"] for file in files] == [0, 1]
 
 
 def test_non_image_upload_has_no_dimensions_and_rejects_focal_point(admin_client: TestClient):
