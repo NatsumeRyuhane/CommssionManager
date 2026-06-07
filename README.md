@@ -124,9 +124,13 @@ from the dev Postgres (project `deploy`), so the two can run side by side.
    ```sh
    python3 deploy/setup.py --env prod
    cp deploy/.env.example deploy/.env
-   openssl rand -hex 32  # generate URL-safe values for SECRET_KEY and external DB_PASSWORD
+   openssl rand -hex 32  # generate ADMIN_PASSWORD
+   openssl rand -hex 32  # generate SECRET_KEY
+   openssl rand -hex 32  # generate external DB_PASSWORD, if needed
    ```
-   Replace the placeholders in `deploy/.env`; Compose auto-loads it for variable substitution.
+   Add the generated values to the matching keys in `deploy/.env`; `ADMIN_PASSWORD` and
+   `SECRET_KEY` are required for every production deployment. Compose auto-loads the file for
+   variable substitution.
    By default, the stack starts a bundled Postgres container and the commented `DB_*` settings
    are ignored. To use an external database without starting the bundled container, uncomment
    `COMPOSE_FILE` and all `DB_*` settings in `deploy/.env`. Set `CORS_ORIGINS` to a JSON array
