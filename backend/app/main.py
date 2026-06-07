@@ -3,9 +3,11 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.router import api_router
 from app.core.config import settings
+from app.middleware.upload_progress import UploadProgressMiddleware
 
 app = FastAPI(title="Commission Manager API", version="0.1.0")
 
+app.add_middleware(UploadProgressMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,

@@ -25,6 +25,7 @@ from app.core.config import settings  # noqa: E402
 from app.db import Base, get_db  # noqa: E402
 from app.main import app  # noqa: E402
 from app.storage.factory import get_storage  # noqa: E402
+from app.upload_progress import upload_progress  # noqa: E402
 
 
 @pytest.fixture(scope="session")
@@ -66,6 +67,7 @@ def storage_root(monkeypatch: pytest.MonkeyPatch, tmp_path) -> Generator[None, N
 @pytest.fixture
 def client(engine: Engine, storage_root: None) -> Generator[TestClient, None, None]:
     # Clean slate per test.
+    upload_progress.clear()
     with engine.begin() as conn:
         for table in reversed(Base.metadata.sorted_tables):
             conn.execute(text(f'TRUNCATE TABLE "{table.name}" RESTART IDENTITY CASCADE'))
@@ -83,6 +85,7 @@ def client(engine: Engine, storage_root: None) -> Generator[TestClient, None, No
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
+    upload_progress.clear()
 
 
 @pytest.fixture

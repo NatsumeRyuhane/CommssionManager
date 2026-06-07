@@ -1,4 +1,5 @@
 import io
+from uuid import uuid4
 
 from fastapi.testclient import TestClient
 from PIL import Image
@@ -63,6 +64,50 @@ def test_upload_records_image_metadata_and_serves_raw_bytes(admin_client: TestCl
     assert served.status_code == 200
     assert served.headers["content-type"] == "image/png"
     assert served.content == raw
+
+
+def test_upload_progress_can_be_queried_after_upload(admin_client: TestClient):
+    _, node_id = _commission(admin_client)
+    upload_id = str(uuid4())
+
+    uploaded = admin_client.post(
+        f"/api/v1/nodes/{node_id}/files",
+        headers={"X-Upload-ID": upload_id},
+        files={"upload": ("final.png", _png(), "image/png")},
+    )
+
+    assert uploaded.status_code == 201, uploaded.text
+    progress = admin_client.get(f"/api/v1/uploads/{upload_id}")
+    assert progress.status_code == 200, progress.text
+    assert progress.json() == {
+        "upload_id": upload_id,
+        "status": "completed",
+        "received_bytes": progress.json()["total_bytes"],
+        "total_bytes": progress.json()["total_bytes"],
+        "percentage": 100,
+        "detail": None,
+    }
+
+
+def test_upload_progress_records_failed_requests(admin_client: TestClient):
+    upload_id = str(uuid4())
+
+    uploaded = admin_client.post(
+        "/api/v1/nodes/999999/files",
+        headers={"X-Upload-ID": upload_id},
+        files={"upload": ("final.png", _png(), "image/png")},
+    )
+
+    assert uploaded.status_code == 404
+    progress = admin_client.get(f"/api/v1/uploads/{upload_id}")
+    assert progress.status_code == 200
+    assert progress.json()["status"] == "failed"
+    assert progress.json()["percentage"] == 100
+    assert progress.json()["detail"] == "Upload failed with HTTP status 404"
+
+
+def test_upload_progress_requires_edit_access(client: TestClient):
+    assert client.get(f"/api/v1/uploads/{uuid4()}").status_code == 401
 
 
 def test_non_image_upload_has_no_dimensions_and_rejects_focal_point(admin_client: TestClient):

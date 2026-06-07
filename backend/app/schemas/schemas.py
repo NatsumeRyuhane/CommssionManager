@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -250,6 +251,15 @@ class FileOut(BaseModel):
 
 class FileMove(BaseModel):
     node_id: int
+
+
+class UploadProgressOut(BaseModel):
+    upload_id: str
+    status: Literal["receiving", "processing", "completed", "failed"]
+    received_bytes: int
+    total_bytes: int | None = None
+    percentage: int | None = None
+    detail: str | None = None
 
 
 class NodeOut(BaseModel):

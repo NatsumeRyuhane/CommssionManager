@@ -68,4 +68,6 @@ See `docs/schema.dbml` for the canonical schema. App-layer invariants:
 - REST API under `/api/v1` (OpenAPI at `/docs`).
 - `GET /commissions/{id}/copy-json` returns the agent payload: internal id, key metadata, and
   `files_endpoint` / `public_images_endpoint` URLs — never credentials.
+- Optional `X-Upload-ID` UUIDs let agents poll `GET /uploads/{upload_id}` for temporary,
+  process-local upload progress. Percentages represent server-received multipart request bytes.
 - **MCP server is deferred** (Phase 3): a thin wrapper over this REST API.
