@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 
 import { api } from "../api/client";
 import type { CommissionDetail, CommissionFile, CommissionNode } from "../api/types";
-import { LifecycleStagesList } from "./LifecycleStagesList";
+import { LifecycleStagesList, type FileUploadPreview } from "./LifecycleStagesList";
 import { NodeDateModal } from "./NodeDateModal";
 
 /**
@@ -28,6 +28,9 @@ export function StagesEditor({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dateNode, setDateNode] = useState<CommissionNode | null>(null);
+  const [uploads, setUploads] = useState<FileUploadPreview[]>([]);
+  const uploadSequence = useRef(0);
+  const previewUrls = useRef(new Map<string, string>());
 
   const reload = useCallback(async () => {
     try {
@@ -40,6 +43,14 @@ export function StagesEditor({
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  useEffect(
+    () => () => {
+      for (const url of previewUrls.current.values()) URL.revokeObjectURL(url);
+      previewUrls.current.clear();
+    },
+    [],
+  );
 
   /**
    * Execute an async operation while managing busy and error state, reload the commission data on success, and invoke the optional `onChange` callback.
@@ -105,12 +116,80 @@ export function StagesEditor({
     void run(() => api.reorderNodes(commissionId, ids));
   }
 
+  function removeUpload(id: string) {
+    setUploads((current) => current.filter((upload) => upload.id !== id));
+    const previewUrl = previewUrls.current.get(id);
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+      previewUrls.current.delete(id);
+    }
+  }
+
   function upload(node: CommissionNode, files: FileList) {
-    void run(async () => {
-      for (const file of Array.from(files)) {
-        await api.uploadFile(node.id, file);
-      }
+    const pending = Array.from(files).map((file) => {
+      const id = `${node.id}-${Date.now()}-${uploadSequence.current++}`;
+      const isImage = file.type.startsWith("image/");
+      const previewUrl = isImage ? URL.createObjectURL(file) : null;
+      if (previewUrl) previewUrls.current.set(id, previewUrl);
+      return {
+        file,
+        preview: {
+          id,
+          nodeId: node.id,
+          fileName: file.name,
+          format: file.name.split(".").pop()?.toLowerCase() || "file",
+          isImage,
+          previewUrl,
+          progress: 0,
+          status: "uploading" as const,
+        },
+      };
     });
+
+    setUploads((current) => [...current, ...pending.map(({ preview }) => preview)]);
+    setBusy(true);
+    setError(null);
+
+    void Promise.allSettled(
+      pending.map(async ({ file, preview }) => {
+        try {
+          await api.uploadFile(node.id, file, {
+            onProgress: (progress) => {
+              setUploads((current) =>
+                current.map((upload) =>
+                  upload.id === preview.id ? { ...upload, progress } : upload,
+                ),
+              );
+            },
+          });
+          return preview.id;
+        } catch (uploadError) {
+          setUploads((current) =>
+            current.map((upload) =>
+              upload.id === preview.id
+                ? { ...upload, status: "failed", error: String(uploadError) }
+                : upload,
+            ),
+          );
+          throw uploadError;
+        }
+      }),
+    )
+      .then(async (results) => {
+        const succeededIds = results.flatMap((result) =>
+          result.status === "fulfilled" ? [result.value] : [],
+        );
+        const failed = results.length - succeededIds.length;
+        if (succeededIds.length > 0) {
+          await reload();
+          for (const id of succeededIds) removeUpload(id);
+          onChange?.();
+        }
+        if (failed > 0) {
+          setError(`${failed} ${failed === 1 ? "file" : "files"} failed to upload.`);
+        }
+      })
+      .finally(() => setBusy(false));
   }
 
   /**
@@ -174,9 +253,11 @@ export function StagesEditor({
         currentStage={detail.current_stage}
         coverFileId={detail.cover?.file_id ?? null}
         busy={busy}
+        uploads={uploads}
         onMoveFile={moveFile}
         onReorderNode={reorderStage}
         onUpload={upload}
+        onDismissUpload={removeUpload}
         onSetCover={(file) => void run(() => api.updateCommission(commissionId, { cover_file_id: file.id }))}
         onDeleteFile={(file) => {
           if (window.confirm(`Delete file “${file.label || file.format}”?`)) {

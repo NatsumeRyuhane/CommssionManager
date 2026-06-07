@@ -98,6 +98,37 @@ async function uploadForm<T>(path: string, form: FormData, method = "POST"): Pro
   return res.json() as Promise<T>;
 }
 
+function uploadFormWithProgress<T>(
+  path: string,
+  form: FormData,
+  onProgress?: (percentage: number) => void,
+): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${BASE}${path}`);
+    xhr.withCredentials = true;
+    xhr.responseType = "json";
+
+    xhr.upload.addEventListener("progress", (event) => {
+      if (!event.lengthComputable) return;
+      onProgress?.(Math.min(100, Math.round((event.loaded / event.total) * 100)));
+    });
+    xhr.addEventListener("load", () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(xhr.response as T);
+        return;
+      }
+      const detail =
+        typeof xhr.response?.detail === "string" ? xhr.response.detail : xhr.statusText;
+      reject(new ApiError(xhr.status, detail || "Upload failed"));
+    });
+    xhr.addEventListener("error", () => {
+      reject(new ApiError(0, "Upload failed because of a network error"));
+    });
+    xhr.send(form);
+  });
+}
+
 export const api = {
   me: () => request<MeResponse>("/auth/me"),
   login: (username: string, password: string) =>
@@ -181,11 +212,19 @@ export const api = {
   deleteNode: (nodeId: number) => request<void>(`/nodes/${nodeId}`, { method: "DELETE" }),
 
   // files
-  uploadFile: (nodeId: number, file: File, label?: string) => {
+  uploadFile: (
+    nodeId: number,
+    file: File,
+    options: { label?: string; onProgress?: (percentage: number) => void } = {},
+  ) => {
     const form = new FormData();
     form.append("upload", file);
-    if (label) form.append("label", label);
-    return uploadForm<CommissionFile>(`/nodes/${nodeId}/files`, form);
+    if (options.label) form.append("label", options.label);
+    return uploadFormWithProgress<CommissionFile>(
+      `/nodes/${nodeId}/files`,
+      form,
+      options.onProgress,
+    );
   },
   deleteFile: (fileId: number) => request<void>(`/files/${fileId}`, { method: "DELETE" }),
   moveFile: (fileId: number, nodeId: number) =>
