@@ -7,7 +7,7 @@ The deployment mode comes from CMGR_ENV in backend/.env (written by deploy/setup
     test  run the backend test suite    — pytest (ephemeral Postgres via testcontainers)
     prod  full Docker stack             — docker compose (db + api + web/nginx)
 
-    python3 main.py <start|stop|restart|upgrade|status|logs|test> [service]
+    python3 main.py <start|stop|restart|upgrade|status|logs|test|uninstall> [service] [--yes]
 
 Stdlib only; orchestrates uv, pnpm, and docker compose. Dev servers run as background
 processes tracked by pidfiles/logs under deploy/.run/.
@@ -119,26 +119,40 @@ def dev_logs(service: str | None) -> None:
 def prod_start() -> None:
     _require("docker")
     c.step("Full stack (build + up)")
-    c.run(c.compose(c.COMPOSE_FULL, "up", "-d", "--build"))
+    c.run(c.prod_compose("up", "-d", "--build", "--remove-orphans"), cwd=c.ROOT)
     print()
-    c.ok(c.color("1", f"App:  http://localhost:{c.PROD_WEB_PORT}"))
+    c.ok(c.color("1", f"App:  http://localhost:{c.prod_web_port()}"))
     c.info("status: python3 main.py status   |   logs: python3 main.py logs")
 
 
 def prod_stop() -> None:
     c.step("Stopping full stack")
-    c.run(c.compose(c.COMPOSE_FULL, "down"))
+    c.run(c.prod_compose("down", "--remove-orphans"), cwd=c.ROOT)
+    c.info("database volume, uploaded files, env files, and built images retained")
+
+
+def prod_uninstall(confirmed: bool) -> None:
+    if not confirmed:
+        c.die("uninstall deletes the bundled database volume and built images; rerun with --yes")
+    c.step("Uninstalling production stack")
+    c.warn("deleting containers, network, bundled database volume, and locally built images")
+    # Use the base file so the bundled database volume is removed even when external mode is active.
+    c.run(
+        c.compose(c.COMPOSE_FULL, "down", "--remove-orphans", "--volumes", "--rmi", "local"),
+        cwd=c.ROOT,
+    )
+    c.info("deploy/.env, backend/.env, uploaded files, and external databases retained")
 
 
 def prod_status() -> None:
     c.step("Prod status")
-    c.run(c.compose(c.COMPOSE_FULL, "ps"), check=False)
+    c.run(c.prod_compose("ps"), cwd=c.ROOT, check=False)
 
 
 def prod_logs(service: str | None) -> None:
     args = ["logs", "-f"] + ([service] if service else [])
     try:
-        c.run(c.compose(c.COMPOSE_FULL, *args), check=False)
+        c.run(c.prod_compose(*args), cwd=c.ROOT, check=False)
     except KeyboardInterrupt:
         pass
 
@@ -151,20 +165,24 @@ def prod_upgrade() -> None:
     stopped = False
     try:
         c.step("Stopping app containers")
-        c.run(c.compose(c.COMPOSE_FULL, "stop", "api", "web"))
+        c.run(c.prod_compose("stop", "api", "web"), cwd=c.ROOT)
         stopped = True
 
         _sync_repo_to_upstream()
 
         c.step("Full stack (build + up)")
-        c.run(c.compose(c.COMPOSE_FULL, "up", "-d", "--build"))
+        c.run(c.prod_compose("up", "-d", "--build", "--remove-orphans"), cwd=c.ROOT)
         print()
-        c.ok(c.color("1", f"App:  http://localhost:{c.PROD_WEB_PORT}"))
+        c.ok(c.color("1", f"App:  http://localhost:{c.prod_web_port()}"))
         c.info("status: python3 main.py status   |   logs: python3 main.py logs")
     except SystemExit:
         if stopped:
             c.warn("upgrade failed — attempting to bring app containers back online")
-            c.run(c.compose(c.COMPOSE_FULL, "up", "-d", "--build"), check=False)
+            c.run(
+                c.prod_compose("up", "-d", "--build", "--remove-orphans"),
+                cwd=c.ROOT,
+                check=False,
+            )
         raise
 
 
@@ -213,9 +231,10 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Run/control Commission Manager.")
     ap.add_argument(
         "command",
-        choices=["start", "stop", "restart", "upgrade", "status", "logs", "test"],
+        choices=["start", "stop", "restart", "upgrade", "status", "logs", "test", "uninstall"],
     )
     ap.add_argument("service", nargs="?", help="for logs: api|web (dev) or a compose service")
+    ap.add_argument("--yes", action="store_true", help="confirm destructive uninstall")
     if len(sys.argv) == 1:
         ap.print_help()
         return
@@ -240,6 +259,11 @@ def main() -> None:
         if mode != "prod":
             c.die("upgrade is only supported in prod mode (CMGR_ENV=prod)")
         prod_upgrade()
+        return
+    if args.command == "uninstall":
+        if mode != "prod":
+            c.die("uninstall is only supported in prod mode (CMGR_ENV=prod)")
+        prod_uninstall(args.yes)
         return
 
     handlers = {

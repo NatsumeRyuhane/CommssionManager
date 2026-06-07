@@ -59,6 +59,8 @@
 ### Deploy
 - [x] `deploy/docker-compose.dev.yml` (Postgres for local dev)
 - [x] `deploy/docker-compose.yml` (full stack: db + api + web)
+- [x] `deploy/.env.example` production configuration template with configurable app port and
+  optional external database mode that skips bundled Postgres
 - [x] Backend + frontend Dockerfiles, nginx for web
 - [x] Reproducible frontend image: pin `packageManager` (pnpm) + `.npmrc` so the build doesn't
   float pnpm versions or fail on the minimum-release-age supply-chain gate
@@ -68,6 +70,8 @@
   named volume
 - [x] `python3 main.py upgrade` for prod: stop app containers, discard non-runtime local changes,
   sync to upstream `main`, rebuild, and start
+- [x] `python3 main.py uninstall --yes` removes local production containers, bundled database
+  volume, and built images while retaining env files, uploads, and external databases
 - [x] `python3 main.py` with no arguments prints the management CLI usage guide
 
 ## Phase 2 — Breadth (deferred)

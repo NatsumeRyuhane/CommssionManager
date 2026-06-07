@@ -1,0 +1,13 @@
+# External database override. Select it in deploy/.env with:
+#   COMPOSE_FILE=deploy/docker-compose.yml:deploy/docker-compose.external-db.yml
+#
+# This disables the bundled Postgres service and constructs the API database URL
+# from the required DB_* settings.
+services:
+  postgres:
+    profiles: ["bundled-db"]
+
+  api:
+    environment:
+      CMGR_DATABASE_URL: postgresql+psycopg://${DB_USER:?DB_USER is required}:${DB_PASSWORD:?DB_PASSWORD is required}@${DB_HOST:?DB_HOST is required}:${DB_PORT:-5432}/${DB_NAME:?DB_NAME is required}
+    depends_on: !reset {}

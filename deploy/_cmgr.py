@@ -25,15 +25,17 @@ RUN_DIR = DEPLOY / ".run"  # pidfiles + captured logs for host (dev) processes
 
 ENV_FILE = BACKEND / ".env"
 ENV_EXAMPLE = BACKEND / ".env.example"
+PROD_ENV_FILE = DEPLOY / ".env"
 
 COMPOSE_DEV = DEPLOY / "docker-compose.dev.yml"
 COMPOSE_FULL = DEPLOY / "docker-compose.yml"
+COMPOSE_EXTERNAL_DB = DEPLOY / "docker-compose.external-db.yml"
 NGINX_CONF = DEPLOY / "nginx.conf"
 
 # Local dev service endpoints.
 API_PORT = 8000
 WEB_PORT = 5173
-PROD_WEB_PORT = 8080  # host port published by the full-stack web container
+DEFAULT_PROD_WEB_PORT = 8080
 
 # ---------------------------------------------------------------------------- output
 _TTY = sys.stdout.isatty()
@@ -107,6 +109,23 @@ def load_env(announce: bool = True) -> dict[str, str]:
 def env_mode(values: dict[str, str], default: str = "dev") -> str:
     mode = values.get("CMGR_ENV", "").strip().lower()
     return mode or default
+
+
+def prod_web_port() -> int:
+    """Return APP_PORT using the same shell-over-deploy/.env precedence as Compose."""
+    if "APP_PORT" in os.environ:
+        raw = os.environ["APP_PORT"]
+    else:
+        raw = read_env_file(PROD_ENV_FILE).get("APP_PORT")
+    if not raw:
+        return DEFAULT_PROD_WEB_PORT
+    try:
+        port = int(raw)
+    except ValueError:
+        die(f"invalid APP_PORT '{raw}' in environment or {PROD_ENV_FILE.relative_to(ROOT)}")
+    if not 1 <= port <= 65535:
+        die(f"APP_PORT must be between 1 and 65535, got {port}")
+    return port
 
 
 # ---------------------------------------------------------------------------- tools
@@ -230,3 +249,8 @@ def stop_bg(name: str, timeout: float = 8.0) -> bool:
 # ---------------------------------------------------------------------------- docker compose
 def compose(file: Path, *args: str) -> list[str]:
     return ["docker", "compose", "-f", str(file), *args]
+
+
+def prod_compose(*args: str) -> list[str]:
+    """Run from deploy/ so Compose reads deploy/.env and its optional COMPOSE_FILE."""
+    return ["docker", "compose", "--project-directory", str(DEPLOY), *args]

@@ -46,6 +46,7 @@ python3 main.py status              # what's running
 python3 main.py logs                # tail the dev server logs
 python3 main.py stop                # stop the dev servers
 python3 main.py upgrade             # prod: stop app containers, sync repo, rebuild, start
+python3 main.py uninstall --yes     # prod: remove local containers, DB volume, and built images
 python3 main.py test                # run the backend suite (any env)
 ```
 
@@ -113,29 +114,40 @@ pnpm build                        # production build (also type-checks)
 
 ## PROD — full self-hosted stack via Docker Compose
 
-The full stack (`deploy/docker-compose.yml`, compose project `cmgr`) builds and runs Postgres +
-the API + an nginx container that serves the built SPA and proxies `/api` to the API. It is
-isolated from the dev Postgres (project `deploy`), so the two can run side by side.
+The production stack (Compose project `cmgr`) builds and runs the API + an nginx container that
+serves the built SPA and proxies `/api` to the API. It uses the bundled Postgres service by
+default, or an external database when selected in `deploy/.env`. The bundled database is isolated
+from the dev Postgres (project `deploy`), so the two can run side by side.
 
-1. **Set strong secrets.** The compose file reads these from the environment (with insecure
-   fallbacks for convenience — **override them for any real deployment**). Put them in a
-   `deploy/.env` file (Compose auto-loads it for variable substitution) or export them:
+1. **Set up production mode and strong secrets.** The setup script checks Docker and deployment
+   assets, sets `CMGR_ENV=prod` in `backend/.env`, and skips host development dependencies:
    ```sh
-   # deploy/.env
-   POSTGRES_PASSWORD=<strong-db-password>
-   ADMIN_USERNAME=<your-admin>
-   ADMIN_PASSWORD=<strong-admin-password>
-   SECRET_KEY=<openssl rand -hex 32>          # JWT signing key, >= 32 bytes
-   CORS_ORIGINS=["https://your.domain"]        # JSON array of allowed origins
-   # optional: ACCESS_TOKEN_EXPIRE_MINUTES, STORAGE_BACKEND
+   python3 deploy/setup.py --env prod
+   cp deploy/.env.example deploy/.env
+   openssl rand -hex 32  # generate ADMIN_PASSWORD
+   openssl rand -hex 32  # generate SECRET_KEY
+   openssl rand -hex 32  # generate external DB_PASSWORD, if needed
    ```
-2. **Build and start** (build context is the repo root):
+   Add the generated values to the matching keys in `deploy/.env`; `ADMIN_PASSWORD` and
+   `SECRET_KEY` are required for every production deployment. Compose auto-loads the file for
+   variable substitution.
+   By default, the stack starts a bundled Postgres container and the commented `DB_*` settings
+   are ignored. To use an external database without starting the bundled container, uncomment
+   `COMPOSE_FILE` and all `DB_*` settings in `deploy/.env`. Set `CORS_ORIGINS` to a JSON array
+   containing the public app origin. Set `APP_PORT` to the host port where the app should listen;
+   it defaults to `8080`. The compose file has insecure fallback values for convenience, so
+   **override every required value for any real deployment**.
+2. **Build and start** with the managed script:
    ```sh
-   docker compose -f deploy/docker-compose.yml up -d --build
+   python3 main.py start
    ```
    The API container runs `alembic upgrade head` on startup, then serves on the internal
-   network; the web container publishes the app on **<http://localhost:8080>** (change the
-   `web` port mapping in the compose file to suit your host).
+   network; the web container publishes the app on `http://localhost:<APP_PORT>`.
+
+   To run Compose directly instead:
+   ```sh
+   docker compose --project-directory deploy up -d --build --remove-orphans
+   ```
 3. **Upgrade an existing deployment** from the checked-out branch's upstream:
    ```sh
    python3 main.py upgrade
@@ -144,13 +156,23 @@ isolated from the dev Postgres (project `deploy`), so the two can run side by si
    plus untracked non-ignored files (`git reset --hard` + `git clean -fd`), fetches/prunes, resets
    the repo to upstream `main`, and rebuilds/starts the stack. Ignored runtime data such as
    `data/`, `.env`, Docker volumes, and `deploy/.run/` is preserved.
-4. **Data** lives outside rebuilt containers. Postgres uses the named Docker volume
-   `cmgr_cmgr_pgdata`; uploaded files are bind-mounted from repo-root `data/storage` into the API
-   container at `/data/storage`. Back up both locations to preserve commissions and their files.
+4. **Data** lives outside rebuilt containers. Bundled Postgres uses the named Docker volume
+   `cmgr_cmgr_pgdata`; an external database must be backed up separately. Uploaded files are
+   bind-mounted from repo-root `data/storage` into the API container at `/data/storage`. Back up
+   the applicable database and uploaded files to preserve commissions and their files.
 
    If upgrading an older deployment that used the former `cmgr_cmgr_storage` Docker volume for
    uploads, copy that volume's contents into `data/storage` before switching to this compose file;
    otherwise the app will start with an empty upload directory.
+5. **Stop or uninstall.** `python3 main.py stop` removes the production containers and network,
+   but retains the bundled database volume, uploaded files, env files, and built images so the
+   stack can be started again. To permanently remove the local production containers, network,
+   bundled database volume, and built images:
+   ```sh
+   python3 main.py uninstall --yes
+   ```
+   Uninstall deliberately retains `deploy/.env`, `backend/.env`, `data/storage`, and any external
+   database. Delete retained files manually only after confirming they are no longer needed.
 
 ---
 

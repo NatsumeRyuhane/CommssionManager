@@ -114,13 +114,13 @@ def check_prod_assets(mode: str) -> None:
     if mode != "prod":
         return
     c.step("Prod deploy assets")
-    for path in (c.COMPOSE_FULL, c.NGINX_CONF):
+    for path in (c.COMPOSE_FULL, c.COMPOSE_EXTERNAL_DB, c.NGINX_CONF):
         if path.exists():
             c.ok(path.relative_to(c.ROOT).as_posix())
         else:
             c.die(f"missing {path.relative_to(c.ROOT)}")
     c.warn("prod uses fallback secrets unless overridden — set strong values in deploy/.env "
-           "(POSTGRES_PASSWORD, ADMIN_PASSWORD, SECRET_KEY, CORS_ORIGINS). See README.")
+           "(ADMIN_PASSWORD, SECRET_KEY, CORS_ORIGINS). See README.")
 
 
 def main() -> None:
