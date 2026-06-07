@@ -31,6 +31,7 @@
   - [x] `labels`, `characters`, `artists` read
   - [x] Case-insensitive taxonomy uniqueness and literal typeahead matching
   - [x] file upload -> storage object, image dimension probe
+  - [x] agent-queryable file upload progress via optional upload ID
   - [x] lifecycle node management (add/rename/reorder/delete + detached reparenting)
   - [x] `cover_file_id` validation (must be an image file of the commission; cleared on file delete)
 - [x] Seed script with sample data for dev

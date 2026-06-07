@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import io
 import mimetypes
+from typing import Annotated
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Response, UploadFile, status
+from fastapi import APIRouter, Depends, Form, Header, HTTPException, Response, UploadFile, status
 from PIL import Image
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
@@ -18,8 +20,9 @@ from app.models import (
     StorageBackend,
     StorageObject,
 )
-from app.schemas import FileMove, FileOut
+from app.schemas import FileMove, FileOut, UploadProgressOut
 from app.storage import get_storage
+from app.upload_progress import upload_progress
 
 router = APIRouter(tags=["files"])
 
@@ -31,6 +34,7 @@ async def upload_file(
     node_id: int,
     upload: UploadFile,
     label: str | None = Form(default=None),
+    upload_id: Annotated[UUID | None, Header(alias="X-Upload-ID")] = None,
     db: Session = Depends(get_db),
     _: Principal = Depends(require_edit),
 ):
@@ -80,6 +84,24 @@ async def upload_file(
     db.commit()
     db.refresh(file)
     return crud.file_out(file, None, crud.load_visibility_context(db))
+
+
+@router.get("/uploads/{upload_id}", response_model=UploadProgressOut)
+def get_upload_progress(
+    upload_id: UUID,
+    _: Principal = Depends(require_edit),
+):
+    progress = upload_progress.get(str(upload_id))
+    if progress is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Upload progress not found")
+    return UploadProgressOut(
+        upload_id=progress.upload_id,
+        status=progress.status,
+        received_bytes=progress.received_bytes,
+        total_bytes=progress.total_bytes,
+        percentage=progress.percentage,
+        detail=progress.detail,
+    )
 
 
 @router.get("/files/{file_id}/raw")
