@@ -667,6 +667,7 @@ def file_out(
     return FileOut(
         id=f.id,
         node_id=f.node_id,
+        position=f.position,
         format=f.format,
         label=f.label,
         is_image=f.is_image,
@@ -691,7 +692,7 @@ def node_out(
     visibility_context: VisibilityContext | None = None,
     include_private: bool = True,
 ) -> NodeOut:
-    files = node.files
+    files = sorted(node.files, key=lambda file: (file.position, file.id))
     if not include_private and visibility_context is not None:
         files = [
             file

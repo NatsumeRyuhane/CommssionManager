@@ -212,6 +212,7 @@ def _node_export(node: CommissionNode) -> dict[str, object]:
             {
                 "id": file.id,
                 "storage_object_id": file.storage_object_id,
+                "position": file.position,
                 "format": file.format,
                 "label": file.label,
                 "is_image": file.is_image,

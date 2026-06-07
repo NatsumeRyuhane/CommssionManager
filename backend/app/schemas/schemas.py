@@ -235,6 +235,7 @@ class AliasCreate(BaseModel):
 class FileOut(BaseModel):
     id: int
     node_id: int
+    position: int
     format: str
     label: str | None = None
     is_image: bool
@@ -250,6 +251,10 @@ class FileOut(BaseModel):
 
 class FileMove(BaseModel):
     node_id: int
+
+
+class FileReorder(BaseModel):
+    file_ids: list[int]
 
 
 class NodeOut(BaseModel):

@@ -111,6 +111,35 @@ def test_delete_node_reparents_files_to_detached(admin_client: TestClient):
     assert file_id in [f["id"] for f in detached["files"]]
 
 
+def test_delete_node_appends_files_to_detached_in_order(admin_client: TestClient):
+    c = _commission(admin_client)
+    sketching = _regular(c["nodes"])[0]
+    detached = next(n for n in c["nodes"] if n["is_detached"])
+    detached_file = admin_client.post(
+        f"/api/v1/nodes/{detached['id']}/files",
+        files={"upload": ("detached.png", _png_bytes(), "image/png")},
+    ).json()
+    first = admin_client.post(
+        f"/api/v1/nodes/{sketching['id']}/files",
+        files={"upload": ("first.png", _png_bytes(), "image/png")},
+    ).json()
+    second = admin_client.post(
+        f"/api/v1/nodes/{sketching['id']}/files",
+        files={"upload": ("second.png", _png_bytes(), "image/png")},
+    ).json()
+
+    assert admin_client.delete(f"/api/v1/nodes/{sketching['id']}").status_code == 204
+
+    detail = admin_client.get(f"/api/v1/commissions/{c['id']}").json()
+    detached = next(n for n in detail["nodes"] if n["is_detached"])
+    assert [file["id"] for file in detached["files"]] == [
+        detached_file["id"],
+        first["id"],
+        second["id"],
+    ]
+    assert [file["position"] for file in detached["files"]] == [0, 1, 2]
+
+
 def test_node_management_requires_auth(client: TestClient):
     # anonymous create commission is blocked, so just probe the write endpoints directly
     assert client.post("/api/v1/commissions/1/nodes", json={"name": "x"}).status_code == 401

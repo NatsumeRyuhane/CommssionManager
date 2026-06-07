@@ -53,6 +53,7 @@ def test_upload_records_image_metadata_and_serves_raw_bytes(admin_client: TestCl
 
     assert uploaded["format"] == "png"
     assert uploaded["label"] == "final render"
+    assert uploaded["position"] == 0
     assert uploaded["is_image"] is True
     assert uploaded["width"] == 31
     assert uploaded["height"] == 47
@@ -131,6 +132,75 @@ def test_move_file_between_nodes_in_same_commission(admin_client: TestClient):
     assert moved_to_detached.json()["node_id"] == detached["id"]
 
 
+def test_upload_move_delete_and_reorder_preserve_node_file_order(admin_client: TestClient):
+    res = admin_client.post(
+        "/api/v1/commissions",
+        json={"title": "Order files test", "node_names": ["Sketching", "Delivered"]},
+    )
+    assert res.status_code == 201, res.text
+    commission = res.json()
+    sketching = next(n for n in commission["nodes"] if n["name"] == "Sketching")
+    delivered = next(n for n in commission["nodes"] if n["name"] == "Delivered")
+    first = _upload(admin_client, delivered["id"], "first.png", _png(), "image/png")
+    second = _upload(admin_client, delivered["id"], "second.png", _png(), "image/png")
+    moved = _upload(admin_client, sketching["id"], "moved.png", _png(), "image/png")
+    assert [first["position"], second["position"]] == [0, 1]
+
+    moved_res = admin_client.patch(
+        f"/api/v1/files/{moved['id']}/node", json={"node_id": delivered["id"]}
+    )
+    assert moved_res.status_code == 200, moved_res.text
+    assert moved_res.json()["position"] == 2
+
+    reordered_ids = [moved["id"], first["id"], second["id"]]
+    reordered = admin_client.post(
+        f"/api/v1/nodes/{delivered['id']}/files/reorder",
+        json={"file_ids": reordered_ids},
+    )
+    assert reordered.status_code == 200, reordered.text
+    assert [file["id"] for file in reordered.json()] == reordered_ids
+    assert [file["position"] for file in reordered.json()] == [0, 1, 2]
+
+    detail = admin_client.get(f"/api/v1/commissions/{commission['id']}").json()
+    delivered_files = next(n for n in detail["nodes"] if n["id"] == delivered["id"])["files"]
+    assert [file["id"] for file in delivered_files] == reordered_ids
+
+    deleted = admin_client.delete(f"/api/v1/files/{first['id']}")
+    assert deleted.status_code == 204
+    detail = admin_client.get(f"/api/v1/commissions/{commission['id']}").json()
+    delivered_files = next(n for n in detail["nodes"] if n["id"] == delivered["id"])["files"]
+    assert [file["id"] for file in delivered_files] == [moved["id"], second["id"]]
+    assert [file["position"] for file in delivered_files] == [0, 1]
+
+
+def test_reorder_files_rejects_incomplete_or_cross_node_ids(admin_client: TestClient):
+    res = admin_client.post(
+        "/api/v1/commissions",
+        json={"title": "Invalid file order test", "node_names": ["Sketching", "Delivered"]},
+    )
+    commission = res.json()
+    sketching = next(n for n in commission["nodes"] if n["name"] == "Sketching")
+    delivered = next(n for n in commission["nodes"] if n["name"] == "Delivered")
+    first = _upload(admin_client, delivered["id"], "first.png", _png(), "image/png")
+    second = _upload(admin_client, delivered["id"], "second.png", _png(), "image/png")
+    other = _upload(admin_client, sketching["id"], "other.png", _png(), "image/png")
+
+    incomplete = admin_client.post(
+        f"/api/v1/nodes/{delivered['id']}/files/reorder",
+        json={"file_ids": [first["id"]]},
+    )
+    assert incomplete.status_code == 400
+    cross_node = admin_client.post(
+        f"/api/v1/nodes/{delivered['id']}/files/reorder",
+        json={"file_ids": [first["id"], other["id"]]},
+    )
+    assert cross_node.status_code == 400
+
+    detail = admin_client.get(f"/api/v1/commissions/{commission['id']}").json()
+    delivered_files = next(n for n in detail["nodes"] if n["id"] == delivered["id"])["files"]
+    assert [file["id"] for file in delivered_files] == [first["id"], second["id"]]
+
+
 def test_move_file_rejects_nodes_from_other_commissions(admin_client: TestClient):
     source_commission_id, source_node_id = _commission(admin_client)
     _, other_node_id = _commission(admin_client)
@@ -147,6 +217,7 @@ def test_move_file_rejects_nodes_from_other_commissions(admin_client: TestClient
 
 def test_move_file_requires_auth(client: TestClient):
     assert client.patch("/api/v1/files/1/node", json={"node_id": 1}).status_code == 401
+    assert client.post("/api/v1/nodes/1/files/reorder", json={"file_ids": []}).status_code == 401
 
 
 def test_delete_file_removes_it_from_api_results_and_raw_access(admin_client: TestClient):

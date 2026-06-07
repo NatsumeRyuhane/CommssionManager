@@ -209,6 +209,7 @@ Table commission_files {
   id                integer   [pk, increment]
   node_id           integer   [not null, ref: > commission_nodes.id, Note: 'Files belong to a node, not directly to a commission. Use the detached node for uncategorized files.']
   storage_object_id integer   [not null, ref: - storage_objects.id]
+  position          integer   [not null, Note: 'Admin-defined ordering within the lifecycle node; lower values come first.']
   format            varchar   [not null, Note: 'File extension: png, jpg, psd, sai2, etc.']
   label             varchar   [Note: 'Optional human-readable description, e.g. "with background", "no watermark", "差分 A"']
   // Image-specific fields — null for non-image files (psd, sai2, design files, etc.)
@@ -219,6 +220,10 @@ Table commission_files {
   focal_y           float     [Note: 'Relative Y of the main subject center (0.0–1.0) for thumbnail cropping; null when is_image = false']
   visibility_override visibility [Note: 'Nullable file-level override. Highest-precedence visibility control for public image filtering, except files in detached nodes are always private.']
   created_at        timestamp [default: `now()`]
+
+  indexes {
+    (node_id, position) [unique]
+  }
 
   Note: 'Any file received as part of a commission: rendered images, source files, design docs, etc. Only files with is_image = true are eligible as cover art.'
 }
