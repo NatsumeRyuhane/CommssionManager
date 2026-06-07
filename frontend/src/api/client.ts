@@ -232,6 +232,11 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ node_id: nodeId }),
     }),
+  reorderFiles: (nodeId: number, fileIds: number[]) =>
+    request<CommissionFile[]>(`/nodes/${nodeId}/files/reorder`, {
+      method: "POST",
+      body: JSON.stringify({ file_ids: fileIds }),
+    }),
   setFocal: (fileId: number, focalX: number, focalY: number) => {
     const form = new FormData();
     form.append("focal_x", String(focalX));

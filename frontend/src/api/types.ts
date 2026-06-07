@@ -41,6 +41,7 @@ export interface CommissionListItem {
 export interface CommissionFile {
   id: number;
   node_id: number;
+  position: number;
   format: string;
   label: string | null;
   is_image: boolean;
