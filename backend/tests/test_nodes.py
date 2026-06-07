@@ -1,7 +1,12 @@
 import io
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
+from threading import Event
 
+import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
+
+from app.storage import get_storage
 
 
 def _commission(client: TestClient, **overrides) -> dict:
@@ -109,6 +114,84 @@ def test_delete_node_reparents_files_to_detached(admin_client: TestClient):
     assert "Sketching" not in node_names
     detached = next(n for n in detail["nodes"] if n["is_detached"])
     assert file_id in [f["id"] for f in detached["files"]]
+
+
+def test_delete_node_appends_files_to_detached_in_order(admin_client: TestClient):
+    c = _commission(admin_client)
+    sketching = _regular(c["nodes"])[0]
+    detached = next(n for n in c["nodes"] if n["is_detached"])
+    detached_file = admin_client.post(
+        f"/api/v1/nodes/{detached['id']}/files",
+        files={"upload": ("detached.png", _png_bytes(), "image/png")},
+    ).json()
+    first = admin_client.post(
+        f"/api/v1/nodes/{sketching['id']}/files",
+        files={"upload": ("first.png", _png_bytes(), "image/png")},
+    ).json()
+    second = admin_client.post(
+        f"/api/v1/nodes/{sketching['id']}/files",
+        files={"upload": ("second.png", _png_bytes(), "image/png")},
+    ).json()
+
+    assert admin_client.delete(f"/api/v1/nodes/{sketching['id']}").status_code == 204
+
+    detail = admin_client.get(f"/api/v1/commissions/{c['id']}").json()
+    detached = next(n for n in detail["nodes"] if n["is_detached"])
+    assert [file["id"] for file in detached["files"]] == [
+        detached_file["id"],
+        first["id"],
+        second["id"],
+    ]
+    assert [file["position"] for file in detached["files"]] == [0, 1, 2]
+
+
+def test_delete_node_waits_for_in_flight_upload(
+    admin_client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    commission = _commission(admin_client)
+    sketching = _regular(commission["nodes"])[0]
+    existing = admin_client.post(
+        f"/api/v1/nodes/{sketching['id']}/files",
+        files={"upload": ("existing.png", _png_bytes(), "image/png")},
+    )
+    assert existing.status_code == 201
+
+    save_started = Event()
+    release_save = Event()
+    storage = get_storage()
+    original_save = storage.save
+
+    def blocked_save(key: str, data: bytes):
+        save_started.set()
+        if not release_save.wait(timeout=5):
+            raise TimeoutError("test did not release blocked storage save")
+        return original_save(key, data)
+
+    monkeypatch.setattr(storage, "save", blocked_save)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        upload_future = executor.submit(
+            admin_client.post,
+            f"/api/v1/nodes/{sketching['id']}/files",
+            files={"upload": ("concurrent.png", _png_bytes(), "image/png")},
+        )
+        assert save_started.wait(timeout=2)
+        delete_future = executor.submit(admin_client.delete, f"/api/v1/nodes/{sketching['id']}")
+        try:
+            with pytest.raises(FutureTimeoutError):
+                delete_future.result(timeout=0.2)
+        finally:
+            release_save.set()
+        concurrent = upload_future.result(timeout=5)
+        assert concurrent.status_code == 201, concurrent.text
+        assert delete_future.result(timeout=5).status_code == 204
+
+    detail = admin_client.get(f"/api/v1/commissions/{commission['id']}").json()
+    detached = next(node for node in detail["nodes"] if node["is_detached"])
+    assert [file["id"] for file in detached["files"]] == [
+        existing.json()["id"],
+        concurrent.json()["id"],
+    ]
+    assert [file["position"] for file in detached["files"]] == [0, 1]
 
 
 def test_node_management_requires_auth(client: TestClient):

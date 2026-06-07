@@ -5,7 +5,7 @@ import mimetypes
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Response, UploadFile, status
 from PIL import Image
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.api.v1 import crud
@@ -18,12 +18,38 @@ from app.models import (
     StorageBackend,
     StorageObject,
 )
-from app.schemas import FileMove, FileOut
+from app.schemas import FileMove, FileOut, FileReorder
 from app.storage import get_storage
 
 router = APIRouter(tags=["files"])
 
 IMAGE_FORMATS = {"png", "jpg", "jpeg", "webp", "gif", "bmp", "tiff"}
+
+
+def _next_position(db: Session, node_id: int) -> int:
+    return db.scalar(
+        select(func.coalesce(func.max(CommissionFile.position), -1) + 1).where(
+            CommissionFile.node_id == node_id
+        )
+    )
+
+
+def _resequence_node_files(db: Session, node_id: int) -> list[CommissionFile]:
+    files = list(
+        db.scalars(
+            select(CommissionFile)
+            .where(CommissionFile.node_id == node_id)
+            .order_by(CommissionFile.position, CommissionFile.id)
+        )
+    )
+    offset = max((file.position for file in files), default=-1) + len(files) + 1
+    for index, file in enumerate(files):
+        file.position = offset + index
+    db.flush()
+    for index, file in enumerate(files):
+        file.position = index
+    db.flush()
+    return files
 
 
 @router.post("/nodes/{node_id}/files", response_model=FileOut, status_code=status.HTTP_201_CREATED)
@@ -34,7 +60,9 @@ async def upload_file(
     db: Session = Depends(get_db),
     _: Principal = Depends(require_edit),
 ):
-    node = db.get(CommissionNode, node_id)
+    node = db.scalar(
+        select(CommissionNode).where(CommissionNode.id == node_id).with_for_update()
+    )
     if node is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Node not found")
 
@@ -68,6 +96,7 @@ async def upload_file(
     file = CommissionFile(
         node_id=node_id,
         storage_object_id=obj.id,
+        position=_next_position(db, node_id),
         format=fmt or "bin",
         label=label,
         is_image=is_image,
@@ -137,20 +166,74 @@ def move_file(
     file = db.get(CommissionFile, file_id)
     if file is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
-    target = db.get(CommissionNode, body.node_id)
+    source_node_id = file.node_id
+    locked_nodes = {
+        node.id: node
+        for node in db.scalars(
+            select(CommissionNode)
+            .where(CommissionNode.id.in_([source_node_id, body.node_id]))
+            .order_by(CommissionNode.id)
+            .with_for_update()
+        )
+    }
+    target = locked_nodes.get(body.node_id)
     if target is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Node not found")
-    if target.commission_id != file.node.commission_id:
+    source = locked_nodes.get(source_node_id)
+    if source is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source node not found")
+    db.refresh(file)
+    if file.node_id != source_node_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="File moved concurrently; retry the request",
+        )
+    if target.commission_id != source.commission_id:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="node_id must belong to the same commission as the file",
         )
 
-    file.node_id = target.id
+    if file.node_id != target.id:
+        file.position = _next_position(db, target.id)
+        file.node_id = target.id
+        db.flush()
+        _resequence_node_files(db, source_node_id)
     db.commit()
     db.refresh(file)
     cover_id = target.commission.meta.cover_file_id if target.commission.meta else None
     return crud.file_out(file, cover_id, crud.load_visibility_context(db))
+
+
+@router.post("/nodes/{node_id}/files/reorder", response_model=list[FileOut])
+def reorder_files(
+    node_id: int,
+    body: FileReorder,
+    db: Session = Depends(get_db),
+    _: Principal = Depends(require_edit),
+):
+    node = db.scalar(
+        select(CommissionNode).where(CommissionNode.id == node_id).with_for_update()
+    )
+    if node is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Node not found")
+    files = {file.id: file for file in node.files}
+    if len(body.file_ids) != len(files) or set(body.file_ids) != set(files):
+        raise HTTPException(
+            status_code=400,
+            detail="file_ids must list exactly the node's files",
+        )
+
+    offset = max((file.position for file in files.values()), default=-1) + len(files) + 1
+    for index, file_id in enumerate(body.file_ids):
+        files[file_id].position = offset + index
+    db.flush()
+    for index, file_id in enumerate(body.file_ids):
+        files[file_id].position = index
+    db.commit()
+    visibility_context = crud.load_visibility_context(db)
+    cover_id = node.commission.meta.cover_file_id if node.commission.meta else None
+    return [crud.file_out(files[file_id], cover_id, visibility_context) for file_id in body.file_ids]
 
 
 @router.delete("/files/{file_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -162,13 +245,19 @@ def delete_file(
     file = db.get(CommissionFile, file_id)
     if file is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
+    db.scalar(
+        select(CommissionNode).where(CommissionNode.id == file.node_id).with_for_update()
+    )
     obj = db.get(StorageObject, file.storage_object_id)
+    node_id = file.node_id
     db.execute(
         update(CommissionMetadata)
         .where(CommissionMetadata.cover_file_id == file_id)
         .values(cover_file_id=None)
     )
     db.delete(file)
+    db.flush()
+    _resequence_node_files(db, node_id)
     if obj:
         try:
             get_storage().delete(obj.key, bucket=obj.bucket)

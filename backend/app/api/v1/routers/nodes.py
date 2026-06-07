@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.v1 import crud
@@ -135,21 +135,45 @@ def delete_node(
     if node.is_detached:
         raise HTTPException(status_code=400, detail="The detached node cannot be deleted")
 
-    detached = db.scalar(
+    detached_candidate = db.scalar(
         select(CommissionNode).where(
             CommissionNode.commission_id == node.commission_id,
             CommissionNode.is_detached.is_(True),
         )
     )
+    if detached_candidate is None:
+        raise HTTPException(status_code=500, detail="Commission is missing its detached node")
+    locked_nodes = {
+        locked.id: locked
+        for locked in db.scalars(
+            select(CommissionNode)
+            .where(CommissionNode.id.in_([node.id, detached_candidate.id]))
+            .order_by(CommissionNode.id)
+            .with_for_update()
+        )
+    }
+    node = locked_nodes.get(node.id)
+    detached = locked_nodes.get(detached_candidate.id)
+    if node is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Node not found")
     if detached is None:
         raise HTTPException(status_code=500, detail="Commission is missing its detached node")
 
-    # reparent this node's files to the detached node, then drop the node
-    db.execute(
-        update(CommissionFile)
-        .where(CommissionFile.node_id == node.id)
-        .values(node_id=detached.id)
+    # Reparent in the existing order and append after any detached files.
+    detached_positions = [
+        file.position for file in detached.files
+    ]
+    next_position = max(detached_positions, default=-1) + 1
+    files = list(
+        db.scalars(
+            select(CommissionFile)
+            .where(CommissionFile.node_id == node.id)
+            .order_by(CommissionFile.position, CommissionFile.id)
+        )
     )
-    db.expire(node, ["files"])
+    for index, file in enumerate(files):
+        file.position = next_position + index
+        file.node_id = detached.id
+    db.flush()
     db.delete(node)
     db.commit()

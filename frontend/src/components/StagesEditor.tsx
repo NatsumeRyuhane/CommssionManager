@@ -116,6 +116,18 @@ export function StagesEditor({
     void run(() => api.reorderNodes(commissionId, ids));
   }
 
+  function reorderFile(nodeId: number, draggedFileId: number, targetFileId: number) {
+    const node = detail?.nodes.find((item) => item.id === nodeId);
+    if (!node) return;
+    const ids = node.files.map((file) => file.id);
+    const from = ids.indexOf(draggedFileId);
+    const to = ids.indexOf(targetFileId);
+    if (from === -1 || to === -1 || from === to) return;
+    const [moved] = ids.splice(from, 1);
+    ids.splice(to, 0, moved);
+    void run(() => api.reorderFiles(nodeId, ids));
+  }
+
   function removeUpload(id: string) {
     setUploads((current) => current.filter((upload) => upload.id !== id));
     const previewUrl = previewUrls.current.get(id);
@@ -125,8 +137,8 @@ export function StagesEditor({
     }
   }
 
-  function upload(node: CommissionNode, files: FileList) {
-    const pending = Array.from(files).map((file) => {
+  function upload(node: CommissionNode, files: File[]) {
+    const pending = files.map((file) => {
       const id = `${node.id}-${Date.now()}-${uploadSequence.current++}`;
       const isImage = file.type.startsWith("image/");
       const previewUrl = isImage ? URL.createObjectURL(file) : null;
@@ -255,6 +267,7 @@ export function StagesEditor({
         busy={busy}
         uploads={uploads}
         onMoveFile={moveFile}
+        onReorderFile={reorderFile}
         onReorderNode={reorderStage}
         onUpload={upload}
         onDismissUpload={removeUpload}

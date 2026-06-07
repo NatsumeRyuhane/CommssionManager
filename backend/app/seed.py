@@ -91,6 +91,7 @@ def run(n: int = 16) -> None:
             file = CommissionFile(
                 node_id=delivered.id,
                 storage_object_id=obj.id,
+                position=0,
                 format="png",
                 is_image=True,
                 width=w,

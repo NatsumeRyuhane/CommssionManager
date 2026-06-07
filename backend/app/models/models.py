@@ -313,11 +313,15 @@ class CommissionNode(Base):
         back_populates="node",
         cascade="all, delete-orphan",
         foreign_keys="CommissionFile.node_id",
+        order_by="CommissionFile.position",
     )
 
 
 class CommissionFile(Base):
     __tablename__ = "commission_files"
+    __table_args__ = (
+        UniqueConstraint("node_id", "position", name="uq_commission_files_node_position"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     node_id: Mapped[int] = mapped_column(
@@ -328,6 +332,7 @@ class CommissionFile(Base):
     )
     format: Mapped[str] = mapped_column(String, nullable=False)
     label: Mapped[str | None] = mapped_column(String)
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
     is_image: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     width: Mapped[int | None] = mapped_column(Integer)
     height: Mapped[int | None] = mapped_column(Integer)
