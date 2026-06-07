@@ -139,7 +139,7 @@ def delete_node(
         select(CommissionNode).where(
             CommissionNode.commission_id == node.commission_id,
             CommissionNode.is_detached.is_(True),
-        )
+        ).with_for_update()
     )
     if detached is None:
         raise HTTPException(status_code=500, detail="Commission is missing its detached node")

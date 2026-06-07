@@ -190,7 +190,7 @@ function LifecycleStage({
   const [dropActive, setDropActive] = useState(false);
   const canMove = Boolean(onMoveFile);
   const canReorderFiles = Boolean(onReorderFile);
-  const canUpload = Boolean(onUpload && !node.is_detached);
+  const canUpload = Boolean(onUpload && !node.is_detached && !busy);
   const canReorder = Boolean(onReorderNode && !node.is_detached);
   const uploadingCount = uploads.filter((upload) => upload.status === "uploading").length;
   const failedCount = uploads.length - uploadingCount;

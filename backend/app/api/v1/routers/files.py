@@ -60,7 +60,9 @@ async def upload_file(
     db: Session = Depends(get_db),
     _: Principal = Depends(require_edit),
 ):
-    node = db.get(CommissionNode, node_id)
+    node = db.scalar(
+        select(CommissionNode).where(CommissionNode.id == node_id).with_for_update()
+    )
     if node is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Node not found")
 
@@ -164,7 +166,9 @@ def move_file(
     file = db.get(CommissionFile, file_id)
     if file is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
-    target = db.get(CommissionNode, body.node_id)
+    target = db.scalar(
+        select(CommissionNode).where(CommissionNode.id == body.node_id).with_for_update()
+    )
     if target is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Node not found")
     if target.commission_id != file.node.commission_id:
@@ -192,7 +196,9 @@ def reorder_files(
     db: Session = Depends(get_db),
     _: Principal = Depends(require_edit),
 ):
-    node = db.get(CommissionNode, node_id)
+    node = db.scalar(
+        select(CommissionNode).where(CommissionNode.id == node_id).with_for_update()
+    )
     if node is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Node not found")
     files = {file.id: file for file in node.files}
@@ -223,6 +229,9 @@ def delete_file(
     file = db.get(CommissionFile, file_id)
     if file is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
+    db.scalar(
+        select(CommissionNode).where(CommissionNode.id == file.node_id).with_for_update()
+    )
     obj = db.get(StorageObject, file.storage_object_id)
     node_id = file.node_id
     db.execute(

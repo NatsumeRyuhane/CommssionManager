@@ -1,4 +1,5 @@
 import io
+from concurrent.futures import ThreadPoolExecutor
 
 from fastapi.testclient import TestClient
 from PIL import Image
@@ -64,6 +65,24 @@ def test_upload_records_image_metadata_and_serves_raw_bytes(admin_client: TestCl
     assert served.status_code == 200
     assert served.headers["content-type"] == "image/png"
     assert served.content == raw
+
+
+def test_parallel_uploads_receive_distinct_positions(admin_client: TestClient):
+    commission_id, node_id = _commission(admin_client)
+
+    def upload(index: int):
+        return admin_client.post(
+            f"/api/v1/nodes/{node_id}/files",
+            files={"upload": (f"parallel-{index}.png", _png(), "image/png")},
+        )
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        results = list(executor.map(upload, range(4)))
+
+    assert [result.status_code for result in results] == [201, 201, 201, 201]
+    detail = admin_client.get(f"/api/v1/commissions/{commission_id}").json()
+    files = next(node for node in detail["nodes"] if node["id"] == node_id)["files"]
+    assert [file["position"] for file in files] == [0, 1, 2, 3]
 
 
 def test_non_image_upload_has_no_dimensions_and_rejects_focal_point(admin_client: TestClient):
