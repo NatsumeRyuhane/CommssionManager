@@ -166,19 +166,35 @@ def move_file(
     file = db.get(CommissionFile, file_id)
     if file is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
-    target = db.scalar(
-        select(CommissionNode).where(CommissionNode.id == body.node_id).with_for_update()
-    )
+    source_node_id = file.node_id
+    locked_nodes = {
+        node.id: node
+        for node in db.scalars(
+            select(CommissionNode)
+            .where(CommissionNode.id.in_([source_node_id, body.node_id]))
+            .order_by(CommissionNode.id)
+            .with_for_update()
+        )
+    }
+    target = locked_nodes.get(body.node_id)
     if target is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Node not found")
-    if target.commission_id != file.node.commission_id:
+    source = locked_nodes.get(source_node_id)
+    if source is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source node not found")
+    db.refresh(file)
+    if file.node_id != source_node_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="File moved concurrently; retry the request",
+        )
+    if target.commission_id != source.commission_id:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="node_id must belong to the same commission as the file",
         )
 
     if file.node_id != target.id:
-        source_node_id = file.node_id
         file.position = _next_position(db, target.id)
         file.node_id = target.id
         db.flush()

@@ -135,12 +135,27 @@ def delete_node(
     if node.is_detached:
         raise HTTPException(status_code=400, detail="The detached node cannot be deleted")
 
-    detached = db.scalar(
+    detached_candidate = db.scalar(
         select(CommissionNode).where(
             CommissionNode.commission_id == node.commission_id,
             CommissionNode.is_detached.is_(True),
-        ).with_for_update()
+        )
     )
+    if detached_candidate is None:
+        raise HTTPException(status_code=500, detail="Commission is missing its detached node")
+    locked_nodes = {
+        locked.id: locked
+        for locked in db.scalars(
+            select(CommissionNode)
+            .where(CommissionNode.id.in_([node.id, detached_candidate.id]))
+            .order_by(CommissionNode.id)
+            .with_for_update()
+        )
+    }
+    node = locked_nodes.get(node.id)
+    detached = locked_nodes.get(detached_candidate.id)
+    if node is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Node not found")
     if detached is None:
         raise HTTPException(status_code=500, detail="Commission is missing its detached node")
 
