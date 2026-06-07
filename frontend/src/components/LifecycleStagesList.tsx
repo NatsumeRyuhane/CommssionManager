@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
-import { Star, Trash2, Upload } from "lucide-react";
+import { Star, Trash2, Upload, X } from "lucide-react";
 
 import type { CommissionFile, CommissionNode } from "../api/types";
 import { Chip } from "./Chip";
@@ -7,14 +7,28 @@ import { Cover } from "./Cover";
 
 const NODE_DRAG_TYPE = "application/x-cmgr-node-id";
 
+export interface FileUploadPreview {
+  id: string;
+  nodeId: number;
+  fileName: string;
+  format: string;
+  isImage: boolean;
+  previewUrl: string | null;
+  progress: number;
+  status: "uploading" | "failed";
+  error?: string;
+}
+
 interface LifecycleStagesListProps {
   nodes: CommissionNode[];
   currentStage?: string | null;
   coverFileId?: number | null;
   busy?: boolean;
+  uploads?: FileUploadPreview[];
   onMoveFile?: (file: CommissionFile, targetNodeId: number) => void;
   onReorderNode?: (draggedNodeId: number, targetNodeId: number) => void;
   onUpload?: (node: CommissionNode, files: FileList) => void;
+  onDismissUpload?: (id: string) => void;
   onSetCover?: (file: CommissionFile) => void;
   onDeleteFile?: (file: CommissionFile) => void;
   onEditDate?: (node: CommissionNode) => void;
@@ -42,9 +56,11 @@ export function LifecycleStagesList({
   currentStage,
   coverFileId,
   busy = false,
+  uploads = [],
   onMoveFile,
   onReorderNode,
   onUpload,
+  onDismissUpload,
   onSetCover,
   onDeleteFile,
   onEditDate,
@@ -67,10 +83,12 @@ export function LifecycleStagesList({
           currentStage={currentStage}
           coverFileId={coverFileId}
           busy={busy}
+          uploads={uploads.filter((upload) => upload.nodeId === node.id)}
           filesById={filesById}
           onMoveFile={onMoveFile}
           onReorderNode={onReorderNode}
           onUpload={onUpload}
+          onDismissUpload={onDismissUpload}
           onSetCover={onSetCover}
           onDeleteFile={onDeleteFile}
           onEditDate={onEditDate}
@@ -106,10 +124,12 @@ function LifecycleStage({
   currentStage,
   coverFileId,
   busy,
+  uploads,
   filesById,
   onMoveFile,
   onReorderNode,
   onUpload,
+  onDismissUpload,
   onSetCover,
   onDeleteFile,
   onEditDate,
@@ -119,10 +139,12 @@ function LifecycleStage({
   currentStage?: string | null;
   coverFileId?: number | null;
   busy: boolean;
+  uploads: FileUploadPreview[];
   filesById: Map<number, CommissionFile>;
   onMoveFile?: (file: CommissionFile, targetNodeId: number) => void;
   onReorderNode?: (draggedNodeId: number, targetNodeId: number) => void;
   onUpload?: (node: CommissionNode, files: FileList) => void;
+  onDismissUpload?: (id: string) => void;
   onSetCover?: (file: CommissionFile) => void;
   onDeleteFile?: (file: CommissionFile) => void;
   onEditDate?: (node: CommissionNode) => void;
@@ -133,6 +155,8 @@ function LifecycleStage({
   const canMove = Boolean(onMoveFile);
   const canUpload = Boolean(onUpload && !node.is_detached);
   const canReorder = Boolean(onReorderNode && !node.is_detached);
+  const uploadingCount = uploads.filter((upload) => upload.status === "uploading").length;
+  const failedCount = uploads.length - uploadingCount;
 
   function drop(e: DragEvent<HTMLDivElement>) {
     e.preventDefault();
@@ -181,7 +205,11 @@ function LifecycleStage({
         <strong>{node.name}</strong>
         {node.is_detached && <Chip kind="rating">detached</Chip>}
         {node.name === currentStage && <Chip kind="cat">current</Chip>}
-        <span className="mono-sm muted">{node.files.length} files</span>
+        <span className="mono-sm muted">
+          {node.files.length} files
+          {uploadingCount > 0 && ` · ${uploadingCount} uploading`}
+          {failedCount > 0 && ` · ${failedCount} failed`}
+        </span>
         <span className="spacer" />
         {onEditDate && !node.is_detached ? (
           <button
@@ -222,7 +250,7 @@ function LifecycleStage({
         )}
         {stageActions}
       </div>
-      {node.files.length === 0 ? (
+      {node.files.length === 0 && uploads.length === 0 ? (
         <div className="lifecycle-empty mono-sm muted">
           {canMove ? "Drop files here" : "No files"}
         </div>
@@ -239,8 +267,61 @@ function LifecycleStage({
               onDeleteFile={onDeleteFile}
             />
           ))}
+          {uploads.map((upload) => (
+            <LifecycleUploadTile
+              key={upload.id}
+              upload={upload}
+              onDismiss={onDismissUpload}
+            />
+          ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function LifecycleUploadTile({
+  upload,
+  onDismiss,
+}: {
+  upload: FileUploadPreview;
+  onDismiss?: (id: string) => void;
+}) {
+  const failed = upload.status === "failed";
+  const statusLabel = failed ? "Upload failed" : `${upload.progress}% uploaded`;
+
+  return (
+    <div className={`lifecycle-file lifecycle-upload ${failed ? "failed" : ""}`}>
+      <div className="lifecycle-file-cover lifecycle-upload-cover">
+        <div className="imgph" style={{ aspectRatio: "1" }}>
+          {upload.isImage && upload.previewUrl ? (
+            <img src={upload.previewUrl} alt="" />
+          ) : (
+            upload.format
+          )}
+        </div>
+        <div
+          className="lifecycle-upload-overlay"
+          role={failed ? "alert" : "status"}
+          aria-label={`${upload.fileName}: ${statusLabel}`}
+          title={upload.error}
+        >
+          <strong>{failed ? "Failed" : `${upload.progress}%`}</strong>
+          {failed && <span>Upload failed</span>}
+        </div>
+        {failed && onDismiss && (
+          <button
+            type="button"
+            className="lifecycle-upload-dismiss"
+            onClick={() => onDismiss(upload.id)}
+            title="Dismiss failed upload"
+            aria-label={`Dismiss failed upload for ${upload.fileName}`}
+          >
+            <X size={15} strokeWidth={2.5} />
+          </button>
+        )}
+      </div>
+      <div className="lifecycle-file-label">{upload.fileName}</div>
     </div>
   );
 }

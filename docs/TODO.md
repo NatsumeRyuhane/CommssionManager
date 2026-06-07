@@ -52,6 +52,7 @@
 - [x] Router + public-read / admin-edit gating
 - [x] Edit page: lifecycle stage management (add/rename/reorder/delete)
 - [x] Edit page: per-stage file upload/delete + set cover
+- [x] Edit page: per-file upload percentage previews + red failure state
 - [x] Gallery: total count (X-Total-Count) + load-more pagination
 - [x] Focal-point reticle editor on uploaded images (Phase 2)
 - [ ] Mobile layouts (Phase 2)
