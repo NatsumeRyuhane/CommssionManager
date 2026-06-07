@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Pencil, Plus, Trash2, X } from "lucide-react";
+import { ExternalLink, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Link } from "react-router-dom";
 
 import { api } from "../api/client";
 import type { AliasOut, Character, Label, LabelType } from "../api/types";
@@ -11,6 +12,7 @@ interface Item {
   id: number;
   name: string;
   aliases: AliasOut[];
+  hasPage?: boolean;
 }
 
 interface Adapter {
@@ -32,7 +34,9 @@ interface Adapter {
  * @returns An `Item` with `id`, `name`, and `aliases` taken from `row`.
  */
 function toItem(row: Label | Character): Item {
-  return { id: row.id, name: row.name, aliases: row.aliases };
+  const item: Item = { id: row.id, name: row.name, aliases: row.aliases };
+  if ("has_page" in row) item.hasPage = row.has_page;
+  return item;
 }
 
 /**
@@ -244,7 +248,20 @@ export function TaxonomyManagementPanel({ kind, title, description }: PanelProps
             {filtered.map((item) => (
               <div className="taxonomy-mgmt-row" key={item.id}>
                 <div className="taxonomy-mgmt-name">
-                  <Chip kind={adapter.chipKind}>{item.name}</Chip>
+                  <Chip kind={adapter.chipKind} hasPage={item.hasPage}>
+                    {item.name}
+                  </Chip>
+                  {adapter.chipKind === "char" && (
+                    <Link
+                      to={`/characters/${item.id}`}
+                      className="mono-sm"
+                      style={{ marginLeft: 8, color: "var(--accent)" }}
+                      title={item.hasPage ? "Open character page" : "Create character page"}
+                    >
+                      <ExternalLink size={12} style={{ verticalAlign: "middle" }} />{" "}
+                      {item.hasPage ? "page" : "+ page"}
+                    </Link>
+                  )}
                 </div>
                 <div className="taxonomy-mgmt-aliases">
                   {item.aliases.map((a) => (

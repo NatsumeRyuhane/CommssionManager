@@ -311,7 +311,11 @@ def list_characters(q: str | None = None, db: Session = Depends(get_db)):
     Returns:
     	List[Character]: Characters matching the optional query, ordered by name.
     """
-    stmt = select(Character).options(selectinload(Character.aliases)).order_by(Character.name)
+    stmt = (
+        select(Character)
+        .options(selectinload(Character.aliases), selectinload(Character.page))
+        .order_by(Character.name)
+    )
     if q is not None:
         ids = _typeahead_character_ids(db, q)
         if not ids:

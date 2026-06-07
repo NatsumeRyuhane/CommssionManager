@@ -87,6 +87,15 @@ class Character(Base):
         cascade="all, delete-orphan",
         order_by="CharacterAlias.alias_lower",
     )
+    page: Mapped[CharacterPage | None] = relationship(
+        back_populates="character",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
+
+    @property
+    def has_page(self) -> bool:
+        return self.page is not None
 
 
 class Artist(Base):
@@ -365,6 +374,82 @@ class CommissionArtist(Base):
     artist_id: Mapped[int] = mapped_column(
         ForeignKey("artists.id", ondelete="CASCADE"), primary_key=True
     )
+
+
+# ---------------------------------------------------------------- character pages
+class CharacterPage(Base):
+    __tablename__ = "character_pages"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    character_id: Mapped[int] = mapped_column(
+        ForeignKey("characters.id", ondelete="CASCADE"), nullable=False, unique=True
+    )
+    about: Mapped[str | None] = mapped_column(Text)
+    main_reference_commission_id: Mapped[int | None] = mapped_column(
+        ForeignKey("commissions.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    character: Mapped[Character] = relationship(back_populates="page")
+    main_reference: Mapped[Commission | None] = relationship(
+        foreign_keys=[main_reference_commission_id]
+    )
+    sets: Mapped[list[CharacterImageSet]] = relationship(
+        back_populates="page",
+        cascade="all, delete-orphan",
+        order_by="CharacterImageSet.position",
+    )
+
+
+class CharacterImageSet(Base):
+    __tablename__ = "character_image_sets"
+    __table_args__ = (
+        UniqueConstraint("page_id", "position", name="uq_character_image_sets_position"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    page_id: Mapped[int] = mapped_column(
+        ForeignKey("character_pages.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    title: Mapped[str] = mapped_column(String, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    page: Mapped[CharacterPage] = relationship(back_populates="sets")
+    items: Mapped[list[CharacterImageSetItem]] = relationship(
+        back_populates="image_set",
+        cascade="all, delete-orphan",
+        order_by="CharacterImageSetItem.position",
+    )
+
+
+class CharacterImageSetItem(Base):
+    __tablename__ = "character_image_set_items"
+    __table_args__ = (
+        UniqueConstraint(
+            "set_id", "commission_id", name="uq_character_image_set_items_commission"
+        ),
+        UniqueConstraint("set_id", "position", name="uq_character_image_set_items_position"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    set_id: Mapped[int] = mapped_column(
+        ForeignKey("character_image_sets.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    commission_id: Mapped[int] = mapped_column(
+        ForeignKey("commissions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    image_set: Mapped[CharacterImageSet] = relationship(back_populates="items")
+    commission: Mapped[Commission] = relationship()
 
 
 # ---------------------------------------------------------------- auth
