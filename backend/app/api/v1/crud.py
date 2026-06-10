@@ -598,6 +598,7 @@ def _cover(
         height=cover_file.height,
         focal_x=cover_file.focal_x,
         focal_y=cover_file.focal_y,
+        focal_zoom=cover_file.focal_zoom,
     )
 
 
@@ -675,6 +676,7 @@ def file_out(
         height=f.height,
         focal_x=f.focal_x,
         focal_y=f.focal_y,
+        focal_zoom=f.focal_zoom,
         visibility=f.visibility_override,
         effective_visibility=(
             effective_file_visibility(f, visibility_context)

@@ -243,6 +243,7 @@ class FileOut(BaseModel):
     height: int | None = None
     focal_x: float | None = None
     focal_y: float | None = None
+    focal_zoom: float | None = None
     visibility: Visibility | None = None
     effective_visibility: Visibility | None = None
     url: str
@@ -298,6 +299,7 @@ class CoverOut(BaseModel):
     height: int | None = None
     focal_x: float | None = None
     focal_y: float | None = None
+    focal_zoom: float | None = None
 
 
 # ---------------------------------------------------------------- commission output

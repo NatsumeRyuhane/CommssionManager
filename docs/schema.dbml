@@ -218,6 +218,7 @@ Table commission_files {
   height            integer   [Note: 'Pixel height; null when is_image = false']
   focal_x           float     [Note: 'Relative X of the main subject center (0.0–1.0) for thumbnail cropping; null when is_image = false']
   focal_y           float     [Note: 'Relative Y of the main subject center (0.0–1.0) for thumbnail cropping; null when is_image = false']
+  focal_zoom        float     [Note: 'Crop zoom factor (1.0–3.0) applied around the focal point when rendering covers/thumbnails; 1.0 = no zoom, null when is_image = false']
   visibility_override visibility [Note: 'Nullable file-level override. Highest-precedence visibility control for public image filtering, except files in detached nodes are always private.']
   created_at        timestamp [default: `now()`]
 

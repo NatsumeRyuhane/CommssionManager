@@ -220,6 +220,7 @@ def _node_export(node: CommissionNode) -> dict[str, object]:
                 "height": file.height,
                 "focal_x": file.focal_x,
                 "focal_y": file.focal_y,
+                "focal_zoom": file.focal_zoom,
                 "visibility_override": file.visibility_override.value if file.visibility_override else None,
                 "created_at": file.created_at,
             }

@@ -338,6 +338,7 @@ class CommissionFile(Base):
     height: Mapped[int | None] = mapped_column(Integer)
     focal_x: Mapped[float | None] = mapped_column(Float)
     focal_y: Mapped[float | None] = mapped_column(Float)
+    focal_zoom: Mapped[float | None] = mapped_column(Float)
     visibility_override: Mapped[Visibility | None] = mapped_column(
         Enum(Visibility, name="visibility")
     )

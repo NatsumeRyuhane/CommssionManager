@@ -98,6 +98,7 @@ def run(n: int = 16) -> None:
                 height=h,
                 focal_x=0.5,
                 focal_y=0.4,
+                focal_zoom=1.0,
             )
             db.add(file)
             db.flush()
