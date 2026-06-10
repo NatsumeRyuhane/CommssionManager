@@ -1,15 +1,30 @@
-import { useEffect, useState, type PointerEvent } from "react";
-import { Check } from "lucide-react";
+import { useEffect, useRef, useState, type PointerEvent } from "react";
+import { Crosshair, Undo2 } from "lucide-react";
 
 import { api } from "../api/client";
 import type { Cover } from "../api/types";
+
+/** A pending focal edit the parent form commits alongside the rest of its fields. */
+export interface StagedFocal {
+  fileId: number;
+  x: number;
+  y: number;
+  zoom: number;
+}
+
+interface FocalValue {
+  x: number;
+  y: number;
+  zoom: number;
+}
 
 interface CoverFocalEditorProps {
   commissionId: number;
   /** Bump this to force a refetch (e.g. after the cover file changes in the stages editor). */
   version?: number;
-  /** Notify the parent that focal data changed so siblings can refresh. */
-  onChange?: () => void;
+  /** Reports the staged focal (null when nothing differs from the saved state).
+   *  Must be referentially stable — pass a setState dispatcher. */
+  onStage?: (staged: StagedFocal | null) => void;
 }
 
 const RATIOS: { w: number; h: number; label: string }[] = [
@@ -18,44 +33,49 @@ const RATIOS: { w: number; h: number; label: string }[] = [
   { w: 16, h: 9, label: "16:9" },
 ];
 
-/**
- * Clamp a number to the inclusive range 0 to 1.
- *
- * @param v - The input value to constrain
- * @returns The input value constrained to the inclusive range 0 to 1
- */
-function clamp(v: number) {
+const ZOOM_MIN = 1;
+const ZOOM_MAX = 3;
+
+function clamp01(v: number) {
   return Math.max(0, Math.min(1, v));
 }
 
+function focalEq(a: FocalValue, b: FocalValue) {
+  return a.x === b.x && a.y === b.y && a.zoom === b.zoom;
+}
+
+function fromCover(cover: Cover): FocalValue {
+  return {
+    x: cover.focal_x ?? 0.5,
+    y: cover.focal_y ?? 0.5,
+    zoom: cover.focal_zoom ?? 1,
+  };
+}
+
 /**
- * Render an editor UI for selecting and saving a cover image focal point.
+ * Staged editor for the cover image focal point and crop zoom.
  *
- * Displays the current cover (fetched for `commissionId`), allows pointer-driven
- * adjustment of the focal point (shown as normalized x/y fractions between 0 and 1),
- * shows preview thumbnails for preset aspect ratios, and provides "Revert" and
- * "Save focal" actions that persist the selected focal to the API. Refetches cover
- * data when `commissionId` or `version` changes and surfaces API errors.
- *
- * @param commissionId - The commission identifier whose cover will be fetched and edited
- * @param version - Optional numeric token to force refetch when bumped (defaults to 0)
- * @param onChange - Optional callback invoked after a successful save
- * @returns The React element containing the cover focal editor UI
+ * Pointer-drags on the canvas pick the focal point and a slider picks the
+ * zoom; nothing is persisted here. Edits are reported to the parent through
+ * `onStage` and committed together with the rest of the edit form, so a
+ * failed save keeps everything staged on the page. "Center focal" recenters
+ * the point; "Revert" restores the last-saved values.
  */
-export function CoverFocalEditor({ commissionId, version = 0, onChange }: CoverFocalEditorProps) {
+export function CoverFocalEditor({ commissionId, version = 0, onStage }: CoverFocalEditorProps) {
   const [cover, setCover] = useState<Cover | null>(null);
-  const [focal, setFocal] = useState<[number, number]>([0.5, 0.5]);
-  const [savedFocal, setSavedFocal] = useState<[number, number]>([0.5, 0.5]);
-  const [busy, setBusy] = useState(false);
+  const [value, setValue] = useState<FocalValue>({ x: 0.5, y: 0.5, zoom: 1 });
+  const [saved, setSaved] = useState<FocalValue>({ x: 0.5, y: 0.5, zoom: 1 });
   const [error, setError] = useState<string | null>(null);
   const [pressed, setPressed] = useState(false);
   const [moveLocked, setMoveLocked] = useState(false);
-  // `loading` gates the save handler so a refetch-in-flight can't PATCH focal
-  // against a stale cover.file_id when the cover changed under us. We
-  // intentionally do *not* clear `cover` at refetch start: version bumps fire
-  // on any StagesEditor mutation (uploads, moves, etc.) and clearing would
-  // flicker the canvas to the empty state on those routine events.
   const [loading, setLoading] = useState(true);
+  // refs let the async refetch handler compare against the values current at
+  // resolution time without re-running the effect on every drag
+  const fileIdRef = useRef<number | null>(null);
+  const valueRef = useRef(value);
+  const savedRef = useRef(saved);
+  valueRef.current = value;
+  savedRef.current = saved;
 
   useEffect(() => {
     let active = true;
@@ -67,9 +87,17 @@ export function CoverFocalEditor({ commissionId, version = 0, onChange }: CoverF
         if (!active) return;
         setCover(d.cover);
         if (d.cover) {
-          const next: [number, number] = [d.cover.focal_x ?? 0.5, d.cover.focal_y ?? 0.5];
-          setFocal(next);
-          setSavedFocal(next);
+          const next = fromCover(d.cover);
+          // version bumps fire on any StagesEditor mutation; when the cover
+          // file is unchanged, keep the user's pending edits instead of
+          // clobbering them, but drop them if the cover itself changed
+          const sameFile = fileIdRef.current === d.cover.file_id;
+          const untouched = focalEq(valueRef.current, savedRef.current);
+          fileIdRef.current = d.cover.file_id;
+          setSaved(next);
+          if (!sameFile || untouched) setValue(next);
+        } else {
+          fileIdRef.current = null;
         }
         setLoading(false);
       })
@@ -83,32 +111,20 @@ export function CoverFocalEditor({ commissionId, version = 0, onChange }: CoverF
     };
   }, [commissionId, version]);
 
+  const dirty = !focalEq(value, saved);
+
+  // report the staged edit (or its absence) to the parent form
+  useEffect(() => {
+    if (!onStage) return;
+    const fileId = cover?.file_id;
+    onStage(fileId != null && dirty ? { fileId, ...value } : null);
+  }, [onStage, cover?.file_id, dirty, value]);
+
   function pick(e: PointerEvent<HTMLDivElement>) {
     const rect = e.currentTarget.getBoundingClientRect();
-    const x = clamp((e.clientX - rect.left) / rect.width);
-    const y = clamp((e.clientY - rect.top) / rect.height);
-    setFocal([x, y]);
-  }
-
-  async function save() {
-    // Refuse to save while a refetch is in flight: `cover.file_id` could be
-    // about to change underneath us and we'd PATCH focal onto the wrong file.
-    if (!cover || loading) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await api.setFocal(cover.file_id, focal[0], focal[1]);
-      setSavedFocal(focal);
-      onChange?.();
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  function revert() {
-    setFocal(savedFocal);
+    const x = clamp01((e.clientX - rect.left) / rect.width);
+    const y = clamp01((e.clientY - rect.top) / rect.height);
+    setValue((v) => ({ ...v, x, y }));
   }
 
   if (!cover) {
@@ -122,7 +138,7 @@ export function CoverFocalEditor({ commissionId, version = 0, onChange }: CoverF
     );
   }
 
-  const dirty = focal[0] !== savedFocal[0] || focal[1] !== savedFocal[1];
+  const focalOrigin = `${value.x * 100}% ${value.y * 100}%`;
 
   return (
     <div className={`edit-field-group cover-focal-editor${moveLocked ? " is-dragging" : ""}`}>
@@ -152,19 +168,39 @@ export function CoverFocalEditor({ commissionId, version = 0, onChange }: CoverF
         <img src={cover.url} alt="" draggable={false} />
         <span
           className="focal-guide focal-guide-h"
-          style={{ top: `${focal[1] * 100}%` }}
+          style={{ top: `${value.y * 100}%` }}
         />
         <span
           className="focal-guide focal-guide-v"
-          style={{ left: `${focal[0] * 100}%` }}
+          style={{ left: `${value.x * 100}%` }}
         />
         <span
           className="focal-reticle"
-          style={{ left: `${focal[0] * 100}%`, top: `${focal[1] * 100}%` }}
+          style={{ left: `${value.x * 100}%`, top: `${value.y * 100}%` }}
         />
       </div>
-      <div className="mono-sm muted" style={{ textAlign: "center", marginTop: 6 }}>
-        focal ({focal[0].toFixed(2)}, {focal[1].toFixed(2)})
+      <div className="focal-zoom-row">
+        <span className="mono-sm muted">zoom</span>
+        <input
+          className="focal-zoom-slider"
+          type="range"
+          min={ZOOM_MIN}
+          max={ZOOM_MAX}
+          step={0.05}
+          value={value.zoom}
+          onChange={(e) => {
+            const zoom = Number(e.target.value);
+            setValue((v) => ({ ...v, zoom }));
+          }}
+          aria-label="Cover crop zoom"
+        />
+        <span className="mono-sm" style={{ minWidth: 42, textAlign: "right" }}>
+          ×{value.zoom.toFixed(2)}
+        </span>
+      </div>
+      <div className="mono-sm muted" style={{ textAlign: "center", marginTop: 2 }}>
+        focal ({value.x.toFixed(2)}, {value.y.toFixed(2)})
+        {dirty && <span className="focal-pending"> · saves with the form</span>}
       </div>
       <div className="cover-focal-previews">
         {RATIOS.map((r) => (
@@ -178,7 +214,9 @@ export function CoverFocalEditor({ commissionId, version = 0, onChange }: CoverF
                 alt=""
                 draggable={false}
                 style={{
-                  objectPosition: `${focal[0] * 100}% ${focal[1] * 100}%`,
+                  objectPosition: focalOrigin,
+                  transformOrigin: focalOrigin,
+                  transform: `scale(${value.zoom})`,
                 }}
               />
             </div>
@@ -188,27 +226,28 @@ export function CoverFocalEditor({ commissionId, version = 0, onChange }: CoverF
           </div>
         ))}
       </div>
-      {dirty && (
-        <div className="cover-focal-actions">
-          <button
-            type="button"
-            className="btn sm ghost"
-            onClick={revert}
-            disabled={busy || loading}
-          >
-            Revert
-          </button>
-          <button
-            type="button"
-            className="btn sm primary"
-            onClick={() => void save()}
-            disabled={busy || loading}
-          >
-            {!busy && !loading && <Check />}
-            {busy ? "Saving…" : loading ? "Refreshing…" : "Save focal"}
-          </button>
-        </div>
-      )}
+      <div className="cover-focal-actions">
+        <button
+          type="button"
+          className="btn sm ghost"
+          onClick={() => setValue((v) => ({ ...v, x: 0.5, y: 0.5 }))}
+          disabled={loading || (value.x === 0.5 && value.y === 0.5)}
+          title="Reset the focal point to the image center"
+        >
+          <Crosshair />
+          Center focal
+        </button>
+        <button
+          type="button"
+          className="btn sm ghost"
+          onClick={() => setValue(saved)}
+          disabled={loading || !dirty}
+          title="Restore the last-saved focal and zoom"
+        >
+          <Undo2 />
+          Revert
+        </button>
+      </div>
       {error && <div className="error-text">{error}</div>}
     </div>
   );

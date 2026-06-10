@@ -20,6 +20,7 @@ export interface Cover {
   height: number | null;
   focal_x: number | null;
   focal_y: number | null;
+  focal_zoom: number | null;
 }
 
 export interface CommissionListItem {
@@ -49,6 +50,7 @@ export interface CommissionFile {
   height: number | null;
   focal_x: number | null;
   focal_y: number | null;
+  focal_zoom: number | null;
   visibility: Visibility | null;
   effective_visibility: Visibility | null;
   url: string;

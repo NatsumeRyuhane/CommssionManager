@@ -237,10 +237,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ file_ids: fileIds }),
     }),
-  setFocal: (fileId: number, focalX: number, focalY: number) => {
+  setFocal: (fileId: number, focalX: number, focalY: number, focalZoom?: number) => {
     const form = new FormData();
     form.append("focal_x", String(focalX));
     form.append("focal_y", String(focalY));
+    if (focalZoom != null) form.append("focal_zoom", String(focalZoom));
     return uploadForm<CommissionFile>(`/files/${fileId}/focal`, form, "PATCH");
   },
 
