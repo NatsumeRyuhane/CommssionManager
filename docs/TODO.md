@@ -58,7 +58,7 @@
 - [x] Edit page: Firefox-compatible drag-and-drop uploads + persisted file reorder within a stage
 - [x] Gallery: total count (X-Total-Count) + load-more pagination
 - [x] Focal-point reticle editor on uploaded images (Phase 2)
-- [ ] Mobile layouts (Phase 2)
+- [x] Mobile layouts (Phase 2)
 
 ### Deploy
 - [x] `deploy/docker-compose.dev.yml` (Postgres for local dev)
@@ -104,10 +104,17 @@
   - Public viewers see only commissions whose effective visibility is public; admins see
     everything in the picker (defaulting to commissions tagged with the character).
   - Still to do: drag-to-reorder of sets and tiles from the UI (backend endpoints exist),
-    typeahead/picker `has_page` marker, mobile character page polish.
+    typeahead/picker `has_page` marker.
 - [x] Artist management: multi-platform handles, paste-to-match, no-match resolve dialog
-- [ ] Mobile views for every section
+- [x] Mobile views for every section: responsive gallery columns, wrapping topbar,
+  bottom-sheet filter popover, horizontal settings tabs, stacked rails/grids, clamped
+  modals, iOS-safe field sizing, coarse-pointer touch targets
+- [x] UI polish pass: uniform button heights (`<a>`/`<button>` parity), lucide icons in
+  place of emoji glyphs, entrance/hover/focus motion with `prefers-reduced-motion` support
 - [x] Focal-point reticle editor on cover image
+  - Focal edits now stage in the edit form and commit with Save (failed saves keep the
+    staged values); editor actions are Center focal / Revert; `focal_zoom` (1.0–3.0)
+    crops toward the focal point everywhere covers render
 - [x] Export: DB export + file-export `.zip` (`{artists}-{id}/{node}/`, node-dated dirs)
 - [ ] Webhooks delivery (`commission.created/updated/delivered`)
 
