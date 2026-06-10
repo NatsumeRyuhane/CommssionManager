@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowDown, ArrowUp, ChevronDown, ChevronUp, Plus, Search, Users } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, ChevronUp, Loader2, Plus, Search, Users } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { api } from "../api/client";
@@ -180,7 +180,12 @@ export function GalleryPage() {
         )}
       </TopBar>
 
-      {loading && <div style={{ padding: 24 }} className="mono-sm">Loading…</div>}
+      {loading && items.length === 0 && (
+        <div style={{ padding: 24 }} className="mono-sm inline-ic">
+          <Loader2 size={14} className="spin" />
+          Loading…
+        </div>
+      )}
       {error && <div style={{ padding: 24 }} className="error-text">{error}</div>}
       {!loading && !error && items.length === 0 && (
         <div style={{ padding: 48, textAlign: "center" }} className="muted">
@@ -196,6 +201,7 @@ export function GalleryPage() {
             disabled={loading}
             onClick={() => setLimit((l) => l + PAGE_SIZE)}
           >
+            {loading && <Loader2 className="spin" />}
             {loading ? "Loading…" : `Load more (${items.length} of ${total})`}
           </button>
         </div>
