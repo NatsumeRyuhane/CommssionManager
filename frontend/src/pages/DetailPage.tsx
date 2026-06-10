@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Braces, Check, Download, Eye, Globe, Lock, Pencil, Trash2 } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { api } from "../api/client";
@@ -19,7 +20,8 @@ function CopyJsonButton({ id }: { id: number }) {
   }
   return (
     <button className="btn sm mono" onClick={() => void copy()} title="Copy commission JSON for agents">
-      {copied ? "✓ copied!" : "{} Copy API JSON"}
+      {copied ? <Check /> : <Braces />}
+      {copied ? "copied!" : "Copy API JSON"}
     </button>
   );
 }
@@ -103,22 +105,26 @@ export function DetailPage() {
         {canWrite && <CopyJsonButton id={data.id} />}
         {canWrite && (
           <Link to={`/commissions/${data.id}/visibility`} className="btn sm">
-            👁 Visibility
+            <Eye />
+            Visibility
           </Link>
         )}
         {canWrite && (
           <a className="btn sm" href={api.filesExportUrl(data.id)} download>
-            ↗ Export zip
+            <Download />
+            Export zip
           </a>
         )}
         {canWrite && (
           <Link to={`/commissions/${data.id}/edit`} className="btn sm primary">
-            ✎ Edit
+            <Pencil />
+            Edit
           </Link>
         )}
         {canWrite && (
           <button className="btn sm danger" onClick={() => void onDelete()}>
-            🗑 Delete
+            <Trash2 />
+            Delete
           </button>
         )}
       </TopBar>
@@ -131,10 +137,11 @@ export function DetailPage() {
         <span className="mono-sm muted">#{paddedId}</span>
         <span className="spacer" />
         <span
-          className="mono-sm detail-visibility"
+          className="mono-sm detail-visibility inline-ic"
           style={{ color: isPublic ? "var(--accent)" : "var(--warn)" }}
         >
-          {isPublic ? "🌐 public" : "🔒 private"}
+          {isPublic ? <Globe size={12} /> : <Lock size={12} />}
+          {isPublic ? "public" : "private"}
           {currentStage && (
             <span className="muted" style={{ marginLeft: 8 }}>· stage: {currentStage}</span>
           )}
@@ -172,8 +179,9 @@ export function DetailPage() {
         <aside className="detail-rail">
           <div className="detail-rail-visibility">
             <span className="mono-sm">visibility:</span>
-            <span style={{ color: isPublic ? "var(--accent)" : "var(--warn)" }}>
-              {isPublic ? "🌐 public" : "🔒 private"}
+            <span className="inline-ic" style={{ color: isPublic ? "var(--accent)" : "var(--warn)" }}>
+              {isPublic ? <Globe size={12} /> : <Lock size={12} />}
+              {isPublic ? "public" : "private"}
             </span>
             {canWrite && (
               <>
@@ -263,8 +271,12 @@ function MetaRow({ label, value, pub }: { label: string; value: string; pub: boo
     <div className="detail-meta-row">
       <span className="row gap-4">
         <span className="label" style={{ margin: 0 }}>{label}</span>
-        <span style={{ fontSize: 10, color: pub ? "var(--accent)" : "var(--warn)" }}>
-          {pub ? "🌐" : "🔒"}
+        <span
+          className="inline-ic"
+          title={pub ? "shown publicly" : "private"}
+          style={{ color: pub ? "var(--accent)" : "var(--warn)" }}
+        >
+          {pub ? <Globe size={11} /> : <Lock size={11} />}
         </span>
       </span>
       <span style={{ fontSize: 13 }}>{value}</span>

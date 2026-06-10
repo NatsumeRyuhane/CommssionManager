@@ -1,4 +1,5 @@
 import { useEffect, useState, type PointerEvent } from "react";
+import { Check } from "lucide-react";
 
 import { api } from "../api/client";
 import type { Cover } from "../api/types";
@@ -203,7 +204,8 @@ export function CoverFocalEditor({ commissionId, version = 0, onChange }: CoverF
             onClick={() => void save()}
             disabled={busy || loading}
           >
-            {busy ? "Saving…" : loading ? "Refreshing…" : "✓ Save focal"}
+            {!busy && !loading && <Check />}
+            {busy ? "Saving…" : loading ? "Refreshing…" : "Save focal"}
           </button>
         </div>
       )}

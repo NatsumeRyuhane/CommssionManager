@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Plus } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { api } from "../api/client";
@@ -96,7 +97,8 @@ export function CharactersDirectoryPage() {
           <div className="row wrap gap-4" style={{ marginTop: 6 }}>
             {characterByIdWithoutPage.map((c) => (
               <Link key={c.id} to={`/characters/${c.id}`} className="btn sm">
-                + {c.name}
+                <Plus />
+                {c.name}
               </Link>
             ))}
           </div>

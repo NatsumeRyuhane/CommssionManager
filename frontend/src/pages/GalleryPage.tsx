@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { ArrowDown, ArrowUp, ChevronDown, ChevronUp, Plus, Search, Users } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { api } from "../api/client";
@@ -84,18 +85,25 @@ export function GalleryPage() {
       <TopBar>
         <span className="mono-sm muted">{total} works</span>
         <Link to="/characters" className="btn sm">
+          <Users />
           Characters
         </Link>
         <div style={{ position: "relative" }}>
-          <button className="btn sm" onClick={() => setFilterOpen((v) => !v)}>
-            🔍 Search &amp; filter
+          <button
+            className="btn sm"
+            onClick={() => setFilterOpen((v) => !v)}
+            aria-expanded={filterOpen}
+          >
+            <Search />
+            Search &amp; filter
             {activeCount > 0 && (
-              <span className="mono-sm muted" style={{ marginLeft: 6 }}>
-                {activeCount} active
+              <span className="filter-count" aria-label={`${activeCount} active filters`}>
+                {activeCount}
               </span>
             )}
-            <span style={{ marginLeft: 4 }}>{filterOpen ? "▴" : "▾"}</span>
+            {filterOpen ? <ChevronUp /> : <ChevronDown />}
           </button>
+          {filterOpen && <div className="popover-scrim" onClick={() => setFilterOpen(false)} />}
           {filterOpen && (
             <div className="popover">
               <div className="row gap-8" style={{ marginBottom: 12 }}>
@@ -161,11 +169,13 @@ export function GalleryPage() {
             else setSort("date");
           }}
         >
-          Sort: {sort} {order === "desc" ? "↓" : "↑"}
+          Sort: {sort}
+          {order === "desc" ? <ArrowDown /> : <ArrowUp />}
         </button>
         {canWrite && (
           <Link to="/commissions/new" className="btn sm primary">
-            + New
+            <Plus />
+            New
           </Link>
         )}
       </TopBar>

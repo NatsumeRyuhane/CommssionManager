@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Check, Eye } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { api } from "../api/client";
@@ -135,7 +136,8 @@ export function EditPage() {
           }}
           disabled={busy}
         >
-          {busy ? "Saving…" : isEdit ? "✓ Save" : "✓ Create"}
+          {!busy && <Check />}
+          {busy ? "Saving…" : isEdit ? "Save" : "Create"}
         </button>
       </TopBar>
 
@@ -256,8 +258,9 @@ export function EditPage() {
           </FieldGroup>
 
           {isEdit && id && (
-            <Link to={`/commissions/${id}/visibility`} className="btn" style={{ justifyContent: "center" }}>
-              👁 Edit visibility
+            <Link to={`/commissions/${id}/visibility`} className="btn">
+              <Eye />
+              Edit visibility
             </Link>
           )}
         </aside>

@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { LogIn, LogOut, Settings, UnlockKeyhole } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { api } from "../api/client";
@@ -48,22 +49,28 @@ export function TopBar({ children, siteTitle }: { children?: ReactNode; siteTitl
       </Link>
       <span className="spacer" />
       {children}
-      <span style={{ width: 1, height: 20, background: "var(--rule)" }} />
+      <span className="topbar-divider" />
       {canWrite ? (
         <>
-          <span className="mono-sm muted">🔓 {me?.kind === "admin" ? "admin" : me?.label}</span>
+          <span className="mono-sm muted inline-ic">
+            <UnlockKeyhole size={12} />
+            {me?.kind === "admin" ? "admin" : me?.label}
+          </span>
           {me?.kind === "admin" && (
-            <Link to="/settings" className="btn sm">
+            <Link to="/settings" className="btn sm" title="Admin settings">
+              <Settings />
               Settings
             </Link>
           )}
           <button className="btn sm" onClick={() => void logout()}>
+            <LogOut />
             Sign out
           </button>
         </>
       ) : (
         <button className="btn sm" onClick={() => setShowLogin(true)}>
-          🔒 Sign in
+          <LogIn />
+          Sign in
         </button>
       )}
       {showLogin && <LoginModal onClose={() => setShowLogin(false)} />}

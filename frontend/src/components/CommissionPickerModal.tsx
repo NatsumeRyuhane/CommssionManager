@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Check, X } from "lucide-react";
 
 import { api } from "../api/client";
 import type { CharacterPageCommission } from "../api/types";
@@ -86,7 +87,7 @@ export function CommissionPickerModal({
           <div className="row" style={{ justifyContent: "space-between" }}>
             <strong style={{ fontSize: 15 }}>{title}</strong>
             <button className="btn sm ghost" onClick={onClose} aria-label="close">
-              ✕
+              <X />
             </button>
           </div>
           <div className="row gap-8" style={{ marginTop: 10, flexWrap: "wrap" }}>
@@ -103,7 +104,8 @@ export function CommissionPickerModal({
               onClick={() => setOnlyTagged((v) => !v)}
               title={onlyTagged ? "Showing only tagged commissions" : "Showing every commission"}
             >
-              {onlyTagged ? "✓ tagged only" : "all commissions"}
+              {onlyTagged && <Check />}
+              {onlyTagged ? "tagged only" : "all commissions"}
             </button>
           </div>
         </div>
@@ -131,7 +133,7 @@ export function CommissionPickerModal({
                   }}
                 >
                   <Cover cover={c.cover} rounded={false} />
-                  <span className="check">{isSelected ? "✓" : ""}</span>
+                  <span className="check">{isSelected && <Check size={11} strokeWidth={3} />}</span>
                   <div className="title">{c.title}</div>
                 </div>
               );
