@@ -48,7 +48,8 @@ a { color: inherit; text-decoration: none; }
 .topbar {
   display: flex;
   align-items: center;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 8px 12px;
   padding: 14px 28px;
   border-bottom: 1px solid var(--rule);
   background: var(--paper);
@@ -254,7 +255,7 @@ a { color: inherit; text-decoration: none; }
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
-  width: 520px;
+  width: min(520px, calc(100vw - 24px));
   z-index: 50;
   background: var(--paper);
   border: 1px solid var(--rule-2);
@@ -275,6 +276,27 @@ a { color: inherit; text-decoration: none; }
   transform: rotate(45deg);
 }
 
+/* on small screens the filter popover becomes a bottom sheet */
+@media (max-width: 700px) {
+  .popover-scrim { background: rgba(15, 15, 15, 0.28); }
+  .popover {
+    position: fixed;
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    max-height: 75vh;
+    overflow-y: auto;
+    border-radius: 14px 14px 0 0;
+    border-left: 0;
+    border-right: 0;
+    border-bottom: 0;
+    padding: 18px 16px calc(18px + env(safe-area-inset-bottom));
+  }
+  .popover::before { display: none; }
+}
+
 /* ---- modal (auth) ---- */
 .modal-overlay {
   position: fixed;
@@ -283,10 +305,11 @@ a { color: inherit; text-decoration: none; }
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 16px;
   z-index: 100;
 }
 .modal {
-  width: 380px;
+  width: min(380px, 100%);
   background: var(--paper);
   border: 1px solid var(--rule-2);
   border-radius: var(--r-lg);
@@ -607,10 +630,12 @@ a { color: inherit; text-decoration: none; }
 .settings-table-wrap {
   border: 1px solid var(--rule);
   border-radius: 8px;
-  overflow: hidden;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 .settings-table {
   width: 100%;
+  min-width: 560px;
   border-collapse: collapse;
   font-size: 13px;
 }
@@ -1687,6 +1712,8 @@ a { color: inherit; text-decoration: none; }
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
   margin-bottom: 8px;
 }
 .char-section-divider {
@@ -1892,5 +1919,148 @@ a { color: inherit; text-decoration: none; }
   .char-about-row {
     grid-template-columns: 1fr;
     gap: 16px;
+  }
+}
+
+/* =====================================================================
+   responsive / mobile
+   880px: rails and split layouts collapse to one column
+   700px: phone-size paddings, sheet popover, denser grids
+   ===================================================================== */
+
+/* ---- settings: sidebar becomes a horizontal tab strip ---- */
+@media (max-width: 880px) {
+  .settings-shell {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+  .settings-sidebar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border-right: 0;
+    border-bottom: 1px solid var(--rule);
+    padding: 8px 12px;
+  }
+  .settings-tab {
+    width: auto;
+    flex-shrink: 0;
+    margin-bottom: 0;
+    white-space: nowrap;
+  }
+  .settings-section-label {
+    flex-shrink: 0;
+    white-space: nowrap;
+    padding: 0 4px 0 12px;
+  }
+  .settings-section-label:first-child { padding-left: 2px; }
+  .settings-content { padding: 20px 16px 40px; }
+  .settings-heading { flex-wrap: wrap; }
+  .settings-form-grid { grid-template-columns: 1fr; align-items: stretch; }
+  .settings-form-grid.two { grid-template-columns: 1fr; }
+  .settings-form-actions { justify-content: flex-start; }
+  .preset-grid { grid-template-columns: 1fr; }
+  .preset-option { min-height: 0; }
+  .storage-summary { grid-template-columns: 1fr; }
+  .storage-summary > div:last-child { grid-column: auto; }
+
+  /* visibility editor: stack the two sections */
+  .visibility-layout { grid-template-columns: 1fr; }
+  .visibility-page { padding: 20px 16px 40px; }
+
+  /* artists: one card per row */
+  .artist-card-grid { grid-template-columns: 1fr; }
+  .artists-page { padding: 20px 16px 40px; }
+}
+
+/* stage-default rows rewrap: name on its own line, controls below */
+@media (max-width: 700px) {
+  .stage-default-row {
+    display: flex;
+    flex-wrap: wrap;
+  }
+  .stage-default-row > input:first-of-type { flex: 1 1 100%; }
+  .stage-default-row > select { flex: 0 0 110px; }
+  .stage-default-row > input:nth-of-type(2) { flex: 1 1 90px; }
+}
+
+/* taxonomy management rows: aliases drop to a second line */
+@media (max-width: 700px) {
+  .taxonomy-mgmt-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .taxonomy-mgmt-aliases {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}
+
+/* artist search loses its fixed two-column grid */
+@media (max-width: 560px) {
+  .artist-search { grid-template-columns: 1fr; }
+}
+
+/* ---- phone-size chrome ---- */
+@media (max-width: 700px) {
+  .topbar { padding: 10px 14px; }
+  .topbar h1 { font-size: 18px; }
+  .topbar-divider { display: none; }
+
+  .fa-grid {
+    gap: 8px;
+    padding: 10px 12px;
+  }
+  .fa-col { gap: 8px; }
+
+  .detail-crumb { padding: 10px 14px; }
+  .page-title { padding: 22px 16px 6px; }
+  .page-title h1 { font-size: 26px; }
+  .detail-cover-wrap { padding: 8px 16px 16px; }
+  .detail-description { padding: 0 16px 22px; }
+  .detail-rail { padding: 20px 16px; }
+  .detail-lifecycle { padding: 18px 12px 36px; }
+
+  .edit-main { padding: 18px 14px 30px; }
+  .edit-rail { padding: 18px 14px 32px; }
+  .edit-title-input { font-size: 24px; }
+
+  .char-banner { height: 104px; }
+  .char-identity { margin-top: -40px; gap: 14px; padding: 0 16px; }
+  .char-profile-pic {
+    width: 92px;
+    height: 92px;
+    font-size: 22px;
+  }
+  .char-identity h1 { font-size: 24px; }
+  .char-body { padding: 16px 16px 32px; }
+  .char-directory {
+    padding: 12px;
+    gap: 10px;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  }
+
+  .lifecycle-file-grid { grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); }
+  .lifecycle-stage { padding: 8px 10px; }
+
+  .picker-overlay { padding: 12px; }
+  .picker-grid { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); }
+
+  /* 16px stops iOS Safari from zooming focused inputs */
+  .field { font-size: 16px; }
+  .field.lg { font-size: 17px; }
+}
+
+/* ---- touch ergonomics ---- */
+@media (pointer: coarse) {
+  .btn { height: 34px; }
+  .btn.sm { height: 30px; }
+  .icon-btn { width: 30px; height: 30px; }
+  .icon-btn.add { width: 34px; height: 34px; }
+  .toggle-switch {
+    --toggle-w: 44px;
+    --toggle-h: 24px;
+    --toggle-knob: 18px;
   }
 }
