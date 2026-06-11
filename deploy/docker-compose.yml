@@ -34,6 +34,15 @@ services:
       CMGR_ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-10080}
       CMGR_STORAGE_BACKEND: ${STORAGE_BACKEND:-local}
       CMGR_STORAGE_LOCAL_ROOT: /data/storage
+      # Object storage + CDN (only used when STORAGE_BACKEND=s3); empty values
+      # are treated as unset by the backend.
+      CMGR_STORAGE_S3_BUCKET: ${STORAGE_S3_BUCKET:-}
+      CMGR_STORAGE_S3_ENDPOINT: ${STORAGE_S3_ENDPOINT:-}
+      CMGR_STORAGE_S3_REGION: ${STORAGE_S3_REGION:-auto}
+      CMGR_STORAGE_S3_ACCESS_KEY: ${STORAGE_S3_ACCESS_KEY:-}
+      CMGR_STORAGE_S3_SECRET_KEY: ${STORAGE_S3_SECRET_KEY:-}
+      CMGR_STORAGE_CDN_BASE_URL: ${STORAGE_CDN_BASE_URL:-}
+      CMGR_STORAGE_SIGNED_URL_TTL: ${STORAGE_SIGNED_URL_TTL:-600}
       CMGR_CORS_ORIGINS: ${CORS_ORIGINS:-["http://localhost:${APP_PORT:-8080}"]}
     volumes:
       # Relative to deploy/docker-compose.yml: store uploaded files under repo-root data/storage.
