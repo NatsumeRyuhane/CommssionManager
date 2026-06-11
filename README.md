@@ -174,6 +174,39 @@ from the dev Postgres (project `deploy`), so the two can run side by side.
    Uninstall deliberately retains `deploy/.env`, `backend/.env`, `data/storage`, and any external
    database. Delete retained files manually only after confirming they are no longer needed.
 
+### Object storage + CDN (optional)
+
+By default uploaded files live on local disk (`data/storage`) and the API streams every byte.
+To serve files from an S3-compatible bucket behind a CDN instead (e.g. Cloudflare R2 with a
+custom domain), set `STORAGE_BACKEND=s3` and the `STORAGE_S3_*` / `STORAGE_CDN_BASE_URL` keys
+in `deploy/.env` (see the commented block in [`deploy/.env.example`](deploy/.env.example)),
+restart the stack, then move the existing bytes:
+
+```sh
+python3 main.py storage status             # per-backend object counts
+python3 main.py storage migrate --dry-run  # preview what would move
+python3 main.py storage migrate            # copy into the bucket (source bytes retained)
+```
+
+**Keep the S3 credentials out of the repository.** `deploy/.env` and `backend/.env` are
+gitignored — that is the only place real values should live on the server; never put them in
+`.env.example`, compose files, or anything committed. If you automate deployments or storage
+migrations with GitHub Actions, store the values as **repository secrets** (GitHub →
+repo **Settings → Secrets and variables → Actions → New repository secret**) named after the
+`deploy/.env` keys — at minimum `STORAGE_S3_ACCESS_KEY` and `STORAGE_S3_SECRET_KEY` (bucket,
+endpoint, and CDN URL can be plain repository *variables*) — and inject them in the workflow
+when writing `deploy/.env` on the runner:
+
+```yaml
+env:
+  STORAGE_S3_ACCESS_KEY: ${{ secrets.STORAGE_S3_ACCESS_KEY }}
+  STORAGE_S3_SECRET_KEY: ${{ secrets.STORAGE_S3_SECRET_KEY }}
+```
+
+CI itself needs no S3 secrets: the test suite covers the S3 driver with a fake client.
+Use a bucket-scoped API token (R2: "Object Read & Write" on the one bucket), and rotate it by
+updating the repo secret + `deploy/.env` and restarting the stack.
+
 ---
 
 ## Agent / automation API
