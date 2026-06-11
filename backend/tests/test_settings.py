@@ -95,6 +95,15 @@ def test_original_download_gate(admin_client: TestClient):
     assert uploaded.status_code == 201, uploaded.text
     file_id = uploaded.json()["id"]
 
+    gif_buf = io.BytesIO()
+    Image.new("RGB", (20, 20), "#3322aa").save(gif_buf, format="GIF")
+    gif_uploaded = admin_client.post(
+        f"/api/v1/nodes/{node['id']}/files",
+        files={"upload": ("anim.gif", gif_buf.getvalue(), "image/gif")},
+    )
+    assert gif_uploaded.status_code == 201, gif_uploaded.text
+    gif_id = gif_uploaded.json()["id"]
+
     # default: originals are open to visitors
     assert admin_client.get("/api/v1/settings/site").json()[
         "allow_public_original_download"
@@ -126,6 +135,8 @@ def test_original_download_gate(admin_client: TestClient):
     assert admin_client.get(
         f"/api/v1/files/{file_id}/image?size=small&format=webp"
     ).status_code in (200, 202)
+    # gifs are exempt: animation only exists in the original bytes
+    assert admin_client.get(f"/api/v1/files/{gif_id}/raw").status_code == 200
 
 
 def test_visibility_settings_are_admin_only_and_patchable(admin_client: TestClient):

@@ -174,8 +174,8 @@
   - Original-download gate: `app_settings.allow_public_original_download` (Settings → Site
     toggle, default on); when off, `/files/{id}/raw` and lossless `format=png` derivatives
     require write access — visitors get lossy (jpeg/webp) derivatives only, the viewer hides
-    "Original" and saves jpeg for png sources (gif animation is admin-only while gated, since
-    derivatives are static)
+    "Original" and saves jpeg for png sources. GIFs are exempt in all circumstances: re-encodes
+    can't preserve animation, so visible gifs are always served raw
 
 ## Phase 3 — Optional / advanced (deferred)
 - [ ] MCP server wrapping the REST API (tools: create_commission, upload_file, search, set_focal_point)

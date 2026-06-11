@@ -33,8 +33,9 @@ function dimensionsFor(file: CommissionFile, maxEdge: number | null): string {
 }
 
 function availableResolutions(file: CommissionFile, allowOriginal: boolean): ResolutionOption[] {
-  // derivatives are static re-encodes; only the original keeps gif animation
-  if (file.format === "gif" && allowOriginal) {
+  // derivatives are static re-encodes; only the original keeps gif animation,
+  // so gifs are always original-only (the server exempts them from the gate too)
+  if (file.format === "gif") {
     return RESOLUTIONS.filter((option) => option.preset === null);
   }
   const maxDimension = Math.max(file.width ?? 0, file.height ?? 0);
