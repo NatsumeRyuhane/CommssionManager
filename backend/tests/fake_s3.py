@@ -19,6 +19,9 @@ class FakeS3Client:
             raise ClientError({"Error": {"Code": "NoSuchKey"}}, "GetObject")
         return {"Body": io.BytesIO(self.objects[(Bucket, Key)])}
 
+    # Deliberately raises code "404" while get_object raises "NoSuchKey" (matching
+    # real S3, where HEAD responses carry no body and surface the bare status code)
+    # so the suite exercises both missing-key branches in S3Storage.
     def head_object(self, *, Bucket: str, Key: str):
         if (Bucket, Key) not in self.objects:
             raise ClientError({"Error": {"Code": "404"}}, "HeadObject")

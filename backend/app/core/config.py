@@ -31,7 +31,10 @@ class Settings(BaseSettings):
     # silently degrade a configured deployment.
     storage_s3_bucket: str | None = None
     storage_s3_endpoint: str | None = None  # R2: https://<account-id>.r2.cloudflarestorage.com
-    storage_s3_region: str = "auto"  # R2 uses the literal region "auto"
+    # The default suits Cloudflare R2, which uses the literal region "auto" (R2 is this
+    # project's primary target — see issue #20). For AWS S3 or other providers, set a
+    # real region (e.g. us-east-1); "auto" resolves to a nonexistent AWS endpoint.
+    storage_s3_region: str = "auto"
     storage_s3_access_key: str | None = None
     storage_s3_secret_key: str | None = None
     # Public base URL mapped to the bucket (CDN / R2 custom domain). When set, public
