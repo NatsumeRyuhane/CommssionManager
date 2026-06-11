@@ -137,6 +137,8 @@ def _visible_file_or_404(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
     visibility_context = crud.load_visibility_context(db)
     commission = file.node.commission
+    # raw-file privacy: non-image files (PSD sources etc.) are never served to
+    # the public regardless of visibility settings; admins can always fetch them
     public_file = (
         file.is_image
         and crud.effective_commission_visibility(commission, visibility_context)

@@ -30,9 +30,11 @@ function availableResolutions(file: CommissionFile): ResolutionOption[] {
   // derivatives are static re-encodes; only the original keeps gif animation
   if (file.format === "gif") return RESOLUTIONS.filter((option) => option.preset === null);
   const maxDimension = Math.max(file.width ?? 0, file.height ?? 0);
+  // <= keeps the preset matching the source's exact size: same dimensions,
+  // but the re-encoded derivative still transfers far fewer bytes than /raw
   return RESOLUTIONS.filter((option) => {
     const maxEdge = maxEdgeOf(option);
-    return maxEdge === null || !maxDimension || maxEdge < maxDimension;
+    return maxEdge === null || !maxDimension || maxEdge <= maxDimension;
   });
 }
 

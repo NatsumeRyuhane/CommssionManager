@@ -53,7 +53,7 @@ def _drop_derivatives(storage_object_id: int) -> None:
 
 
 def test_upload_eagerly_builds_all_presets(admin_client: TestClient):
-    commission_id, node_id = _commission(admin_client)
+    _, node_id = _commission(admin_client)
     _upload(admin_client, node_id)
     object_id = _storage_object_id(admin_client)
     storage = get_storage()
@@ -114,7 +114,7 @@ def test_image_endpoint_rejects_non_image(admin_client: TestClient):
 
 
 def test_cache_miss_answers_202_then_builds(admin_client: TestClient):
-    commission_id, node_id = _commission(admin_client)
+    _, node_id = _commission(admin_client)
     file = _upload(admin_client, node_id)
     object_id = _storage_object_id(admin_client)
     _drop_derivatives(object_id)
@@ -151,7 +151,7 @@ def test_public_file_serves_derivative_anonymously(client: TestClient, admin_cli
 
 
 def test_file_delete_cleans_derivatives(admin_client: TestClient):
-    commission_id, node_id = _commission(admin_client)
+    _, node_id = _commission(admin_client)
     file = _upload(admin_client, node_id)
     object_id = _storage_object_id(admin_client)
     storage = get_storage()
