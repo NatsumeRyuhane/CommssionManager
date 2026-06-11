@@ -82,14 +82,10 @@ export function EditPage() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!title.trim()) {
-      setError("Title is required.");
-      return;
-    }
     setBusy(true);
     setError(null);
     const payload: CommissionUpdate = {
-      title: title.trim(),
+      title: title.trim() || "Untitled",
       description: description || null,
       completed_at: completedAt || null,
       confirmed_at: confirmedAt || null,

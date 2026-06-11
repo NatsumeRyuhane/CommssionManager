@@ -334,7 +334,7 @@ class CommissionDetail(CommissionListItem):
 
 # ---------------------------------------------------------------- commission input
 class CommissionCreate(BaseModel):
-    title: str
+    title: str = "Untitled"
     description: str | None = None
     completed_at: date | None = None
     rating: Rating = Rating.general
@@ -347,6 +347,11 @@ class CommissionCreate(BaseModel):
     character_names: list[str] = []
     artist_names: list[str] = []
     node_names: list[str] = []
+
+    @field_validator("title")
+    @classmethod
+    def title_defaults_to_untitled(cls, title: str) -> str:
+        return title.strip() or "Untitled"
 
 
 class CommissionUpdate(BaseModel):
@@ -363,6 +368,14 @@ class CommissionUpdate(BaseModel):
     tag_names: list[str] | None = None
     character_names: list[str] | None = None
     artist_names: list[str] | None = None
+
+    @field_validator("title")
+    @classmethod
+    def title_defaults_to_untitled(cls, title: str | None) -> str | None:
+        # None means "leave unchanged"; a blank string falls back to Untitled
+        if title is None:
+            return None
+        return title.strip() or "Untitled"
 
 
 # ---------------------------------------------------------------- agent payload

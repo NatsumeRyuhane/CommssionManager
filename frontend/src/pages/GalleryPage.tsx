@@ -86,7 +86,7 @@ export function GalleryPage() {
   async function createNew() {
     setCreating(true);
     try {
-      const created = await api.createCommission({ title: "Untitled" });
+      const created = await api.createCommission({});
       navigate(`/commissions/${created.id}/edit`);
     } catch (e) {
       setError(String(e));

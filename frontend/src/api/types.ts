@@ -85,7 +85,8 @@ export interface CommissionDetail extends CommissionListItem {
 }
 
 export interface CommissionCreate {
-  title: string;
+  /** Defaults to "Untitled" server-side when omitted or blank. */
+  title?: string;
   description?: string | null;
   completed_at?: string | null;
   rating?: Rating;
