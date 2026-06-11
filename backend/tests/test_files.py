@@ -82,6 +82,7 @@ def test_upload_records_image_metadata_and_serves_raw_bytes(admin_client: TestCl
     assert uploaded["height"] == 47
     assert uploaded["focal_x"] == 0.5
     assert uploaded["focal_y"] == 0.5
+    assert uploaded["focal_zoom"] == 1.0
 
     served = admin_client.get(uploaded["url"])
     assert served.status_code == 200
@@ -209,6 +210,7 @@ def test_non_image_upload_has_no_dimensions_and_rejects_focal_point(admin_client
     assert uploaded["height"] is None
     assert uploaded["focal_x"] is None
     assert uploaded["focal_y"] is None
+    assert uploaded["focal_zoom"] is None
 
     focal = admin_client.patch(
         f"/api/v1/files/{uploaded['id']}/focal", data={"focal_x": "0.2", "focal_y": "0.8"}
@@ -226,6 +228,32 @@ def test_set_focal_point_clamps_to_image_bounds(admin_client: TestClient):
     assert focal.status_code == 200
     assert focal.json()["focal_x"] == 0.0
     assert focal.json()["focal_y"] == 1.0
+    # zoom untouched when omitted
+    assert focal.json()["focal_zoom"] == 1.0
+
+
+def test_set_focal_zoom_persists_and_clamps(admin_client: TestClient):
+    _, node_id = _commission(admin_client)
+    uploaded = _upload(admin_client, node_id, "final.png", _png(), "image/png")
+
+    focal = admin_client.patch(
+        f"/api/v1/files/{uploaded['id']}/focal",
+        data={"focal_x": "0.3", "focal_y": "0.6", "focal_zoom": "1.8"},
+    )
+    assert focal.status_code == 200
+    assert focal.json()["focal_zoom"] == 1.8
+
+    too_small = admin_client.patch(
+        f"/api/v1/files/{uploaded['id']}/focal",
+        data={"focal_x": "0.3", "focal_y": "0.6", "focal_zoom": "0.4"},
+    )
+    assert too_small.json()["focal_zoom"] == 1.0
+
+    too_large = admin_client.patch(
+        f"/api/v1/files/{uploaded['id']}/focal",
+        data={"focal_x": "0.3", "focal_y": "0.6", "focal_zoom": "11"},
+    )
+    assert too_large.json()["focal_zoom"] == 3.0
 
 
 def test_move_file_between_nodes_in_same_commission(admin_client: TestClient):

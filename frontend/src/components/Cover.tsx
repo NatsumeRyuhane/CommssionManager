@@ -28,9 +28,17 @@ export function Cover({
     cover.focal_x != null && cover.focal_y != null
       ? `${cover.focal_x * 100}% ${cover.focal_y * 100}%`
       : "center";
+  // scale ≥ 1 with the origin pinned to the focal point zooms the crop
+  // toward the subject without ever exposing a gap at the edges
+  const zoom = cover.focal_zoom != null && cover.focal_zoom > 1 ? cover.focal_zoom : null;
+  const imgStyle: React.CSSProperties = { objectPosition };
+  if (zoom) {
+    imgStyle.transformOrigin = objectPosition;
+    (imgStyle as Record<string, string | number>)["--focal-zoom"] = zoom;
+  }
   return (
     <div className="imgph" style={style}>
-      <img src={cover.url} alt="" style={{ objectPosition }} loading="lazy" />
+      <img src={cover.url} alt="" style={imgStyle} loading="lazy" />
     </div>
   );
 }

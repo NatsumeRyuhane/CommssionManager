@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
+import { Check, Eye } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { api } from "../api/client";
 import type { CommissionCreate, Rating } from "../api/types";
 import { Chip } from "../components/Chip";
-import { CoverFocalEditor } from "../components/CoverFocalEditor";
+import { CoverFocalEditor, type StagedFocal } from "../components/CoverFocalEditor";
 import { StagesEditor } from "../components/StagesEditor";
 import { TaxonomyPicker } from "../components/TaxonomyPicker";
 import { TopBar } from "../components/TopBar";
@@ -48,6 +49,8 @@ export function EditPage() {
   const [error, setError] = useState<string | null>(null);
   const [coverVersion, setCoverVersion] = useState(0);
   const bumpCoverVersion = () => setCoverVersion((v) => v + 1);
+  // focal edits stage here and commit together with the form submit
+  const [pendingFocal, setPendingFocal] = useState<StagedFocal | null>(null);
 
   useEffect(() => {
     if (!isEdit || !id) return;
@@ -101,12 +104,21 @@ export function EditPage() {
     try {
       if (isEdit && id) {
         await api.updateCommission(Number(id), payload);
+        if (pendingFocal) {
+          await api.setFocal(
+            pendingFocal.fileId,
+            pendingFocal.x,
+            pendingFocal.y,
+            pendingFocal.zoom,
+          );
+        }
         navigate(`/commissions/${id}`);
       } else {
         const created = await api.createCommission({ ...payload, node_names: splitList(nodes) });
         navigate(`/commissions/${created.id}/edit`);
       }
     } catch (err) {
+      // stay on the page: form fields and any staged focal edit are kept
       setError(String(err));
     } finally {
       setBusy(false);
@@ -135,7 +147,8 @@ export function EditPage() {
           }}
           disabled={busy}
         >
-          {busy ? "Saving…" : isEdit ? "✓ Save" : "✓ Create"}
+          {!busy && <Check />}
+          {busy ? "Saving…" : isEdit ? "Save" : "Create"}
         </button>
       </TopBar>
 
@@ -182,7 +195,7 @@ export function EditPage() {
             <CoverFocalEditor
               commissionId={Number(id)}
               version={coverVersion}
-              onChange={bumpCoverVersion}
+              onStage={setPendingFocal}
             />
           )}
           <FieldGroup label="Completed">
@@ -256,8 +269,9 @@ export function EditPage() {
           </FieldGroup>
 
           {isEdit && id && (
-            <Link to={`/commissions/${id}/visibility`} className="btn" style={{ justifyContent: "center" }}>
-              👁 Edit visibility
+            <Link to={`/commissions/${id}/visibility`} className="btn">
+              <Eye />
+              Edit visibility
             </Link>
           )}
         </aside>

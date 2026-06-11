@@ -1,18 +1,40 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import type { CommissionListItem } from "../api/types";
 import { Chip } from "./Chip";
 import { Cover } from "./Cover";
 
+/** Columns that fit the current viewport, capped at `max`. */
+function useViewportColumns(max: number) {
+  const compute = () => {
+    if (typeof window === "undefined") return max;
+    const width = window.innerWidth;
+    const fit = width >= 1180 ? 4 : width >= 860 ? 3 : 2;
+    return Math.min(max, fit);
+  };
+  const [columns, setColumns] = useState(compute);
+  useEffect(() => {
+    const onResize = () => setColumns(compute());
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+    // compute only reads window state; max is the sole reactive input
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [max]);
+  return columns;
+}
+
 /** FurAffinity-style column layout: items flow into N height-balanced columns,
- *  preserving left-to-right, top-to-bottom order within the balancing. */
+ *  preserving left-to-right, top-to-bottom order within the balancing.
+ *  `columns` is an upper bound; narrow viewports drop to 3 then 2. */
 export function FaGallery({
   items,
-  columns = 4,
+  columns: maxColumns = 4,
 }: {
   items: CommissionListItem[];
   columns?: number;
 }) {
+  const columns = useViewportColumns(maxColumns);
   const cols: { h: number; items: CommissionListItem[] }[] = Array.from(
     { length: columns },
     () => ({ h: 0, items: [] })

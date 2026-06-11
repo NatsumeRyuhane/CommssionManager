@@ -104,6 +104,7 @@ async def upload_file(
         height=height,
         focal_x=0.5 if is_image else None,
         focal_y=0.5 if is_image else None,
+        focal_zoom=1.0 if is_image else None,
     )
     db.add(file)
     db.commit()
@@ -141,6 +142,7 @@ def set_focal(
     file_id: int,
     focal_x: float = Form(...),
     focal_y: float = Form(...),
+    focal_zoom: float | None = Form(None),
     db: Session = Depends(get_db),
     _: Principal = Depends(require_edit),
 ):
@@ -151,6 +153,8 @@ def set_focal(
         raise HTTPException(status_code=400, detail="Focal point only applies to image files")
     file.focal_x = max(0.0, min(1.0, focal_x))
     file.focal_y = max(0.0, min(1.0, focal_y))
+    if focal_zoom is not None:
+        file.focal_zoom = max(1.0, min(3.0, focal_zoom))
     db.commit()
     db.refresh(file)
     return crud.file_out(file, None, crud.load_visibility_context(db))

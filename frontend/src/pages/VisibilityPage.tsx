@@ -367,6 +367,7 @@ function FileThumb({
             height: file.height,
             focal_x: file.focal_x,
             focal_y: file.focal_y,
+            focal_zoom: file.focal_zoom,
           }}
           ratio={1}
         />

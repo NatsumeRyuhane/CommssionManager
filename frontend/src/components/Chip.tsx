@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { X } from "lucide-react";
 import { Link } from "react-router-dom";
 
 type ChipKind = "cat" | "tag" | "rating" | "char" | "artist";
@@ -34,8 +35,8 @@ export function Chip({
       )}
       {children}
       {onRemove && (
-        <span className="x" onClick={onRemove}>
-          ✕
+        <span className="x" onClick={onRemove} role="button" aria-label="remove">
+          <X />
         </span>
       )}
     </>

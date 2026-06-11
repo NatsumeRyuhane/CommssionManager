@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Check, Globe, Link2, Pencil, Plus, Trash2, X } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 
 import { api } from "../api/client";
@@ -45,6 +46,7 @@ export function CharacterPage() {
   const [setDraft, setSetDraft] = useState({ title: "", description: "" });
   const [picker, setPicker] = useState<PickerState | null>(null);
   const [busy, setBusy] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -207,6 +209,8 @@ export function CharacterPage() {
   function copyShareLink() {
     const url = `${window.location.origin}/characters/${characterId}`;
     void navigator.clipboard?.writeText(url);
+    setLinkCopied(true);
+    setTimeout(() => setLinkCopied(false), 2000);
   }
 
   // ---- render -----------------------------------------------------------
@@ -237,7 +241,8 @@ export function CharacterPage() {
               onClick={() => void createPage()}
               disabled={busy}
             >
-              + Create page
+              <Plus />
+              Create page
             </button>
           )}
           <div style={{ marginTop: 24 }}>
@@ -268,12 +273,14 @@ export function CharacterPage() {
       <TopBar>
         {canWrite && (
           <button className="btn sm" onClick={copyShareLink}>
-            🔗 Copy link
+            {linkCopied ? <Check /> : <Link2 />}
+            {linkCopied ? "copied!" : "Copy link"}
           </button>
         )}
         {canWrite && (
           <button className="btn sm danger" onClick={() => void deletePage()} disabled={busy}>
-            🗑 Delete
+            <Trash2 />
+            Delete
           </button>
         )}
       </TopBar>
@@ -286,8 +293,9 @@ export function CharacterPage() {
         <strong className="detail-crumb-title">{data.character_name}</strong>
         <span className="spacer" />
         {isPublicPage && (
-          <span className="mono-sm" style={{ color: "var(--accent)" }}>
-            🌐 public page
+          <span className="mono-sm inline-ic" style={{ color: "var(--accent)" }}>
+            <Globe size={12} />
+            public page
           </span>
         )}
       </div>
@@ -316,7 +324,8 @@ export function CharacterPage() {
               </div>
               {canWrite && !editingAbout && (
                 <button className="btn sm ghost" onClick={startEditAbout}>
-                  ✎ edit
+                  <Pencil />
+                  edit
                 </button>
               )}
             </div>
@@ -389,7 +398,8 @@ export function CharacterPage() {
                   className="btn sm"
                   onClick={() => setPicker({ kind: "main-reference" })}
                 >
-                  {data.main_reference ? "Change reference" : "+ Pin reference"}
+                  {!data.main_reference && <Plus />}
+                  {data.main_reference ? "Change reference" : "Pin reference"}
                 </button>
                 {data.main_reference && (
                   <button
@@ -438,7 +448,8 @@ export function CharacterPage() {
 
         {canWrite && (
           <button className="btn" onClick={startCreateSet} disabled={busy}>
-            + New set
+            <Plus />
+            New set
           </button>
         )}
       </div>
@@ -540,13 +551,15 @@ function BookshelfRow({
         {editable && (
           <div className="row gap-4">
             <button className="btn sm" onClick={onRename}>
-              ✎ edit
+              <Pencil />
+              edit
             </button>
             <button className="btn sm" onClick={onAdd}>
-              + add commissions
+              <Plus />
+              add commissions
             </button>
-            <button className="btn sm danger" onClick={onDelete}>
-              🗑
+            <button className="btn sm danger" onClick={onDelete} title="Delete set" aria-label="Delete set">
+              <Trash2 />
             </button>
           </div>
         )}
@@ -597,7 +610,7 @@ function BookshelfTile({
           onClick={onRemove}
           aria-label="Remove"
         >
-          ✕
+          <X size={13} />
         </button>
       )}
     </div>

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { ArrowDown, ArrowUp, Copy, Plus, X } from "lucide-react";
 
 import { api } from "../api/client";
 import type {
@@ -417,6 +418,7 @@ function ApiKeysPanel({
           <strong>New key</strong>
           <code>{createdKey}</code>
           <button className="btn sm" onClick={onCopyCreated}>
+            <Copy />
             Copy
           </button>
         </div>
@@ -587,7 +589,8 @@ function VisibilityPanel({
               })
             }
           >
-            + Add stage
+            <Plus />
+            Add stage
           </button>
         </div>
         <div className="stage-default-list">
@@ -613,15 +616,23 @@ function VisibilityPanel({
                 onChange={(e) => setStage(index, { note: e.target.value })}
                 placeholder="note"
               />
-              <button className="btn sm" disabled={index === 0} onClick={() => moveStage(index, -1)}>
-                ↑
+              <button
+                className="btn sm"
+                disabled={index === 0}
+                onClick={() => moveStage(index, -1)}
+                title="Move up"
+                aria-label="Move stage up"
+              >
+                <ArrowUp />
               </button>
               <button
                 className="btn sm"
                 disabled={index === value.stage_defaults.length - 1}
                 onClick={() => moveStage(index, 1)}
+                title="Move down"
+                aria-label="Move stage down"
               >
-                ↓
+                <ArrowDown />
               </button>
               <button
                 className="btn sm danger"
@@ -631,8 +642,10 @@ function VisibilityPanel({
                     stage_defaults: value.stage_defaults.filter((_, i) => i !== index),
                   })
                 }
+                title="Remove stage"
+                aria-label="Remove stage"
               >
-                ✕
+                <X />
               </button>
             </div>
           ))}
