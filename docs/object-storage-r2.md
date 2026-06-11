@@ -117,8 +117,11 @@ export CMGR_TEST_S3_SECRET_KEY=<secret-access-key>
 python3 main.py test
 ```
 
-In CI, `.github/workflows/ci.yml` maps these from `TEST_S3_*` repository secrets/variables
-(unset → empty → live leg skips; fork PRs never receive secrets, so they always use the fake):
+In CI, the live legs run as their own **`S3 integration (live driver tests)`** check —
+separate from `Backend (ruff + pytest)`, which stays hermetic on the fake client — so a red
+S3-integration check means bucket connectivity or credentials, never app code. The job is
+gated on the `TEST_S3_BUCKET` repository variable: when it's unset (unconfigured repos, fork
+PRs) the check shows as skipped. Configure it with:
 
 ```sh
 gh variable set TEST_S3_BUCKET   --body "commission-files-test"

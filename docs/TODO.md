@@ -150,6 +150,10 @@
     configured backend, verifies checksums, re-keys legacy predictable keys, commits
     per object (resumable); source bytes are never deleted
   - Settings → Storage panel now shows bucket / endpoint / CDN base URL
+  - CI: dedicated `S3 integration (live driver tests)` job runs the driver-contract tests
+    against a real bucket when the `TEST_S3_*` repo secrets/variables are set (gated on the
+    `TEST_S3_BUCKET` variable, skipped otherwise); the Backend job stays hermetic on the
+    fake S3 client
 - [ ] Webhooks delivery (`commission.created/updated/delivered`)
 
 ## Phase 3 — Optional / advanced (deferred)
