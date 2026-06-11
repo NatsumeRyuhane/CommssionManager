@@ -124,10 +124,11 @@
   - Eager generation at upload (background task) + async build on cache miss: the endpoint
     answers 202 and the frontend `DerivedImg` shows a placeholder and retries with backoff
   - `FileOut`/`CoverOut` expose an `image_urls` preset map; `url` still points at `/raw`
-  - Surfaces: gallery/lifecycle/bookshelf/picker/visibility tiles `thumb`, focal previews
-    `small`, hero + character main ref `medium` (+`srcset`), viewer defaults `medium` and
-    downloads server-rendered variants (client canvas resize removed); only downloads and
-    the focal editor source still touch `/raw`
+  - Surfaces: gallery/lifecycle/bookshelf/picker/visibility tiles `thumb`, focal editor
+    canvas + previews `small` (picking is percentage-based, so no precision loss), hero +
+    character main ref `medium` (+`srcset`), viewer defaults `medium` and downloads
+    server-rendered variants (client canvas resize removed); only downloads still
+    touch `/raw`
   - Deleting a file/commission removes its derivatives; commission delete also stops
     leaking original bytes + `storage_objects` rows; export zip stays originals-only
 - [ ] Webhooks delivery (`commission.created/updated/delivered`)

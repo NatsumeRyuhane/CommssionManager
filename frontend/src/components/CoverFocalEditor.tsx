@@ -166,7 +166,14 @@ export function CoverFocalEditor({ commissionId, version = 0, onStage }: CoverFo
           setMoveLocked(false);
         }}
       >
-        <img src={cover.url} alt="" draggable={false} />
+        {/* picking is percentage-based on the rendered box, so a derivative
+            loses no precision over the original bytes */}
+        <DerivedImg
+          src={presetUrl(cover.image_urls, "small", cover.url)}
+          fallbackSrc={cover.url}
+          alt=""
+          draggable={false}
+        />
         <span
           className="focal-guide focal-guide-h"
           style={{ top: `${value.y * 100}%` }}
