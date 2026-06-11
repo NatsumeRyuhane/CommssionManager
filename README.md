@@ -180,7 +180,13 @@ By default uploaded files live on local disk (`data/storage`) and the API stream
 To serve files from an S3-compatible bucket behind a CDN instead (e.g. Cloudflare R2 with a
 custom domain), set `STORAGE_BACKEND=s3` and the `STORAGE_S3_*` / `STORAGE_CDN_BASE_URL` keys
 in `deploy/.env` (see the commented block in [`deploy/.env.example`](deploy/.env.example)),
-restart the stack, then move the existing bytes:
+restart the stack, then move the existing bytes.
+
+**R2 walkthrough:** [`docs/object-storage-r2.md`](docs/object-storage-r2.md) covers the full
+setup — bucket, scoped API token, the mapping from Cloudflare's one-time token screen to the
+app's config keys (the `cfat_…` API Token is *not* used), the optional CDN custom domain, and
+which env-name dialect goes where (`CMGR_`-prefixed in `backend/.env` vs unprefixed in
+`deploy/.env` and GitHub secrets/variables).
 
 ```sh
 python3 main.py storage status             # per-backend object counts
