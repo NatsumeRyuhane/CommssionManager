@@ -190,11 +190,16 @@ export function SettingsPage() {
               value={site}
               busy={saving}
               onChange={setSite}
-              onSave={async () => {
+              onSave={async (stageNames) => {
                 setSaving(true);
                 setError(null);
                 try {
-                  setSite(await api.updateSiteSettings({ site_title: site.site_title }));
+                  setSite(
+                    await api.updateSiteSettings({
+                      site_title: site.site_title,
+                      default_stage_names: stageNames,
+                    }),
+                  );
                 } catch (e) {
                   setError(String(e));
                 } finally {
@@ -299,12 +304,16 @@ function SitePanel({
   value: SiteSettings;
   busy: boolean;
   onChange: (next: SiteSettings) => void;
-  onSave: () => void;
+  onSave: (stageNames: string[]) => void;
 }) {
+  // edited as raw text so typed commas/spaces survive; parsed on save
+  const [stagesText, setStagesText] = useState(value.default_stage_names.join(", "));
+  const stageNames = stagesText.split(",").map((s) => s.trim()).filter(Boolean);
+
   function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!value.site_title.trim()) return;
-    onSave();
+    if (!value.site_title.trim() || stageNames.length === 0) return;
+    onSave(stageNames);
   }
 
   return (
@@ -331,8 +340,23 @@ function SitePanel({
               maxLength={120}
             />
           </label>
+          <label>
+            <span className="label">New-commission stage template</span>
+            <input
+              className="field"
+              value={stagesText}
+              onChange={(e) => setStagesText(e.target.value)}
+              placeholder="Delivered, Color, Lineart, Sketching"
+            />
+            <span className="mono-sm muted">
+              Comma-separated, applied when a commission is created. First stage renders topmost.
+            </span>
+          </label>
           <div className="settings-form-actions">
-            <button className="btn primary" disabled={busy || !value.site_title.trim()}>
+            <button
+              className="btn primary"
+              disabled={busy || !value.site_title.trim() || stageNames.length === 0}
+            >
               {busy ? "Saving…" : "Save site"}
             </button>
           </div>

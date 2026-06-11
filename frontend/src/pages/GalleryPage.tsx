@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { ArrowDown, ArrowUp, ChevronDown, ChevronUp, Loader2, Plus, Search, Users } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import { api } from "../api/client";
 import type { CommissionListItem } from "../api/types";
@@ -22,10 +22,12 @@ const PAGE_SIZE = 24;
  */
 export function GalleryPage() {
   const { canWrite } = useAuth();
+  const navigate = useNavigate();
   const [items, setItems] = useState<CommissionListItem[]>([]);
   const [total, setTotal] = useState(0);
   const [limit, setLimit] = useState(PAGE_SIZE);
   const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [q, setQ] = useState("");
@@ -78,6 +80,18 @@ export function GalleryPage() {
 
   function toggle(list: string[], set: (v: string[]) => void, value: string) {
     set(list.includes(value) ? list.filter((v) => v !== value) : [...list, value]);
+  }
+
+  // creates immediately from the site's stage template and lands on the edit page
+  async function createNew() {
+    setCreating(true);
+    try {
+      const created = await api.createCommission({ title: "Untitled" });
+      navigate(`/commissions/${created.id}/edit`);
+    } catch (e) {
+      setError(String(e));
+      setCreating(false);
+    }
   }
 
   return (
@@ -173,10 +187,14 @@ export function GalleryPage() {
           {order === "desc" ? <ArrowDown /> : <ArrowUp />}
         </button>
         {canWrite && (
-          <Link to="/commissions/new" className="btn sm primary">
-            <Plus />
+          <button
+            className="btn sm primary"
+            disabled={creating}
+            onClick={() => void createNew()}
+          >
+            {creating ? <Loader2 className="spin" /> : <Plus />}
             New
-          </Link>
+          </button>
         )}
       </TopBar>
 

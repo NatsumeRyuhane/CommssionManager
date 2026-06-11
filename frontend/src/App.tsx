@@ -14,7 +14,6 @@ import { VisibilityPage } from "./pages/VisibilityPage";
  *
  * Renders the app wrapped with AuthProvider and BrowserRouter and declares routes:
  * - `/` → GalleryPage
- * - `/commissions/new` → EditPage
  * - `/commissions/:id` → DetailPage
  * - `/commissions/:id/edit` → EditPage
  * - `/commissions/:id/visibility` → VisibilityPage
@@ -29,7 +28,6 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<GalleryPage />} />
-          <Route path="/commissions/new" element={<EditPage />} />
           <Route path="/commissions/:id" element={<DetailPage />} />
           <Route path="/commissions/:id/edit" element={<EditPage />} />
           <Route path="/commissions/:id/visibility" element={<VisibilityPage />} />

@@ -223,11 +223,14 @@ export interface StorageSettings {
 
 export interface SiteSettings {
   site_title: string;
+  /** Stage template for new commissions, display order (first = topmost). */
+  default_stage_names: string[];
   updated_at: string | null;
 }
 
 export interface SiteSettingsUpdate {
   site_title?: string | null;
+  default_stage_names?: string[] | null;
 }
 
 export interface CommissionVisibilityField {
