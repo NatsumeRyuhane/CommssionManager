@@ -131,7 +131,6 @@ def test_public_lifecycle_omits_private_stages_and_files(admin_client: TestClien
     assert {
         file["id"] for node in admin_detail["nodes"] for file in node["files"]
     } == {public_image["id"], hidden_image["id"], review_image["id"]}
-    assert admin_detail["current_stage"] == "Review"
 
     admin_client.cookies.clear()
 
@@ -140,7 +139,6 @@ def test_public_lifecycle_omits_private_stages_and_files(admin_client: TestClien
     body = public_detail.json()
     assert [node["name"] for node in body["nodes"]] == ["Delivered"]
     assert [file["id"] for file in body["nodes"][0]["files"]] == [public_image["id"]]
-    assert body["current_stage"] == "Delivered"
 
     public_nodes = admin_client.get(f"/api/v1/commissions/{commission['id']}/nodes")
     assert public_nodes.status_code == 200

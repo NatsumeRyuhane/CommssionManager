@@ -319,7 +319,6 @@ class CommissionListItem(BaseModel):
     characters: list[str] = []
     artists: list[str] = []
     formats: list[str] = []
-    current_stage: str | None = None
     cover: CoverOut | None = None
 
 
@@ -379,7 +378,6 @@ class CopyJsonOut(BaseModel):
     tags: list[str] = []
     characters: list[str] = []
     artists: list[str] = []
-    current_stage: str | None = None
     files_endpoint: str
     public_images_endpoint: str
 

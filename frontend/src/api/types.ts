@@ -41,7 +41,6 @@ export interface CommissionListItem {
   characters: string[];
   artists: string[];
   formats: string[];
-  current_stage: string | null;
   cover: Cover | null;
 }
 

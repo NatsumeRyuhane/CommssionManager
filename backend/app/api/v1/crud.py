@@ -558,33 +558,6 @@ def ordered_nodes(commission: Commission) -> list[CommissionNode]:
     return regular
 
 
-def _current_stage(
-    commission: Commission,
-    visibility_context: VisibilityContext | None = None,
-    include_private: bool = True,
-) -> str | None:
-    nodes = ordered_nodes(commission)
-    if not include_private and visibility_context is not None:
-        nodes = [
-            node
-            for node in nodes
-            if effective_node_visibility(node, visibility_context) == Visibility.public
-        ]
-    with_files = [
-        node
-        for node in nodes
-        if any(
-            include_private
-            or visibility_context is None
-            or effective_file_visibility(file, visibility_context) == Visibility.public
-            for file in node.files
-        )
-    ]
-    if with_files:
-        return with_files[-1].name
-    return nodes[-1].name if nodes else None
-
-
 def _cover(
     commission: Commission,
     visibility_context: VisibilityContext | None = None,
@@ -683,7 +656,6 @@ def serialize_list_item(
             else []
         ),
         formats=formats_of(commission, visibility_context, include_private),
-        current_stage=_current_stage(commission, visibility_context, include_private),
         cover=_cover(commission, visibility_context, include_private),
     )
 
@@ -861,7 +833,6 @@ def serialize_copy_json(commission: Commission) -> CopyJsonOut:
         tags=tags_of(commission),
         characters=[c.name for c in commission.characters],
         artists=[a.name for a in commission.artists],
-        current_stage=_current_stage(commission),
         files_endpoint=f"/api/v1/commissions/{commission.id}/files",
         public_images_endpoint=f"/api/v1/commissions/{commission.id}/images?visibility=public",
     )

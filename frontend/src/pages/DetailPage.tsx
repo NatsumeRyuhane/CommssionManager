@@ -88,7 +88,6 @@ export function DetailPage() {
   const regular = data.nodes.filter((n) => !n.is_detached);
   const detached = data.nodes.filter((n) => n.is_detached && n.files.length > 0);
   const lifecycle = [...detached, ...regular];
-  const currentStage = data.current_stage;
   const paddedId = String(data.id).padStart(3, "0");
 
   const isPublic = data.effective_visibility !== "private";
@@ -142,9 +141,6 @@ export function DetailPage() {
         >
           {isPublic ? <Globe size={12} /> : <Lock size={12} />}
           {isPublic ? "public" : "private"}
-          {currentStage && (
-            <span className="muted" style={{ marginLeft: 8 }}>· stage: {currentStage}</span>
-          )}
         </span>
       </div>
 
@@ -234,11 +230,6 @@ export function DetailPage() {
               {data.artists.map((a) => <Chip key={a} kind="artist">{a}</Chip>)}
             </MetaBlock>
           )}
-          {currentStage && (
-            <MetaBlock label="Current stage">
-              <Chip kind="cat">{currentStage}</Chip>
-            </MetaBlock>
-          )}
         </aside>
       </div>
 
@@ -254,7 +245,6 @@ export function DetailPage() {
         </div>
         <LifecycleStagesList
           nodes={lifecycle}
-          currentStage={currentStage}
           coverFileId={data.cover?.file_id ?? null}
         />
       </div>
