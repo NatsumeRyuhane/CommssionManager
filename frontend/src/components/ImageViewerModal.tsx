@@ -1,19 +1,24 @@
 import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Download, X } from "lucide-react";
 
-import type { CommissionFile } from "../api/types";
+import type { CommissionFile, ImagePreset } from "../api/types";
+import { DerivedImg, PRESET_EDGES, presetUrl } from "./DerivedImg";
 
 interface ResolutionOption {
   label: string;
-  maxEdge: number | null;
+  preset: ImagePreset | null; // null = original bytes
 }
 
 const RESOLUTIONS: ResolutionOption[] = [
-  { label: "Original", maxEdge: null },
-  { label: "Large", maxEdge: 2048 },
-  { label: "Medium", maxEdge: 1280 },
-  { label: "Small", maxEdge: 640 },
+  { label: "Original", preset: null },
+  { label: "Large", preset: "large" },
+  { label: "Medium", preset: "medium" },
+  { label: "Small", preset: "small" },
 ];
+
+function maxEdgeOf(option: ResolutionOption): number | null {
+  return option.preset ? PRESET_EDGES[option.preset] : null;
+}
 
 function dimensionsFor(file: CommissionFile, maxEdge: number | null): string {
   if (!file.width || !file.height) return maxEdge ? `${maxEdge}px max` : "original";
@@ -22,10 +27,20 @@ function dimensionsFor(file: CommissionFile, maxEdge: number | null): string {
 }
 
 function availableResolutions(file: CommissionFile): ResolutionOption[] {
+  // derivatives are static re-encodes; only the original keeps gif animation
+  if (file.format === "gif") return RESOLUTIONS.filter((option) => option.preset === null);
   const maxDimension = Math.max(file.width ?? 0, file.height ?? 0);
-  return RESOLUTIONS.filter(
-    ({ maxEdge }) => maxEdge === null || !maxDimension || maxEdge < maxDimension,
-  );
+  // <= keeps the preset matching the source's exact size: same dimensions,
+  // but the re-encoded derivative still transfers far fewer bytes than /raw
+  return RESOLUTIONS.filter((option) => {
+    const maxEdge = maxEdgeOf(option);
+    return maxEdge === null || !maxDimension || maxEdge <= maxDimension;
+  });
+}
+
+function defaultPreset(file: CommissionFile, options: ResolutionOption[]): ImagePreset | null {
+  if (file.format === "gif") return null;
+  return options.some((option) => option.preset === "medium") ? "medium" : null;
 }
 
 function safeFilename(file: CommissionFile): string {
@@ -36,14 +51,14 @@ function safeFilename(file: CommissionFile): string {
   return base || `image-${file.id}`;
 }
 
-function outputType(file: CommissionFile): { mime: string; extension: string } {
+function outputType(file: CommissionFile): { format: string; extension: string } {
   if (file.format === "jpg" || file.format === "jpeg") {
-    return { mime: "image/jpeg", extension: "jpg" };
+    return { format: "jpeg", extension: "jpg" };
   }
   if (file.format === "webp") {
-    return { mime: "image/webp", extension: "webp" };
+    return { format: "webp", extension: "webp" };
   }
-  return { mime: "image/png", extension: "png" };
+  return { format: "png", extension: "png" };
 }
 
 function downloadBlob(blob: Blob, filename: string) {
@@ -57,29 +72,18 @@ function downloadBlob(blob: Blob, filename: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
-async function resizeImage(blob: Blob, maxEdge: number, file: CommissionFile): Promise<Blob> {
-  const image = await createImageBitmap(blob);
-  const scale = Math.min(1, maxEdge / Math.max(image.width, image.height));
-  const width = Math.max(1, Math.round(image.width * scale));
-  const height = Math.max(1, Math.round(image.height * scale));
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const context = canvas.getContext("2d");
-  if (!context) {
-    image.close();
-    throw new Error("Browser could not create an image canvas");
+/** Fetch a derivative, polling while the server answers 202 (still building). */
+async function fetchDerivative(url: string): Promise<Blob> {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const response = await fetch(url, { credentials: "include" });
+    if (response.status === 202) {
+      await new Promise((resolve) => setTimeout(resolve, 900));
+      continue;
+    }
+    if (!response.ok) throw new Error(`Download failed (${response.status})`);
+    return response.blob();
   }
-  context.drawImage(image, 0, 0, width, height);
-  image.close();
-  const { mime } = outputType(file);
-  return new Promise((resolve, reject) => {
-    canvas.toBlob(
-      (result) => (result ? resolve(result) : reject(new Error("Browser could not resize image"))),
-      mime,
-      0.92,
-    );
-  });
+  throw new Error("Timed out waiting for the server to build the image");
 }
 
 export function ImageViewerModal({
@@ -98,14 +102,17 @@ export function ImageViewerModal({
   const index = Math.max(0, images.findIndex((file) => file.id === activeFileId));
   const active = images[index];
   const resolutions = useMemo(() => availableResolutions(active), [active]);
-  const [maxEdge, setMaxEdge] = useState<number | null>(null);
+  const [preset, setPreset] = useState<ImagePreset | null>(() =>
+    defaultPreset(active, availableResolutions(active)),
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setMaxEdge(null);
+    const file = images.find((candidate) => candidate.id === activeFileId);
+    if (file) setPreset(defaultPreset(file, availableResolutions(file)));
     setError(null);
-  }, [activeFileId]);
+  }, [activeFileId, images]);
 
   useEffect(() => {
     function keydown(event: KeyboardEvent) {
@@ -125,18 +132,19 @@ export function ImageViewerModal({
     setSaving(true);
     setError(null);
     try {
-      const response = await fetch(active.url, { credentials: "include" });
-      if (!response.ok) throw new Error(`Download failed (${response.status})`);
-      const source = await response.blob();
-      if (maxEdge === null) {
-        downloadBlob(source, `${safeFilename(active)}.${active.format || "png"}`);
+      if (preset === null) {
+        const response = await fetch(active.url, { credentials: "include" });
+        if (!response.ok) throw new Error(`Download failed (${response.status})`);
+        downloadBlob(await response.blob(), `${safeFilename(active)}.${active.format || "png"}`);
         return;
       }
-      const resized = await resizeImage(source, maxEdge, active);
-      const { extension } = outputType(active);
+      const derivativeUrl = active.image_urls?.[preset];
+      if (!derivativeUrl) throw new Error("No derivative available for this image");
+      const { format, extension } = outputType(active);
+      const blob = await fetchDerivative(`${derivativeUrl}&format=${format}`);
       downloadBlob(
-        resized,
-        `${safeFilename(active)}-${dimensionsFor(active, maxEdge).replace(/\s/g, "")}.${extension}`,
+        blob,
+        `${safeFilename(active)}-${dimensionsFor(active, PRESET_EDGES[preset]).replace(/\s/g, "")}.${extension}`,
       );
     } catch (saveError) {
       setError(String(saveError));
@@ -147,6 +155,7 @@ export function ImageViewerModal({
 
   const previous = images[(index - 1 + images.length) % images.length];
   const next = images[(index + 1) % images.length];
+  const displaySrc = preset ? presetUrl(active.image_urls, preset, active.url) : active.url;
 
   return (
     <div className="image-viewer-overlay" onMouseDown={onClose}>
@@ -167,15 +176,19 @@ export function ImageViewerModal({
           <div className="row gap-8">
             <select
               className="field image-viewer-resolution"
-              aria-label="Save image resolution"
-              value={maxEdge ?? "original"}
+              aria-label="Image resolution"
+              value={preset ?? "original"}
               onChange={(event) =>
-                setMaxEdge(event.target.value === "original" ? null : Number(event.target.value))
+                setPreset(
+                  event.target.value === "original"
+                    ? null
+                    : (event.target.value as ImagePreset),
+                )
               }
             >
               {resolutions.map((option) => (
-                <option key={option.maxEdge ?? "original"} value={option.maxEdge ?? "original"}>
-                  {option.label} · {dimensionsFor(active, option.maxEdge)}
+                <option key={option.preset ?? "original"} value={option.preset ?? "original"}>
+                  {option.label} · {dimensionsFor(active, maxEdgeOf(option))}
                 </option>
               ))}
             </select>
@@ -207,7 +220,11 @@ export function ImageViewerModal({
               <ChevronLeft size={28} />
             </button>
           )}
-          <img src={active.url} alt={active.label || `${nodeName} image ${index + 1}`} />
+          <DerivedImg
+            src={displaySrc}
+            fallbackSrc={active.url}
+            alt={active.label || `${nodeName} image ${index + 1}`}
+          />
           {images.length > 1 && (
             <button
               className="image-viewer-nav next"
@@ -233,7 +250,12 @@ export function ImageViewerModal({
                 aria-label={`View image ${imageIndex + 1}`}
                 aria-current={file.id === active.id}
               >
-                <img src={file.url} alt="" loading="lazy" />
+                <DerivedImg
+                  src={presetUrl(file.image_urls, "thumb", file.url)}
+                  fallbackSrc={file.url}
+                  alt=""
+                  loading="lazy"
+                />
               </button>
             ))}
           </div>

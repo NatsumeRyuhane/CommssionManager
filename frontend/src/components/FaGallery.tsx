@@ -53,7 +53,12 @@ export function FaGallery({
         <div className="fa-col" key={i}>
           {col.items.map((it) => (
             <Link to={`/commissions/${it.id}`} className="fa-tile" key={it.id}>
-              <Cover cover={it.cover} rounded={false} />
+              <Cover
+                cover={it.cover}
+                rounded={false}
+                size="thumb"
+                sizes="(max-width: 859px) 50vw, (max-width: 1179px) 33vw, 25vw"
+              />
               <div className="label-row">
                 {it.categories[0] && <Chip kind="cat">{it.categories[0]}</Chip>}
                 {it.rating !== "general" && (

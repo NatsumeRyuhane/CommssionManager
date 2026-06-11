@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
+from uuid import uuid4
 
 from app.storage.base import StorageBackendDriver, StoredFile
 
@@ -24,7 +25,10 @@ class LocalStorage(StorageBackendDriver):
     def save(self, key: str, data: bytes) -> StoredFile:
         p = self._path(key)
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_bytes(data)
+        # write-then-rename so concurrent readers never observe partial bytes
+        tmp = p.with_name(f".{p.name}.{uuid4().hex}.tmp")
+        tmp.write_bytes(data)
+        tmp.replace(p)
         return StoredFile(
             backend=self.backend_name,
             bucket=None,

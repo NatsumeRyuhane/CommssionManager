@@ -6,10 +6,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from app import images
 from app.api.v1 import crud
 from app.auth.deps import Principal, get_principal, require_edit
 from app.db import get_db
-from app.models import Commission, Visibility
+from app.models import Commission, CommissionFile, StorageObject, Visibility
 from app.schemas import (
     CommissionCreate,
     CommissionDetail,
@@ -20,6 +21,7 @@ from app.schemas import (
     CopyJsonOut,
     FileOut,
 )
+from app.storage import get_storage
 
 router = APIRouter(prefix="/commissions", tags=["commissions"])
 
@@ -208,11 +210,36 @@ def delete_commission(
     _: Principal = Depends(require_edit),
 ):
     commission = _get_one(db, commission_id)
+    object_ids = {
+        file.storage_object_id for node in commission.nodes for file in node.files
+    }
     # cover_file_id references a file we're about to cascade-delete; clear it first
     if commission.meta:
         commission.meta.cover_file_id = None
         db.flush()
     db.delete(commission)
+    db.flush()
+    # clean up stored bytes (originals + cached derivatives) for storage objects
+    # that no remaining file references
+    if object_ids:
+        still_used = set(
+            db.scalars(
+                select(CommissionFile.storage_object_id).where(
+                    CommissionFile.storage_object_id.in_(object_ids)
+                )
+            )
+        )
+        storage = get_storage()
+        for object_id in object_ids - still_used:
+            obj = db.get(StorageObject, object_id)
+            if obj is None:
+                continue
+            try:
+                storage.delete(obj.key, bucket=obj.bucket)
+            except OSError:
+                pass
+            images.delete_derivatives(storage, obj.id)
+            db.delete(obj)
     db.commit()
 
 

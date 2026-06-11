@@ -77,7 +77,7 @@ export function CharactersDirectoryPage() {
           {pages.map((p) => (
             <Link key={p.character_id} to={`/characters/${p.character_id}`} className="char-directory-card">
               <div className="face">
-                <Cover cover={p.main_reference?.cover ?? null} rounded={false} />
+                <Cover cover={p.main_reference?.cover ?? null} rounded={false} size="thumb" />
               </div>
               <div className="meta">
                 <h3>{p.character_name}</h3>

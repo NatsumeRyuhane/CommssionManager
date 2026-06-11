@@ -247,6 +247,8 @@ class FileOut(BaseModel):
     visibility: Visibility | None = None
     effective_visibility: Visibility | None = None
     url: str
+    # preset name -> derivative URL (/files/{id}/image?size=...); None for non-images
+    image_urls: dict[str, str] | None = None
     is_cover: bool = False
 
 
@@ -295,6 +297,8 @@ class NodeReorder(BaseModel):
 class CoverOut(BaseModel):
     file_id: int
     url: str
+    # preset name -> derivative URL (/files/{id}/image?size=...)
+    image_urls: dict[str, str] | None = None
     width: int | None = None
     height: int | None = None
     focal_x: float | None = None

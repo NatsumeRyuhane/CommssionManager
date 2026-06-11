@@ -3,6 +3,7 @@ import { Crosshair, Undo2 } from "lucide-react";
 
 import { api } from "../api/client";
 import type { Cover } from "../api/types";
+import { DerivedImg, presetUrl } from "./DerivedImg";
 
 /** A pending focal edit the parent form commits alongside the rest of its fields. */
 export interface StagedFocal {
@@ -165,7 +166,14 @@ export function CoverFocalEditor({ commissionId, version = 0, onStage }: CoverFo
           setMoveLocked(false);
         }}
       >
-        <img src={cover.url} alt="" draggable={false} />
+        {/* picking is percentage-based on the rendered box, so a derivative
+            loses no precision over the original bytes */}
+        <DerivedImg
+          src={presetUrl(cover.image_urls, "small", cover.url)}
+          fallbackSrc={cover.url}
+          alt=""
+          draggable={false}
+        />
         <span
           className="focal-guide focal-guide-h"
           style={{ top: `${value.y * 100}%` }}
@@ -209,8 +217,9 @@ export function CoverFocalEditor({ commissionId, version = 0, onStage }: CoverFo
               className="cover-focal-preview-img"
               style={{ aspectRatio: `${r.w} / ${r.h}` }}
             >
-              <img
-                src={cover.url}
+              <DerivedImg
+                src={presetUrl(cover.image_urls, "small", cover.url)}
+                fallbackSrc={cover.url}
                 alt=""
                 draggable={false}
                 style={{

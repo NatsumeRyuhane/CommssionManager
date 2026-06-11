@@ -363,6 +363,7 @@ function FileThumb({
           cover={{
             file_id: file.id,
             url: file.url,
+            image_urls: file.image_urls,
             width: file.width,
             height: file.height,
             focal_x: file.focal_x,
@@ -370,6 +371,7 @@ function FileThumb({
             focal_zoom: file.focal_zoom,
           }}
           ratio={1}
+          size="thumb"
         />
       </div>
     );

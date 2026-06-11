@@ -8,6 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app import images
 from app.models import (
     AppSettings,
     Artist,
@@ -358,6 +359,13 @@ def _file_url(file_id: int) -> str:
     return f"/api/v1/files/{file_id}/raw"
 
 
+def _image_urls(file_id: int) -> dict[str, str]:
+    """Preset name -> derivative URL, for image files only."""
+    return {
+        preset: f"/api/v1/files/{file_id}/image?size={preset}" for preset in images.PRESETS
+    }
+
+
 def default_stage_visibility(stage_name: str, context: VisibilityContext) -> Visibility:
     return context.stage_defaults.get(stage_name.strip().lower(), context.default_stage_visibility)
 
@@ -594,6 +602,7 @@ def _cover(
     return CoverOut(
         file_id=cover_file.id,
         url=_file_url(cover_file.id),
+        image_urls=_image_urls(cover_file.id),
         width=cover_file.width,
         height=cover_file.height,
         focal_x=cover_file.focal_x,
@@ -684,6 +693,7 @@ def file_out(
             else None
         ),
         url=_file_url(f.id),
+        image_urls=_image_urls(f.id) if f.is_image else None,
         is_cover=(f.id == cover_file_id),
     )
 

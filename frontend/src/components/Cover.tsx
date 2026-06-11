@@ -1,14 +1,19 @@
-import type { Cover as CoverType } from "../api/types";
+import type { Cover as CoverType, ImagePreset } from "../api/types";
+import { DerivedImg, presetSrcSet, presetUrl } from "./DerivedImg";
 
 /** Renders a cover/image with focal-point-aware cropping, or a hatched placeholder. */
 export function Cover({
   cover,
   ratio,
   rounded = true,
+  size = "small",
+  sizes,
 }: {
   cover: CoverType | null;
   ratio?: number; // width / height; defaults to the cover's intrinsic ratio or 4:5
   rounded?: boolean;
+  size?: ImagePreset; // derivative preset for this surface; originals never load here
+  sizes?: string; // when set, expose the derivative srcset and let the browser pick
 }) {
   const ar =
     ratio ??
@@ -36,9 +41,18 @@ export function Cover({
     imgStyle.transformOrigin = objectPosition;
     (imgStyle as Record<string, string | number>)["--focal-zoom"] = zoom;
   }
+  const srcSet = sizes ? presetSrcSet(cover.image_urls, cover.width, cover.height) : undefined;
   return (
     <div className="imgph" style={style}>
-      <img src={cover.url} alt="" style={imgStyle} loading="lazy" />
+      <DerivedImg
+        src={presetUrl(cover.image_urls, size, cover.url)}
+        srcSet={srcSet}
+        sizes={srcSet ? sizes : undefined}
+        fallbackSrc={cover.url}
+        alt=""
+        style={imgStyle}
+        loading="lazy"
+      />
     </div>
   );
 }
