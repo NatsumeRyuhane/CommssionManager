@@ -219,10 +219,12 @@ gh variable set STORAGE_SIGNED_URL_TTL --body "600"
 ```
 
 In a workflow, read them as `${{ secrets.STORAGE_S3_ACCESS_KEY }}` / `${{ vars.STORAGE_S3_BUCKET }}`
-when writing `deploy/.env` on the runner. The CI workflow in this repo needs none of these — the
-test suite covers the S3 driver with a fake client. Use a bucket-scoped API token (R2: "Object
-Read & Write" on the one bucket); rotate it by updating the repo secret and `deploy/.env`, then
-restarting the stack.
+when writing `deploy/.env` on the runner. The CI workflow in this repo needs none of these to
+pass — the test suite covers the S3 driver with a fake client; optionally set the separate
+`TEST_S3_*` secrets/variables (pointing at a dedicated test bucket) to also run the driver
+tests against live S3, as described in [`docs/object-storage-r2.md`](docs/object-storage-r2.md).
+Use a bucket-scoped API token (R2: "Object Read & Write" on the one bucket); rotate it by
+updating the repo secret and `deploy/.env`, then restarting the stack.
 
 ---
 

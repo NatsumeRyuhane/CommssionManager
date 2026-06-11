@@ -40,6 +40,16 @@ jobs:
       # Point the test suite at the service container so conftest.py skips spinning
       # up its own testcontainers Postgres.
       CMGR_TEST_DATABASE_URL: postgresql+psycopg://test:test@localhost:5432/test
+      # Optional live-S3 leg of the storage driver tests (tests/test_storage_s3.py).
+      # When the TEST_S3_* repo secrets/variables are unset — including PRs from
+      # forks, which never receive secrets — these resolve to empty strings and the
+      # live tests skip, leaving the fake-client coverage. Use a dedicated test
+      # bucket with a bucket-scoped token; see docs/object-storage-r2.md.
+      CMGR_TEST_S3_BUCKET: ${{ vars.TEST_S3_BUCKET }}
+      CMGR_TEST_S3_ENDPOINT: ${{ vars.TEST_S3_ENDPOINT }}
+      CMGR_TEST_S3_REGION: ${{ vars.TEST_S3_REGION }}
+      CMGR_TEST_S3_ACCESS_KEY: ${{ secrets.TEST_S3_ACCESS_KEY }}
+      CMGR_TEST_S3_SECRET_KEY: ${{ secrets.TEST_S3_SECRET_KEY }}
     steps:
       - uses: actions/checkout@v4
         with:

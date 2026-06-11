@@ -96,7 +96,38 @@ python3 main.py storage migrate            # copy into the bucket (source bytes 
 Migration is resumable (commits per object) and never deletes the local source bytes;
 remove `data/storage` contents manually once you've verified the cutover.
 
-## 6. Rotating the credentials
+## 6. Optional: run the driver tests against live S3
+
+The suite always tests the S3 driver with a dict-backed fake client, so neither local runs
+nor CI need any S3 configuration. To *additionally* run the driver-contract tests
+(round trip, missing-key handling, signed URLs) against a real bucket, provide
+`CMGR_TEST_S3_*` — the live test leg skips whenever they're absent, mirroring the
+`CMGR_TEST_DATABASE_URL` pattern.
+
+Use a **dedicated test bucket with its own bucket-scoped token** — never the production
+bucket. The tests write and delete a few tiny objects under `pytest-driver/`.
+
+Locally:
+
+```sh
+export CMGR_TEST_S3_BUCKET=commission-files-test
+export CMGR_TEST_S3_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
+export CMGR_TEST_S3_ACCESS_KEY=<access-key-id>
+export CMGR_TEST_S3_SECRET_KEY=<secret-access-key>
+python3 main.py test
+```
+
+In CI, `.github/workflows/ci.yml` maps these from `TEST_S3_*` repository secrets/variables
+(unset → empty → live leg skips; fork PRs never receive secrets, so they always use the fake):
+
+```sh
+gh variable set TEST_S3_BUCKET   --body "commission-files-test"
+gh variable set TEST_S3_ENDPOINT --body "https://<account-id>.r2.cloudflarestorage.com"
+gh secret set TEST_S3_ACCESS_KEY --body "<access-key-id>"
+gh secret set TEST_S3_SECRET_KEY --body "<secret-access-key>"
+```
+
+## 7. Rotating the credentials
 
 R2 → Manage R2 API Tokens → delete the old token, create a new one (same scope), then
 update the values everywhere they live — `backend/.env` / `deploy/.env` on the server and
