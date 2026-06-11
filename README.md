@@ -188,24 +188,35 @@ python3 main.py storage migrate --dry-run  # preview what would move
 python3 main.py storage migrate            # copy into the bucket (source bytes retained)
 ```
 
-**Keep the S3 credentials out of the repository.** `deploy/.env` and `backend/.env` are
-gitignored — that is the only place real values should live on the server; never put them in
-`.env.example`, compose files, or anything committed. If you automate deployments or storage
-migrations with GitHub Actions, store the values as **repository secrets** (GitHub →
-repo **Settings → Secrets and variables → Actions → New repository secret**) named after the
-`deploy/.env` keys — at minimum `STORAGE_S3_ACCESS_KEY` and `STORAGE_S3_SECRET_KEY` (bucket,
-endpoint, and CDN URL can be plain repository *variables*) — and inject them in the workflow
-when writing `deploy/.env` on the runner:
+**Keep the S3 credentials out of the repository.** On the server, real values live only in the
+gitignored `deploy/.env` / `backend/.env` — never in `.env.example`, compose files, or anything
+committed. If you automate deployments or storage migrations with GitHub Actions, configure the
+repository in two places (names match the `deploy/.env` keys 1:1):
 
-```yaml
-env:
-  STORAGE_S3_ACCESS_KEY: ${{ secrets.STORAGE_S3_ACCESS_KEY }}
-  STORAGE_S3_SECRET_KEY: ${{ secrets.STORAGE_S3_SECRET_KEY }}
+**Repository secrets** — the two credentials, nothing else (GitHub → repo **Settings → Secrets
+and variables → Actions → Secrets**, or with the `gh` CLI):
+
+```sh
+gh secret set STORAGE_S3_ACCESS_KEY --body "<access-key-id>"
+gh secret set STORAGE_S3_SECRET_KEY --body "<secret-access-key>"
 ```
 
-CI itself needs no S3 secrets: the test suite covers the S3 driver with a fake client.
-Use a bucket-scoped API token (R2: "Object Read & Write" on the one bucket), and rotate it by
-updating the repo secret + `deploy/.env` and restarting the stack.
+**Repository variables** — the non-sensitive knobs (same settings page → **Variables**):
+
+```sh
+gh variable set STORAGE_BACKEND        --body "s3"
+gh variable set STORAGE_S3_BUCKET      --body "commission-files"
+gh variable set STORAGE_S3_ENDPOINT    --body "https://<account-id>.r2.cloudflarestorage.com"
+gh variable set STORAGE_S3_REGION      --body "auto"  # R2: auto; AWS: e.g. us-east-1
+gh variable set STORAGE_CDN_BASE_URL   --body "https://files.example.com"
+gh variable set STORAGE_SIGNED_URL_TTL --body "600"
+```
+
+In a workflow, read them as `${{ secrets.STORAGE_S3_ACCESS_KEY }}` / `${{ vars.STORAGE_S3_BUCKET }}`
+when writing `deploy/.env` on the runner. The CI workflow in this repo needs none of these — the
+test suite covers the S3 driver with a fake client. Use a bucket-scoped API token (R2: "Object
+Read & Write" on the one bucket); rotate it by updating the repo secret and `deploy/.env`, then
+restarting the stack.
 
 ---
 
