@@ -131,6 +131,25 @@
     touch `/raw`
   - Deleting a file/commission removes its derivatives; commission delete also stops
     leaking original bytes + `storage_objects` rows; export zip stays originals-only
+- [x] CDN-backed file delivery (issue #20, Option 2 — object storage + CDN)
+  - `S3Storage` driver (S3-compatible: Cloudflare R2 / AWS S3 / MinIO) behind the existing
+    storage abstraction; selected via `CMGR_STORAGE_BACKEND=s3` + `CMGR_STORAGE_S3_*` /
+    `CMGR_STORAGE_CDN_BASE_URL` settings (boto3, lazily imported)
+  - `/files/{id}/raw` and `/files/{id}/image` now 302 to the CDN (public files) or a
+    signed URL (private files) when the backend provides URLs; `?redirect=0` opts back
+    into streaming (used by the viewer's blob downloads — fetch() can't carry credentials
+    across a cross-origin redirect)
+  - Streaming path got the Option-1 header work: `ETag` (checksum) + `If-None-Match` →
+    304, `Last-Modified`, `Cache-Control: public, max-age=86400` for public files,
+    `private, no-store` for admin-only files
+  - Upload keys + derivative cache keys carry an unguessable random/checksum segment:
+    safe behind a public bucket domain, busts caches on re-upload, and fixes the
+    duplicate-filename unique-constraint collision
+  - `python3 main.py storage <status|migrate> [--dry-run]` wraps
+    `python -m app.storage.migrate`: copies objects (and cached derivatives) into the
+    configured backend, verifies checksums, re-keys legacy predictable keys, commits
+    per object (resumable); source bytes are never deleted
+  - Settings → Storage panel now shows bucket / endpoint / CDN base URL
 - [ ] Webhooks delivery (`commission.created/updated/delivered`)
 
 ## Phase 3 — Optional / advanced (deferred)
