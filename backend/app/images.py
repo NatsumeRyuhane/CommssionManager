@@ -110,7 +110,14 @@ def delete_derivatives(
     """Best-effort removal of every cached derivative for a storage object."""
     for preset in PRESETS:
         for fmt in FORMATS:
-            try:
-                storage.delete(derivative_key(storage_object_id, token, preset, fmt))
-            except OSError:
-                pass
+            keys = (
+                derivative_key(storage_object_id, token, preset, fmt),
+                # pre-token layout, so caches written before the key scheme
+                # changed don't linger as orphans
+                f"derivatives/{storage_object_id}/{preset}.{fmt}",
+            )
+            for key in keys:
+                try:
+                    storage.delete(key)
+                except OSError:
+                    pass

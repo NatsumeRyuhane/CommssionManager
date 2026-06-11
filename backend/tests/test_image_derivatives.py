@@ -164,6 +164,18 @@ def test_file_delete_cleans_derivatives(admin_client: TestClient):
         )
 
 
+def test_file_delete_cleans_legacy_pretoken_derivatives(admin_client: TestClient):
+    _, node_id = _commission(admin_client)
+    file = _upload(admin_client, node_id)
+    obj = _storage_object(admin_client)
+    storage = get_storage()
+    # a derivative cached under the pre-token key layout (before issue #20)
+    legacy_key = f"derivatives/{obj['id']}/thumb.{images.DEFAULT_FORMAT}"
+    storage.save(legacy_key, b"stale-cache")
+    assert admin_client.delete(f"/api/v1/files/{file['id']}").status_code == 204
+    assert not storage.exists(legacy_key)
+
+
 def test_commission_delete_cleans_originals_and_derivatives(admin_client: TestClient):
     commission_id, node_id = _commission(admin_client)
     _upload(admin_client, node_id)
