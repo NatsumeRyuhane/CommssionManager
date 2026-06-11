@@ -241,6 +241,7 @@ def get_raw(
 @router.get("/files/{file_id}/image")
 def get_image(
     file_id: int,
+    request: Request,
     background: BackgroundTasks,
     size: str = Query(...),
     format: str = Query(default=images.DEFAULT_FORMAT),
@@ -281,12 +282,22 @@ def get_image(
         except OSError:
             data = None  # evicted between exists() and read(); fall through to rebuild
         if data is not None:
+            headers = {"Cache-Control": PUBLIC_CACHE if public else "private, max-age=3600"}
+            if obj.created_at is not None:
+                headers["Last-Modified"] = format_datetime(
+                    obj.created_at.astimezone(timezone.utc), usegmt=True
+                )
+            if obj.checksum:
+                # derivative bytes are a pure function of (source checksum, preset,
+                # format), so their identity makes a stable validator
+                etag = f'"{obj.checksum[:16]}-{size}-{format}"'
+                headers["ETag"] = etag
+                if _etag_matches(request.headers.get("if-none-match"), etag):
+                    return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers=headers)
             return Response(
                 content=data,
                 media_type=images.FORMATS[format][1],
-                headers={
-                    "Cache-Control": PUBLIC_CACHE if public else "private, max-age=3600"
-                },
+                headers=headers,
             )
     background.add_task(
         images.generate, storage, obj.key, obj.bucket, obj.id, obj.checksum, size, format

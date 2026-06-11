@@ -88,6 +88,29 @@ def test_public_image_derivative_is_shared_cacheable(
     assert res.headers["cache-control"] == "public, max-age=86400"
 
 
+def test_image_streaming_sets_validators_and_honors_if_none_match(
+    client: TestClient, admin_client: TestClient
+):
+    file = _setup(admin_client)
+    admin_client.post("/api/v1/auth/logout")
+    res = client.get(f"/api/v1/files/{file['id']}/image?size=thumb")
+    assert res.status_code == 200
+    etag = res.headers["etag"]
+    assert "last-modified" in res.headers
+
+    res = client.get(
+        f"/api/v1/files/{file['id']}/image?size=thumb", headers={"If-None-Match": etag}
+    )
+    assert res.status_code == 304
+    assert res.content == b""
+
+    # a different representation must not match the validator
+    res = client.get(
+        f"/api/v1/files/{file['id']}/image?size=small", headers={"If-None-Match": etag}
+    )
+    assert res.status_code == 200
+
+
 def test_same_filename_uploads_no_longer_collide(admin_client: TestClient):
     file = _setup(admin_client)
     res = admin_client.post(
