@@ -139,9 +139,13 @@ def update_visibility_settings(
 @router.get("/storage", response_model=StorageSettingsOut)
 def get_storage_settings(principal: Principal = Depends(require_edit)):
     _require_admin(principal)
+    is_s3 = settings.storage_backend == "s3"
     return StorageSettingsOut(
         backend=settings.storage_backend,
         local_root=settings.storage_local_root if settings.storage_backend == "local" else None,
+        s3_bucket=settings.storage_s3_bucket if is_s3 else None,
+        s3_endpoint=settings.storage_s3_endpoint if is_s3 else None,
+        cdn_base_url=settings.storage_cdn_base_url if is_s3 else None,
     )
 
 
