@@ -78,6 +78,45 @@ class ProdUninstallTests(unittest.TestCase):
         )
 
 
+class StorageToolTests(unittest.TestCase):
+    def test_rejects_unknown_action(self) -> None:
+        with patch.object(manager.c, "die", side_effect=SystemExit) as die:
+            with self.assertRaises(SystemExit):
+                manager.storage_tool("dev", "frobnicate", False)
+        die.assert_called_once_with(
+            "usage: python3 main.py storage <status|migrate> [--dry-run]"
+        )
+
+    def test_dev_mode_runs_cli_via_uv(self) -> None:
+        env = {"PATH": "/stub"}
+        with (
+            patch.object(manager, "_require"),
+            patch.object(manager.c, "step"),
+            patch.object(manager.c, "uv_environ", return_value=env),
+            patch.object(manager.c, "run") as run,
+        ):
+            manager.storage_tool("dev", "status", False)
+        run.assert_called_once_with(
+            ["uv", "run", "python", "-m", "app.storage.migrate", "status"],
+            cwd=manager.c.BACKEND,
+            env=env,
+        )
+
+    def test_prod_mode_execs_inside_api_container(self) -> None:
+        with (
+            patch.object(manager, "_require"),
+            patch.object(manager.c, "step"),
+            patch.object(manager.c, "run") as run,
+        ):
+            manager.storage_tool("prod", "migrate", True)
+        run.assert_called_once_with(
+            manager.c.prod_compose(
+                "exec", "api", "python", "-m", "app.storage.migrate", "migrate", "--dry-run"
+            ),
+            cwd=manager.c.ROOT,
+        )
+
+
 class _PatchedEnvFile:
     def __init__(self, temp_dir: tempfile.TemporaryDirectory, env_file: Path) -> None:
         self.temp_dir = temp_dir
