@@ -216,6 +216,9 @@ export interface VisibilitySettingsUpdate {
 export interface StorageSettings {
   backend: string;
   local_root: string | null;
+  s3_bucket: string | null;
+  s3_endpoint: string | null;
+  cdn_base_url: string | null;
   configurable_via: string;
 }
 

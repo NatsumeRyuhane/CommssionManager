@@ -5,8 +5,42 @@ from app.storage.base import StorageBackendDriver
 from app.storage.local import LocalStorage
 
 
+def build_storage(backend: str) -> StorageBackendDriver:
+    """Construct a driver for any supported backend (the migration CLI needs drivers
+    for backends other than the configured one)."""
+    if backend == "local":
+        return LocalStorage(settings.storage_local_root)
+    if backend == "s3":
+        return _build_s3()
+    raise NotImplementedError(f"storage backend not implemented: {backend}")
+
+
+def _build_s3() -> StorageBackendDriver:
+    required = ("storage_s3_bucket", "storage_s3_access_key", "storage_s3_secret_key")
+    missing = [name for name in required if not getattr(settings, name)]
+    if missing:
+        names = ", ".join(f"CMGR_{name.upper()}" for name in missing)
+        raise RuntimeError(f"storage_backend=s3 requires settings: {names}")
+    import boto3  # deferred so local-only deployments never touch it
+
+    from app.storage.s3 import S3Storage
+
+    # `or None`: the prod compose file passes unset knobs as empty strings
+    client = boto3.client(
+        "s3",
+        endpoint_url=settings.storage_s3_endpoint or None,
+        region_name=settings.storage_s3_region or None,
+        aws_access_key_id=settings.storage_s3_access_key,
+        aws_secret_access_key=settings.storage_s3_secret_key,
+    )
+    return S3Storage(
+        client,
+        settings.storage_s3_bucket,
+        cdn_base_url=settings.storage_cdn_base_url or None,
+        signed_url_ttl=settings.storage_signed_url_ttl,
+    )
+
+
 @lru_cache
 def get_storage() -> StorageBackendDriver:
-    if settings.storage_backend == "local":
-        return LocalStorage(settings.storage_local_root)
-    raise NotImplementedError(f"storage backend not implemented: {settings.storage_backend}")
+    return build_storage(settings.storage_backend)

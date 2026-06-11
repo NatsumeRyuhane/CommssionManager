@@ -519,6 +519,9 @@ class CommissionVisibilityUpdate(BaseModel):
 class StorageSettingsOut(BaseModel):
     backend: str
     local_root: str | None = None
+    s3_bucket: str | None = None
+    s3_endpoint: str | None = None
+    cdn_base_url: str | None = None
     configurable_via: str = "environment"
 
 

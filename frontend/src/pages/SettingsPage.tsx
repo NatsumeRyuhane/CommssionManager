@@ -703,6 +703,24 @@ function StoragePanel({ storage }: { storage: StorageSettings }) {
             <code>{storage.local_root}</code>
           </div>
         )}
+        {storage.s3_bucket && (
+          <div>
+            <span className="label">Bucket</span>
+            <code>{storage.s3_bucket}</code>
+          </div>
+        )}
+        {storage.s3_endpoint && (
+          <div>
+            <span className="label">Endpoint</span>
+            <code>{storage.s3_endpoint}</code>
+          </div>
+        )}
+        {storage.cdn_base_url && (
+          <div>
+            <span className="label">CDN base URL</span>
+            <code>{storage.cdn_base_url}</code>
+          </div>
+        )}
       </div>
     </section>
   );

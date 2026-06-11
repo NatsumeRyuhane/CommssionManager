@@ -47,10 +47,17 @@ Resolution lives in `app/auth/deps.py` (`get_principal`, `require_edit`).
 
 ## Storage abstraction
 
-`app/storage` defines `StorageBackendDriver` (`save/read/delete/exists`). `StorageObject` rows
-carry `backend`, `bucket`, `key`, `size_bytes`, `checksum` — adding S3/GCS means a new driver +
-enum value, no schema change. The "commission folder" is a local-backend convention only
-(`commissions/{id}/nodes/{node_id}/{filename}`).
+`app/storage` defines `StorageBackendDriver` (`save/read/delete/exists`, plus optional
+`public_url`/`signed_url` for backends that can hand out URLs). `StorageObject` rows carry
+`backend`, `bucket`, `key`, `size_bytes`, `checksum` — adding a backend means a new driver +
+enum value, no schema change. Drivers: `local` (filesystem) and `s3` (S3-compatible, e.g.
+Cloudflare R2; see `CMGR_STORAGE_S3_*`). Keys follow
+`commissions/{id}/nodes/{node_id}/{random}/{filename}` — the random segment keeps URLs
+unguessable behind a public CDN domain and makes re-uploads of the same filename collision-free.
+With an object-storage backend, `/files/{id}/raw` and `/files/{id}/image` 302 to the CDN
+(public) or a signed URL (private) instead of streaming; `?redirect=0` forces streaming.
+`python -m app.storage.migrate` (wrapped by `python3 main.py storage`) moves existing bytes
+between backends.
 
 ## Data model notes
 

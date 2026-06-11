@@ -45,8 +45,11 @@ _inflight: set[str] = set()
 _inflight_lock = threading.Lock()
 
 
-def derivative_key(storage_object_id: int, preset: str, fmt: str) -> str:
-    return f"derivatives/{storage_object_id}/{preset}.{fmt}"
+def derivative_key(storage_object_id: int, token: str | None, preset: str, fmt: str) -> str:
+    """Cache key for one derivative. `token` is a checksum-derived secret segment: it
+    keeps derivative URLs unguessable when the bucket sits behind a public CDN domain
+    (originals get the same property from the random segment in their upload key)."""
+    return f"derivatives/{storage_object_id}/{(token or 'v0')[:16]}/{preset}.{fmt}"
 
 
 def render(data: bytes, preset: str, fmt: str) -> bytes:
@@ -72,11 +75,12 @@ def generate(
     source_key: str,
     source_bucket: str | None,
     storage_object_id: int,
+    token: str | None,
     preset: str,
     fmt: str,
 ) -> None:
     """Generate one derivative into the cache; a failure only logs (it's a cache)."""
-    key = derivative_key(storage_object_id, preset, fmt)
+    key = derivative_key(storage_object_id, token, preset, fmt)
     with _inflight_lock:
         if key in _inflight:
             return
@@ -91,18 +95,29 @@ def generate(
             _inflight.discard(key)
 
 
-def generate_presets(storage_object_id: int, source_key: str, source_bucket: str | None) -> None:
+def generate_presets(
+    storage_object_id: int, token: str | None, source_key: str, source_bucket: str | None
+) -> None:
     """Eagerly build every preset in the default format (upload background task)."""
     storage = get_storage()
     for preset in PRESETS:
-        generate(storage, source_key, source_bucket, storage_object_id, preset, DEFAULT_FORMAT)
+        generate(storage, source_key, source_bucket, storage_object_id, token, preset, DEFAULT_FORMAT)
 
 
-def delete_derivatives(storage: StorageBackendDriver, storage_object_id: int) -> None:
+def delete_derivatives(
+    storage: StorageBackendDriver, storage_object_id: int, token: str | None
+) -> None:
     """Best-effort removal of every cached derivative for a storage object."""
     for preset in PRESETS:
         for fmt in FORMATS:
-            try:
-                storage.delete(derivative_key(storage_object_id, preset, fmt))
-            except OSError:
-                pass
+            keys = (
+                derivative_key(storage_object_id, token, preset, fmt),
+                # pre-token layout, so caches written before the key scheme
+                # changed don't linger as orphans
+                f"derivatives/{storage_object_id}/{preset}.{fmt}",
+            )
+            for key in keys:
+                try:
+                    storage.delete(key)
+                except OSError:
+                    pass

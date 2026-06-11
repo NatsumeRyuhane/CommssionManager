@@ -238,7 +238,7 @@ def delete_commission(
                 storage.delete(obj.key, bucket=obj.bucket)
             except OSError:
                 pass
-            images.delete_derivatives(storage, obj.id)
+            images.delete_derivatives(storage, obj.id, obj.checksum)
             db.delete(obj)
     db.commit()
 

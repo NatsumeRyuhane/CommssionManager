@@ -7,7 +7,12 @@ The deployment mode comes from CMGR_ENV in backend/.env (written by deploy/setup
     test  run the backend test suite    — pytest (ephemeral Postgres via testcontainers)
     prod  full Docker stack             — docker compose (db + api + web/nginx)
 
-    python3 main.py <start|stop|restart|upgrade|status|logs|test|uninstall> [service] [--yes]
+    python3 main.py <start|stop|restart|upgrade|status|logs|test|storage|uninstall> [service] [--yes]
+
+The storage command manages where uploaded file bytes live (issue #20):
+
+    python3 main.py storage status              per-backend object counts
+    python3 main.py storage migrate [--dry-run] copy objects into the configured backend
 
 Stdlib only; orchestrates uv, pnpm, and docker compose. Dev servers run as background
 processes tracked by pidfiles/logs under deploy/.run/.
@@ -217,6 +222,24 @@ def _git_output(cmd: list[str]) -> str:
     return result.stdout.strip()
 
 
+# ------------------------------------------------------------------------------- storage
+def storage_tool(mode: str, action: str | None, dry_run: bool) -> None:
+    """Run the backend's storage migration CLI (app.storage.migrate) in-place (dev)
+    or inside the api container (prod)."""
+    if action not in ("status", "migrate"):
+        c.die("usage: python3 main.py storage <status|migrate> [--dry-run]")
+    cmd = ["python", "-m", "app.storage.migrate", action]
+    if dry_run:
+        cmd.append("--dry-run")
+    c.step(f"Storage {action}")
+    if mode == "dev":
+        _require("uv")
+        c.run(["uv", "run", *cmd], cwd=c.BACKEND, env=c.uv_environ())
+    else:
+        _require("docker")
+        c.run(c.prod_compose("exec", "api", *cmd), cwd=c.ROOT)
+
+
 # ------------------------------------------------------------------------------- test
 def run_tests() -> None:
     _require("uv")
@@ -231,10 +254,20 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Run/control Commission Manager.")
     ap.add_argument(
         "command",
-        choices=["start", "stop", "restart", "upgrade", "status", "logs", "test", "uninstall"],
+        choices=[
+            "start", "stop", "restart", "upgrade", "status", "logs", "test", "storage",
+            "uninstall",
+        ],
     )
-    ap.add_argument("service", nargs="?", help="for logs: api|web (dev) or a compose service")
+    ap.add_argument(
+        "service",
+        nargs="?",
+        help="for logs: api|web (dev) or a compose service; for storage: status|migrate",
+    )
     ap.add_argument("--yes", action="store_true", help="confirm destructive uninstall")
+    ap.add_argument(
+        "--dry-run", action="store_true", help="for storage migrate: list moves without copying"
+    )
     if len(sys.argv) == 1:
         ap.print_help()
         return
@@ -254,6 +287,10 @@ def main() -> None:
 
     if args.command == "test":
         run_tests()
+
+    if args.command == "storage":
+        storage_tool(mode, args.service, args.dry_run)
+        return
 
     if args.command == "upgrade":
         if mode != "prod":

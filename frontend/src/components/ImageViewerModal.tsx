@@ -72,10 +72,16 @@ function downloadBlob(blob: Blob, filename: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
+/** Force the API to stream bytes instead of 302ing to object storage — fetch()
+ *  can't carry credentials across a cross-origin redirect to the CDN. */
+function streamUrl(url: string): string {
+  return `${url}${url.includes("?") ? "&" : "?"}redirect=0`;
+}
+
 /** Fetch a derivative, polling while the server answers 202 (still building). */
 async function fetchDerivative(url: string): Promise<Blob> {
   for (let attempt = 0; attempt < 20; attempt++) {
-    const response = await fetch(url, { credentials: "include" });
+    const response = await fetch(streamUrl(url), { credentials: "include" });
     if (response.status === 202) {
       await new Promise((resolve) => setTimeout(resolve, 900));
       continue;
@@ -133,7 +139,7 @@ export function ImageViewerModal({
     setError(null);
     try {
       if (preset === null) {
-        const response = await fetch(active.url, { credentials: "include" });
+        const response = await fetch(streamUrl(active.url), { credentials: "include" });
         if (!response.ok) throw new Error(`Download failed (${response.status})`);
         downloadBlob(await response.blob(), `${safeFilename(active)}.${active.format || "png"}`);
         return;

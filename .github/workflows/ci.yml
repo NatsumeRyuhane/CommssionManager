@@ -38,7 +38,10 @@ jobs:
           --health-retries 10
     env:
       # Point the test suite at the service container so conftest.py skips spinning
-      # up its own testcontainers Postgres.
+      # up its own testcontainers Postgres. The CMGR_TEST_S3_* knobs are deliberately
+      # NOT set here: this job stays hermetic (fake S3 client, live legs skip) so a
+      # red "Backend" always means app code, never bucket connectivity — live S3
+      # coverage runs as the separate s3-integration job below.
       CMGR_TEST_DATABASE_URL: postgresql+psycopg://test:test@localhost:5432/test
     steps:
       - uses: actions/checkout@v4
@@ -63,6 +66,45 @@ jobs:
 
       - name: Tests (pytest)
         run: uv run pytest -q
+
+  s3-integration:
+    name: S3 integration (live driver tests)
+    runs-on: ubuntu-latest
+    # Gate on the TEST_S3_BUCKET repository *variable* (the secrets context is not
+    # available in job-level `if`): unconfigured repos and fork PRs show this job
+    # as skipped instead of green-but-empty. A failure here means bucket
+    # connectivity/credentials, never app code — that's the Backend job.
+    if: ${{ vars.TEST_S3_BUCKET != '' }}
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      CMGR_TEST_S3_BUCKET: ${{ vars.TEST_S3_BUCKET }}
+      CMGR_TEST_S3_ENDPOINT: ${{ vars.TEST_S3_ENDPOINT }}
+      CMGR_TEST_S3_REGION: ${{ vars.TEST_S3_REGION }}
+      CMGR_TEST_S3_ACCESS_KEY: ${{ secrets.TEST_S3_ACCESS_KEY }}
+      CMGR_TEST_S3_SECRET_KEY: ${{ secrets.TEST_S3_SECRET_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      # Only the live legs of the driver-contract tests; no database needed.
+      - name: Live S3 driver tests
+        run: uv run pytest tests/test_storage_s3.py -k live -q
 
   frontend:
     name: Frontend (typecheck + build)

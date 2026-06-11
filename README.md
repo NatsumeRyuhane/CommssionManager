@@ -174,6 +174,58 @@ from the dev Postgres (project `deploy`), so the two can run side by side.
    Uninstall deliberately retains `deploy/.env`, `backend/.env`, `data/storage`, and any external
    database. Delete retained files manually only after confirming they are no longer needed.
 
+### Object storage + CDN (optional)
+
+By default uploaded files live on local disk (`data/storage`) and the API streams every byte.
+To serve files from an S3-compatible bucket behind a CDN instead (e.g. Cloudflare R2 with a
+custom domain), set `STORAGE_BACKEND=s3` and the `STORAGE_S3_*` / `STORAGE_CDN_BASE_URL` keys
+in `deploy/.env` (see the commented block in [`deploy/.env.example`](deploy/.env.example)),
+restart the stack, then move the existing bytes.
+
+**R2 walkthrough:** [`docs/object-storage-r2.md`](docs/object-storage-r2.md) covers the full
+setup — bucket, scoped API token, the mapping from Cloudflare's one-time token screen to the
+app's config keys (the `cfat_…` API Token is *not* used), the optional CDN custom domain, and
+which env-name dialect goes where (`CMGR_`-prefixed in `backend/.env` vs unprefixed in
+`deploy/.env` and GitHub secrets/variables).
+
+```sh
+python3 main.py storage status             # per-backend object counts
+python3 main.py storage migrate --dry-run  # preview what would move
+python3 main.py storage migrate            # copy into the bucket (source bytes retained)
+```
+
+**Keep the S3 credentials out of the repository.** On the server, real values live only in the
+gitignored `deploy/.env` / `backend/.env` — never in `.env.example`, compose files, or anything
+committed. If you automate deployments or storage migrations with GitHub Actions, configure the
+repository in two places (names match the `deploy/.env` keys 1:1):
+
+**Repository secrets** — the two credentials, nothing else (GitHub → repo **Settings → Secrets
+and variables → Actions → Secrets**, or with the `gh` CLI):
+
+```sh
+gh secret set STORAGE_S3_ACCESS_KEY --body "<access-key-id>"
+gh secret set STORAGE_S3_SECRET_KEY --body "<secret-access-key>"
+```
+
+**Repository variables** — the non-sensitive knobs (same settings page → **Variables**):
+
+```sh
+gh variable set STORAGE_BACKEND        --body "s3"
+gh variable set STORAGE_S3_BUCKET      --body "commission-files"
+gh variable set STORAGE_S3_ENDPOINT    --body "https://<account-id>.r2.cloudflarestorage.com"
+gh variable set STORAGE_S3_REGION      --body "auto"  # R2: auto; AWS: e.g. us-east-1
+gh variable set STORAGE_CDN_BASE_URL   --body "https://files.example.com"
+gh variable set STORAGE_SIGNED_URL_TTL --body "600"
+```
+
+In a workflow, read them as `${{ secrets.STORAGE_S3_ACCESS_KEY }}` / `${{ vars.STORAGE_S3_BUCKET }}`
+when writing `deploy/.env` on the runner. The CI workflow in this repo needs none of these to
+pass — the test suite covers the S3 driver with a fake client; optionally set the separate
+`TEST_S3_*` secrets/variables (pointing at a dedicated test bucket) to also run the driver
+tests against live S3, as described in [`docs/object-storage-r2.md`](docs/object-storage-r2.md).
+Use a bucket-scoped API token (R2: "Object Read & Write" on the one bucket); rotate it by
+updating the repo secret and `deploy/.env`, then restarting the stack.
+
 ---
 
 ## Agent / automation API

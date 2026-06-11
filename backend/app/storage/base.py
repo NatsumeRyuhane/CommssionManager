@@ -31,3 +31,16 @@ class StorageBackendDriver(ABC):
 
     @abstractmethod
     def exists(self, key: str, *, bucket: str | None = None) -> bool: ...
+
+    # URL-producing backends (object storage behind a CDN) override these so endpoints
+    # can redirect clients to the bytes instead of streaming them through the app.
+
+    def public_url(self, key: str, *, bucket: str | None = None) -> str | None:
+        """Stable publicly fetchable URL (CDN), or None when the backend has none."""
+        return None
+
+    def signed_url(
+        self, key: str, *, bucket: str | None = None, ttl: int | None = None
+    ) -> str | None:
+        """Expiring URL for private objects, or None when the backend can't mint one."""
+        return None
