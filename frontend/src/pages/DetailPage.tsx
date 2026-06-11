@@ -168,7 +168,11 @@ export function DetailPage() {
           </div>
           <div className="detail-cover-wrap">
             <div className="detail-cover">
-              <Cover cover={data.cover} />
+              <Cover
+                cover={data.cover}
+                size="medium"
+                sizes="(max-width: 900px) 92vw, 460px"
+              />
             </div>
           </div>
           {data.description && (

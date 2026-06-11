@@ -13,9 +13,15 @@ export type VisibilityFieldKey =
   | "confirmed_at"
   | "price";
 
+export type ImagePreset = "thumb" | "small" | "medium" | "large";
+
+/** Preset name -> server-side derivative URL (/files/{id}/image?size=...). */
+export type ImageUrls = Partial<Record<ImagePreset, string>>;
+
 export interface Cover {
   file_id: number;
   url: string;
+  image_urls: ImageUrls | null;
   width: number | null;
   height: number | null;
   focal_x: number | null;
@@ -54,6 +60,7 @@ export interface CommissionFile {
   visibility: Visibility | null;
   effective_visibility: Visibility | null;
   url: string;
+  image_urls: ImageUrls | null;
   is_cover: boolean;
 }
 

@@ -132,7 +132,7 @@ export function CommissionPickerModal({
                     }
                   }}
                 >
-                  <Cover cover={c.cover} rounded={false} />
+                  <Cover cover={c.cover} rounded={false} size="thumb" />
                   <span className="check">{isSelected && <Check size={11} strokeWidth={3} />}</span>
                   <div className="title">{c.title}</div>
                 </div>

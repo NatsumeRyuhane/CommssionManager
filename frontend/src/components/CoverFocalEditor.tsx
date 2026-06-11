@@ -3,6 +3,7 @@ import { Crosshair, Undo2 } from "lucide-react";
 
 import { api } from "../api/client";
 import type { Cover } from "../api/types";
+import { DerivedImg, presetUrl } from "./DerivedImg";
 
 /** A pending focal edit the parent form commits alongside the rest of its fields. */
 export interface StagedFocal {
@@ -209,8 +210,9 @@ export function CoverFocalEditor({ commissionId, version = 0, onStage }: CoverFo
               className="cover-focal-preview-img"
               style={{ aspectRatio: `${r.w} / ${r.h}` }}
             >
-              <img
-                src={cover.url}
+              <DerivedImg
+                src={presetUrl(cover.image_urls, "small", cover.url)}
+                fallbackSrc={cover.url}
                 alt=""
                 draggable={false}
                 style={{

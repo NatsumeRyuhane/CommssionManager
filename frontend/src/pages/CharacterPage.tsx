@@ -385,7 +385,7 @@ export function CharacterPage() {
                 to={`/commissions/${data.main_reference.commission_id}`}
                 className="char-main-ref"
               >
-                <Cover cover={data.main_reference.cover} rounded={false} />
+                <Cover cover={data.main_reference.cover} rounded={false} size="medium" />
               </Link>
             ) : (
               <div className="char-main-ref placeholder">
@@ -599,7 +599,7 @@ function BookshelfTile({
   return (
     <div className="bookshelf-tile">
       <Link to={`/commissions/${commission.commission_id}`}>
-        <Cover cover={commission.cover} rounded={false} />
+        <Cover cover={commission.cover} rounded={false} size="thumb" />
         <div className="caption">{commission.title}</div>
       </Link>
       {editable && (
