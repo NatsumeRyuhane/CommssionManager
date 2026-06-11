@@ -5,7 +5,6 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import type { Character, CommissionDetail } from "../api/types";
 import { Chip } from "../components/Chip";
-import { Cover } from "../components/Cover";
 import { LifecycleStagesList } from "../components/LifecycleStagesList";
 import { TopBar } from "../components/TopBar";
 import { useAuth } from "../hooks/useAuth";
@@ -144,9 +143,9 @@ export function DetailPage() {
         </span>
       </div>
 
-      {/* hero + side rail */}
-      <div className="detail-hero">
-        <div className="detail-hero-main">
+      {/* scrolling content + sticky side rail; images open in the viewer from the stage list */}
+      <div className="detail-layout">
+        <div className="detail-main">
           <div className="page-title">
             <div className="row gap-8 wrap" style={{ marginBottom: 10 }}>
               {data.categories.map((c) => (
@@ -162,91 +161,83 @@ export function DetailPage() {
               <div className="sub mono">{subBits.join(" · ")}</div>
             )}
           </div>
-          <div className="detail-cover-wrap">
-            <div className="detail-cover">
-              <Cover
-                cover={data.cover}
-                size="medium"
-                sizes="(max-width: 900px) 92vw, 460px"
-              />
-            </div>
-          </div>
           {data.description && (
             <p className="detail-description">{data.description}</p>
           )}
+
+          <div className="detail-lifecycle">
+            <div className="row" style={{ justifyContent: "space-between", marginBottom: 12 }}>
+              <div className="row gap-8">
+                <strong style={{ fontSize: 15 }}>Lifecycle</strong>
+                <span className="mono-sm muted">
+                  {regular.length} stages{detached.length ? " · detached present" : ""}
+                </span>
+              </div>
+            </div>
+            <LifecycleStagesList
+              nodes={lifecycle}
+              coverFileId={data.cover?.file_id ?? null}
+            />
+          </div>
         </div>
 
         <aside className="detail-rail">
-          <div className="detail-rail-visibility">
-            <span className="mono-sm">visibility:</span>
-            <span className="inline-ic" style={{ color: isPublic ? "var(--accent)" : "var(--warn)" }}>
-              {isPublic ? <Globe size={12} /> : <Lock size={12} />}
-              {isPublic ? "public" : "private"}
-            </span>
-            {canWrite && (
-              <>
-                <span className="spacer" />
-                <Link
-                  to={`/commissions/${data.id}/visibility`}
-                  className="mono-sm"
-                  style={{ color: "var(--accent)" }}
-                >
-                  edit
-                </Link>
-              </>
+          <div className="detail-rail-inner">
+            <div className="detail-rail-visibility">
+              <span className="mono-sm">visibility:</span>
+              <span className="inline-ic" style={{ color: isPublic ? "var(--accent)" : "var(--warn)" }}>
+                {isPublic ? <Globe size={12} /> : <Lock size={12} />}
+                {isPublic ? "public" : "private"}
+              </span>
+              {canWrite && (
+                <>
+                  <span className="spacer" />
+                  <Link
+                    to={`/commissions/${data.id}/visibility`}
+                    className="mono-sm"
+                    style={{ color: "var(--accent)" }}
+                  >
+                    edit
+                  </Link>
+                </>
+              )}
+            </div>
+
+            {data.completed_at && (
+              <MetaRow label="Date" value={data.completed_at} pub />
+            )}
+            {canWrite && data.confirmed_at && (
+              <MetaRow label="Confirmed" value={data.confirmed_at.slice(0, 10)} pub={false} />
+            )}
+            {canWrite && data.price_amount && (
+              <MetaRow
+                label="Price"
+                value={`${data.price_amount}${data.price_currency ? ` ${data.price_currency}` : ""}`}
+                pub={false}
+              />
+            )}
+
+            {data.characters.length > 0 && (
+              <MetaBlock label="Characters">
+                {characterChips.map((c) => (
+                  <Chip
+                    key={c.name}
+                    kind="char"
+                    to={c.id != null ? `/characters/${c.id}` : undefined}
+                    hasPage={c.hasPage}
+                  >
+                    {c.name}
+                  </Chip>
+                ))}
+              </MetaBlock>
+            )}
+            {data.artists.length > 0 && (
+              <MetaBlock label="Artists">
+                {data.artists.map((a) => <Chip key={a} kind="artist">{a}</Chip>)}
+              </MetaBlock>
             )}
           </div>
-
-          {data.completed_at && (
-            <MetaRow label="Date" value={data.completed_at} pub />
-          )}
-          {canWrite && data.confirmed_at && (
-            <MetaRow label="Confirmed" value={data.confirmed_at.slice(0, 10)} pub={false} />
-          )}
-          {canWrite && data.price_amount && (
-            <MetaRow
-              label="Price"
-              value={`${data.price_amount}${data.price_currency ? ` ${data.price_currency}` : ""}`}
-              pub={false}
-            />
-          )}
-
-          {data.characters.length > 0 && (
-            <MetaBlock label="Characters">
-              {characterChips.map((c) => (
-                <Chip
-                  key={c.name}
-                  kind="char"
-                  to={c.id != null ? `/characters/${c.id}` : undefined}
-                  hasPage={c.hasPage}
-                >
-                  {c.name}
-                </Chip>
-              ))}
-            </MetaBlock>
-          )}
-          {data.artists.length > 0 && (
-            <MetaBlock label="Artists">
-              {data.artists.map((a) => <Chip key={a} kind="artist">{a}</Chip>)}
-            </MetaBlock>
-          )}
         </aside>
-      </div>
-
-      {/* lifecycle */}
-      <div className="detail-lifecycle">
-        <div className="row" style={{ justifyContent: "space-between", marginBottom: 12 }}>
-          <div className="row gap-8">
-            <strong style={{ fontSize: 15 }}>Lifecycle</strong>
-            <span className="mono-sm muted">
-              {regular.length} stages{detached.length ? " · detached present" : ""}
-            </span>
-          </div>
-        </div>
-        <LifecycleStagesList
-          nodes={lifecycle}
-          coverFileId={data.cover?.file_id ?? null}
-        />
       </div>
     </div>
   );
