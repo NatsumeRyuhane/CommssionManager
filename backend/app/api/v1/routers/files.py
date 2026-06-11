@@ -3,11 +3,23 @@ from __future__ import annotations
 import io
 import mimetypes
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Response, UploadFile, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    Form,
+    HTTPException,
+    Query,
+    Response,
+    UploadFile,
+    status,
+)
+from fastapi.responses import JSONResponse
 from PIL import Image
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
+from app import images
 from app.api.v1 import crud
 from app.auth.deps import Principal, get_principal, require_edit
 from app.db import get_db
@@ -56,6 +68,7 @@ def _resequence_node_files(db: Session, node_id: int) -> list[CommissionFile]:
 async def upload_file(
     node_id: int,
     upload: UploadFile,
+    background: BackgroundTasks,
     label: str | None = Form(default=None),
     db: Session = Depends(get_db),
     _: Principal = Depends(require_edit),
@@ -109,15 +122,16 @@ async def upload_file(
     db.add(file)
     db.commit()
     db.refresh(file)
+    if is_image:
+        # eager derivative generation keeps the read path warm for new uploads
+        background.add_task(images.generate_presets, obj.id, stored.key, stored.bucket)
     return crud.file_out(file, None, crud.load_visibility_context(db))
 
 
-@router.get("/files/{file_id}/raw")
-def get_raw(
-    file_id: int,
-    db: Session = Depends(get_db),
-    principal: Principal | None = Depends(get_principal),
-):
+def _visible_file_or_404(
+    db: Session, file_id: int, principal: Principal | None
+) -> CommissionFile:
+    """The shared visibility gate for byte-serving endpoints (/raw and /image)."""
     file = db.get(CommissionFile, file_id)
     if file is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
@@ -131,10 +145,69 @@ def get_raw(
     )
     if not public_file and (principal is None or not principal.can_write):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
+    return file
+
+
+@router.get("/files/{file_id}/raw")
+def get_raw(
+    file_id: int,
+    db: Session = Depends(get_db),
+    principal: Principal | None = Depends(get_principal),
+):
+    file = _visible_file_or_404(db, file_id, principal)
     obj = db.get(StorageObject, file.storage_object_id)
     data = get_storage().read(obj.key, bucket=obj.bucket)
     media = mimetypes.guess_type(obj.key)[0] or "application/octet-stream"
     return Response(content=data, media_type=media)
+
+
+@router.get("/files/{file_id}/image")
+def get_image(
+    file_id: int,
+    background: BackgroundTasks,
+    size: str = Query(...),
+    format: str = Query(default=images.DEFAULT_FORMAT),
+    db: Session = Depends(get_db),
+    principal: Principal | None = Depends(get_principal),
+):
+    """Serve a cached derivative, or start building it and answer 202.
+
+    Clients treat the 202 as "show a placeholder and retry shortly"; generation
+    runs in the background and is deduplicated across concurrent misses.
+    """
+    if size not in images.PRESETS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"size must be one of: {', '.join(images.PRESETS)}",
+        )
+    if format not in images.FORMATS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"format must be one of: {', '.join(images.FORMATS)}",
+        )
+    file = _visible_file_or_404(db, file_id, principal)
+    if not file.is_image:
+        raise HTTPException(status_code=400, detail="Derivatives only exist for image files")
+    obj = db.get(StorageObject, file.storage_object_id)
+    storage = get_storage()
+    key = images.derivative_key(obj.id, size, format)
+    if storage.exists(key):
+        try:
+            data = storage.read(key)
+        except OSError:
+            data = None  # evicted between exists() and read(); fall through to rebuild
+        if data is not None:
+            return Response(
+                content=data,
+                media_type=images.FORMATS[format][1],
+                headers={"Cache-Control": "private, max-age=3600"},
+            )
+    background.add_task(images.generate, storage, obj.key, obj.bucket, obj.id, size, format)
+    return JSONResponse(
+        status_code=status.HTTP_202_ACCEPTED,
+        content={"detail": "derivative is being generated"},
+        headers={"Cache-Control": "no-store", "Retry-After": "1"},
+    )
 
 
 @router.patch("/files/{file_id}/focal", response_model=FileOut)
@@ -263,10 +336,12 @@ def delete_file(
     db.flush()
     _resequence_node_files(db, node_id)
     if obj:
+        storage = get_storage()
         try:
-            get_storage().delete(obj.key, bucket=obj.bucket)
+            storage.delete(obj.key, bucket=obj.bucket)
         except OSError:
             pass
+        images.delete_derivatives(storage, obj.id)
         # only drop the storage object if nothing else points at it
         still_used = db.scalar(
             select(CommissionFile).where(
