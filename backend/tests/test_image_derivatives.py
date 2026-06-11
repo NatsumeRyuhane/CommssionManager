@@ -39,26 +39,26 @@ def _upload(
     return res.json()
 
 
-def _storage_object_id(admin_client: TestClient) -> int:
-    """Id of the most recently created storage object."""
+def _storage_object(admin_client: TestClient) -> dict:
+    """The most recently created storage object row (id + checksum drive cache keys)."""
     res = admin_client.get("/api/v1/exports/database.json")
     assert res.status_code == 200
     objects = res.json()["storage_objects"]
     assert objects
-    return objects[-1]["id"]
+    return objects[-1]
 
 
-def _drop_derivatives(storage_object_id: int) -> None:
-    images.delete_derivatives(get_storage(), storage_object_id)
+def _drop_derivatives(obj: dict) -> None:
+    images.delete_derivatives(get_storage(), obj["id"], obj["checksum"])
 
 
 def test_upload_eagerly_builds_all_presets(admin_client: TestClient):
     _, node_id = _commission(admin_client)
     _upload(admin_client, node_id)
-    object_id = _storage_object_id(admin_client)
+    obj = _storage_object(admin_client)
     storage = get_storage()
     for preset in images.PRESETS:
-        key = images.derivative_key(object_id, preset, images.DEFAULT_FORMAT)
+        key = images.derivative_key(obj["id"], obj["checksum"], preset, images.DEFAULT_FORMAT)
         assert storage.exists(key), f"missing eager derivative {key}"
 
 
@@ -116,8 +116,8 @@ def test_image_endpoint_rejects_non_image(admin_client: TestClient):
 def test_cache_miss_answers_202_then_builds(admin_client: TestClient):
     _, node_id = _commission(admin_client)
     file = _upload(admin_client, node_id)
-    object_id = _storage_object_id(admin_client)
-    _drop_derivatives(object_id)
+    obj = _storage_object(admin_client)
+    _drop_derivatives(obj)
 
     res = admin_client.get(f"/api/v1/files/{file['id']}/image?size=small")
     assert res.status_code == 202
@@ -153,13 +153,15 @@ def test_public_file_serves_derivative_anonymously(client: TestClient, admin_cli
 def test_file_delete_cleans_derivatives(admin_client: TestClient):
     _, node_id = _commission(admin_client)
     file = _upload(admin_client, node_id)
-    object_id = _storage_object_id(admin_client)
+    obj = _storage_object(admin_client)
     storage = get_storage()
-    key = images.derivative_key(object_id, "thumb", images.DEFAULT_FORMAT)
+    key = images.derivative_key(obj["id"], obj["checksum"], "thumb", images.DEFAULT_FORMAT)
     assert storage.exists(key)
     assert admin_client.delete(f"/api/v1/files/{file['id']}").status_code == 204
     for preset in images.PRESETS:
-        assert not storage.exists(images.derivative_key(object_id, preset, images.DEFAULT_FORMAT))
+        assert not storage.exists(
+            images.derivative_key(obj["id"], obj["checksum"], preset, images.DEFAULT_FORMAT)
+        )
 
 
 def test_commission_delete_cleans_originals_and_derivatives(admin_client: TestClient):
@@ -169,12 +171,16 @@ def test_commission_delete_cleans_originals_and_derivatives(admin_client: TestCl
     obj = res.json()["storage_objects"][-1]
     storage = get_storage()
     assert storage.exists(obj["key"])
-    assert storage.exists(images.derivative_key(obj["id"], "thumb", images.DEFAULT_FORMAT))
+    assert storage.exists(
+        images.derivative_key(obj["id"], obj["checksum"], "thumb", images.DEFAULT_FORMAT)
+    )
 
     assert admin_client.delete(f"/api/v1/commissions/{commission_id}").status_code == 204
     assert not storage.exists(obj["key"])
     for preset in images.PRESETS:
-        assert not storage.exists(images.derivative_key(obj["id"], preset, images.DEFAULT_FORMAT))
+        assert not storage.exists(
+            images.derivative_key(obj["id"], obj["checksum"], preset, images.DEFAULT_FORMAT)
+        )
     # storage object row is gone too
     res = admin_client.get("/api/v1/exports/database.json")
     assert all(row["id"] != obj["id"] for row in res.json()["storage_objects"])

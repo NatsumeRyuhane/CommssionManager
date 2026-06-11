@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import io
 import mimetypes
+from datetime import timezone
+from email.utils import format_datetime
+from uuid import uuid4
 
 from fastapi import (
     APIRouter,
@@ -10,11 +13,12 @@ from fastapi import (
     Form,
     HTTPException,
     Query,
+    Request,
     Response,
     UploadFile,
     status,
 )
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from PIL import Image
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
@@ -36,6 +40,13 @@ from app.storage import get_storage
 router = APIRouter(tags=["files"])
 
 IMAGE_FORMATS = {"png", "jpg", "jpeg", "webp", "gif", "bmp", "tiff"}
+
+# Originals are immutable (upload keys carry a random segment), so public copies can
+# cache for a day; private bytes must never land in a shared cache. Redirects to the
+# CDN cache briefly so an edge in front of the app can absorb repeat lookups.
+PUBLIC_CACHE = "public, max-age=86400"
+PRIVATE_CACHE = "private, no-store"
+REDIRECT_CACHE = "public, max-age=300"
 
 
 def _next_position(db: Session, node_id: int) -> int:
@@ -93,7 +104,11 @@ async def upload_file(
             is_image = False
 
     storage = get_storage()
-    key = f"commissions/{node.commission_id}/nodes/{node_id}/{upload.filename}"
+    # The random segment keeps object URLs unguessable behind a public CDN domain,
+    # busts caches when the same filename is re-uploaded, and keeps repeat filenames
+    # from colliding on the (backend, bucket, key) unique constraint. The basename
+    # stays last so export zips keep the original filename.
+    key = f"commissions/{node.commission_id}/nodes/{node_id}/{uuid4().hex}/{upload.filename}"
     stored = storage.save(key, raw)
 
     obj = StorageObject(
@@ -124,14 +139,20 @@ async def upload_file(
     db.refresh(file)
     if is_image:
         # eager derivative generation keeps the read path warm for new uploads
-        background.add_task(images.generate_presets, obj.id, stored.key, stored.bucket)
+        background.add_task(
+            images.generate_presets, obj.id, stored.checksum, stored.key, stored.bucket
+        )
     return crud.file_out(file, None, crud.load_visibility_context(db))
 
 
 def _visible_file_or_404(
     db: Session, file_id: int, principal: Principal | None
-) -> CommissionFile:
-    """The shared visibility gate for byte-serving endpoints (/raw and /image)."""
+) -> tuple[CommissionFile, bool]:
+    """The shared visibility gate for byte-serving endpoints (/raw and /image).
+
+    Returns the file plus whether it is publicly visible — delivery picks cache
+    headers and redirect targets (CDN vs signed URL) off that flag.
+    """
     file = db.get(CommissionFile, file_id)
     if file is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
@@ -147,20 +168,74 @@ def _visible_file_or_404(
     )
     if not public_file and (principal is None or not principal.can_write):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
-    return file
+    return file, public_file
+
+
+def _storage_redirect(storage, key: str, bucket: str | None, public: bool):
+    """302 to the CDN (public files) or a signed URL, or None when the backend
+    serves no URLs (local disk) and the caller must stream the bytes itself."""
+    if public:
+        target = storage.public_url(key, bucket=bucket)
+        if target:
+            return RedirectResponse(
+                target,
+                status_code=status.HTTP_302_FOUND,
+                headers={"Cache-Control": REDIRECT_CACHE},
+            )
+    target = storage.signed_url(key, bucket=bucket)
+    if target:
+        # signed URLs expire, so the redirect itself must never be cached
+        return RedirectResponse(
+            target,
+            status_code=status.HTTP_302_FOUND,
+            headers={"Cache-Control": PRIVATE_CACHE},
+        )
+    return None
+
+
+def _etag_matches(if_none_match: str | None, etag: str) -> bool:
+    if not if_none_match:
+        return False
+    candidates = {tag.strip().removeprefix("W/") for tag in if_none_match.split(",")}
+    return "*" in candidates or etag in candidates
 
 
 @router.get("/files/{file_id}/raw")
 def get_raw(
     file_id: int,
+    request: Request,
+    redirect: bool = Query(default=True),
     db: Session = Depends(get_db),
     principal: Principal | None = Depends(get_principal),
 ):
-    file = _visible_file_or_404(db, file_id, principal)
+    """Serve original bytes: a redirect to object storage / the CDN when the backend
+    provides URLs, otherwise a stream with validators so a CDN in front of the app
+    can cache public files. ``redirect=0`` forces streaming (browser fetch() can't
+    carry credentials across a cross-origin redirect, so downloads opt out).
+    """
+    file, public = _visible_file_or_404(db, file_id, principal)
     obj = db.get(StorageObject, file.storage_object_id)
-    data = get_storage().read(obj.key, bucket=obj.bucket)
+    storage = get_storage()
+
+    if redirect:
+        response = _storage_redirect(storage, obj.key, obj.bucket, public)
+        if response is not None:
+            return response
+
+    headers = {"Cache-Control": PUBLIC_CACHE if public else PRIVATE_CACHE}
+    if obj.created_at is not None:
+        headers["Last-Modified"] = format_datetime(
+            obj.created_at.astimezone(timezone.utc), usegmt=True
+        )
+    if obj.checksum:
+        etag = f'"{obj.checksum}"'
+        headers["ETag"] = etag
+        if _etag_matches(request.headers.get("if-none-match"), etag):
+            return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers=headers)
+
+    data = storage.read(obj.key, bucket=obj.bucket)
     media = mimetypes.guess_type(obj.key)[0] or "application/octet-stream"
-    return Response(content=data, media_type=media)
+    return Response(content=data, media_type=media, headers=headers)
 
 
 @router.get("/files/{file_id}/image")
@@ -169,13 +244,16 @@ def get_image(
     background: BackgroundTasks,
     size: str = Query(...),
     format: str = Query(default=images.DEFAULT_FORMAT),
+    redirect: bool = Query(default=True),
     db: Session = Depends(get_db),
     principal: Principal | None = Depends(get_principal),
 ):
     """Serve a cached derivative, or start building it and answer 202.
 
-    Clients treat the 202 as "show a placeholder and retry shortly"; generation
-    runs in the background and is deduplicated across concurrent misses.
+    Cache hits redirect to object storage / the CDN when the backend provides URLs
+    (``redirect=0`` opts back into streaming, as on /raw). Clients treat the 202 as
+    "show a placeholder and retry shortly"; generation runs in the background and
+    is deduplicated across concurrent misses.
     """
     if size not in images.PRESETS:
         raise HTTPException(
@@ -187,13 +265,17 @@ def get_image(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"format must be one of: {', '.join(images.FORMATS)}",
         )
-    file = _visible_file_or_404(db, file_id, principal)
+    file, public = _visible_file_or_404(db, file_id, principal)
     if not file.is_image:
         raise HTTPException(status_code=400, detail="Derivatives only exist for image files")
     obj = db.get(StorageObject, file.storage_object_id)
     storage = get_storage()
-    key = images.derivative_key(obj.id, size, format)
+    key = images.derivative_key(obj.id, obj.checksum, size, format)
     if storage.exists(key):
+        if redirect:
+            response = _storage_redirect(storage, key, None, public)
+            if response is not None:
+                return response
         try:
             data = storage.read(key)
         except OSError:
@@ -202,9 +284,13 @@ def get_image(
             return Response(
                 content=data,
                 media_type=images.FORMATS[format][1],
-                headers={"Cache-Control": "private, max-age=3600"},
+                headers={
+                    "Cache-Control": PUBLIC_CACHE if public else "private, max-age=3600"
+                },
             )
-    background.add_task(images.generate, storage, obj.key, obj.bucket, obj.id, size, format)
+    background.add_task(
+        images.generate, storage, obj.key, obj.bucket, obj.id, obj.checksum, size, format
+    )
     return JSONResponse(
         status_code=status.HTTP_202_ACCEPTED,
         content={"detail": "derivative is being generated"},
@@ -343,7 +429,7 @@ def delete_file(
             storage.delete(obj.key, bucket=obj.bucket)
         except OSError:
             pass
-        images.delete_derivatives(storage, obj.id)
+        images.delete_derivatives(storage, obj.id, obj.checksum)
         # only drop the storage object if nothing else points at it
         still_used = db.scalar(
             select(CommissionFile).where(
