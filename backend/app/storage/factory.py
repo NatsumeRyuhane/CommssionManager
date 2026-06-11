@@ -19,24 +19,24 @@ def _build_s3() -> StorageBackendDriver:
     required = ("storage_s3_bucket", "storage_s3_access_key", "storage_s3_secret_key")
     missing = [name for name in required if not getattr(settings, name)]
     if missing:
-        raise RuntimeError(
-            "storage_backend=s3 requires settings: " + ", ".join(f"CMGR_{m.upper()}" for m in missing)
-        )
+        names = ", ".join(f"CMGR_{name.upper()}" for name in missing)
+        raise RuntimeError(f"storage_backend=s3 requires settings: {names}")
     import boto3  # deferred so local-only deployments never touch it
 
     from app.storage.s3 import S3Storage
 
+    # `or None`: the prod compose file passes unset knobs as empty strings
     client = boto3.client(
         "s3",
-        endpoint_url=settings.storage_s3_endpoint,
-        region_name=settings.storage_s3_region,
+        endpoint_url=settings.storage_s3_endpoint or None,
+        region_name=settings.storage_s3_region or None,
         aws_access_key_id=settings.storage_s3_access_key,
         aws_secret_access_key=settings.storage_s3_secret_key,
     )
     return S3Storage(
         client,
         settings.storage_s3_bucket,
-        cdn_base_url=settings.storage_cdn_base_url,
+        cdn_base_url=settings.storage_cdn_base_url or None,
         signed_url_ttl=settings.storage_signed_url_ttl,
     )
 

@@ -58,6 +58,40 @@ def test_signed_url_uses_configured_ttl(s3: S3Storage):
     assert s3.signed_url("k.png", ttl=60).endswith("expires=60")
 
 
+# ---------------------------------------------------------------- factory
+
+def test_build_storage_s3_fails_fast_without_credentials(monkeypatch: pytest.MonkeyPatch):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "storage_s3_bucket", "bucket")
+    monkeypatch.setattr(settings, "storage_s3_access_key", "")
+    monkeypatch.setattr(settings, "storage_s3_secret_key", None)
+    with pytest.raises(RuntimeError) as excinfo:
+        build_storage("s3")
+    assert "CMGR_STORAGE_S3_ACCESS_KEY" in str(excinfo.value)
+    assert "CMGR_STORAGE_S3_SECRET_KEY" in str(excinfo.value)
+
+
+def test_build_storage_s3_treats_empty_env_values_as_unset(monkeypatch: pytest.MonkeyPatch):
+    """The prod compose file passes unset knobs as empty strings."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "storage_s3_bucket", "bucket")
+    monkeypatch.setattr(settings, "storage_s3_access_key", "key")
+    monkeypatch.setattr(settings, "storage_s3_secret_key", "secret")
+    monkeypatch.setattr(settings, "storage_s3_endpoint", "")
+    monkeypatch.setattr(settings, "storage_cdn_base_url", "")
+    driver = build_storage("s3")
+    assert isinstance(driver, S3Storage)
+    assert driver.cdn_base_url is None
+    assert driver.public_url("x.png") is None
+
+
+def test_build_storage_rejects_unknown_backend():
+    with pytest.raises(NotImplementedError):
+        build_storage("gcs")
+
+
 # ---------------------------------------------------------------- migration
 
 def test_target_key_randomizes_legacy_keys_for_object_storage():
