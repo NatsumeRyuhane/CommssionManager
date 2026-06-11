@@ -46,6 +46,12 @@ from app.schemas import (
 
 SETTINGS_ID = 1
 DEFAULT_SITE_TITLE = "Commissions"
+# listed in display order: first name gets position 0 and renders topmost
+DEFAULT_STAGE_NAMES = "Delivered, Color, Lineart, Sketching"
+
+
+def split_stage_names(raw: str) -> list[str]:
+    return [name.strip() for name in raw.split(",") if name.strip()]
 
 FIELD_DEFAULTS: dict[str, bool] = {
     "title": True,
@@ -283,7 +289,15 @@ def create_commission(db: Session, data: CommissionCreate) -> Commission:
             visibility_override=Visibility.private,
         )
     )
-    for i, node_name in enumerate(data.node_names):
+    # when the caller doesn't specify stages, apply the site default template
+    # (an explicitly empty list still creates a stage-less commission)
+    node_names = data.node_names
+    if "node_names" not in data.model_fields_set:
+        app_settings = db.get(AppSettings, SETTINGS_ID)
+        node_names = split_stage_names(
+            app_settings.default_stage_names if app_settings is not None else DEFAULT_STAGE_NAMES
+        )
+    for i, node_name in enumerate(node_names):
         commission.nodes.append(
             CommissionNode(
                 name=node_name,
@@ -420,6 +434,9 @@ def ensure_app_settings(db: Session) -> AppSettings:
 def site_settings_out(settings: AppSettings | None) -> SiteSettingsOut:
     return SiteSettingsOut(
         site_title=settings.site_title if settings is not None else DEFAULT_SITE_TITLE,
+        default_stage_names=split_stage_names(
+            settings.default_stage_names if settings is not None else DEFAULT_STAGE_NAMES
+        ),
         updated_at=settings.updated_at if settings is not None else None,
     )
 

@@ -118,6 +118,7 @@ Table storage_objects {
 Table app_settings {
   id                            integer           [pk]
   site_title                    varchar           [not null, default: 'Commissions']
+  default_stage_names           varchar           [not null, default: 'Delivered, Color, Lineart, Sketching', note: 'comma-separated stage template for new commissions, display order (first = topmost)']
   visibility_preset             visibility_preset [not null, default: 'public_by_default']
   default_commission_visibility visibility        [not null, default: 'public']
   default_stage_visibility      visibility        [not null, default: 'private']

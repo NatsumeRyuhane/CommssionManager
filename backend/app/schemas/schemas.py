@@ -460,11 +460,13 @@ class VisibilitySettingsUpdate(BaseModel):
 
 class SiteSettingsOut(BaseModel):
     site_title: str
+    default_stage_names: list[str]
     updated_at: datetime | None = None
 
 
 class SiteSettingsUpdate(BaseModel):
     site_title: str | None = Field(default=None, max_length=120)
+    default_stage_names: list[str] | None = None
 
     @field_validator("site_title")
     @classmethod
@@ -475,6 +477,16 @@ class SiteSettingsUpdate(BaseModel):
         if not title:
             raise ValueError("site_title must not be empty")
         return title
+
+    @field_validator("default_stage_names")
+    @classmethod
+    def stage_names_must_not_be_blank(cls, names: list[str] | None) -> list[str] | None:
+        if names is None:
+            return None
+        cleaned = [name.strip() for name in names if name.strip()]
+        if sum(len(name) for name in cleaned) + 2 * len(cleaned) > 500:
+            raise ValueError("default_stage_names is too long")
+        return cleaned
 
 
 class VisibilityFieldState(BaseModel):

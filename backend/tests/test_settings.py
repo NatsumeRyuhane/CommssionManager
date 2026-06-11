@@ -11,6 +11,12 @@ def test_site_settings_are_public_with_default(client: TestClient):
     initial = client.get("/api/v1/settings/site")
     assert initial.status_code == 200, initial.text
     assert initial.json()["site_title"] == "Commissions"
+    assert initial.json()["default_stage_names"] == [
+        "Delivered",
+        "Color",
+        "Lineart",
+        "Sketching",
+    ]
 
 
 def test_site_settings_are_admin_patchable(admin_client: TestClient):
@@ -35,6 +41,35 @@ def test_site_settings_are_admin_patchable(admin_client: TestClient):
     fetched = admin_client.get("/api/v1/settings/site")
     assert fetched.status_code == 200
     assert fetched.json()["site_title"] == "Heiyao's commissions"
+
+
+def test_default_stage_template_applies_to_new_commissions(admin_client: TestClient):
+    templated = admin_client.post("/api/v1/commissions", json={"title": "From template"})
+    assert templated.status_code == 201, templated.text
+    assert [n["name"] for n in templated.json()["nodes"] if not n["is_detached"]] == [
+        "Delivered",
+        "Color",
+        "Lineart",
+        "Sketching",
+    ]
+
+    patched = admin_client.patch(
+        "/api/v1/settings/site",
+        json={"default_stage_names": ["Done", "  WIP  ", ""]},
+    )
+    assert patched.status_code == 200, patched.text
+    assert patched.json()["default_stage_names"] == ["Done", "WIP"]
+
+    custom = admin_client.post("/api/v1/commissions", json={"title": "From custom template"})
+    assert custom.status_code == 201, custom.text
+    assert [n["name"] for n in custom.json()["nodes"] if not n["is_detached"]] == ["Done", "WIP"]
+
+    # an explicit empty list opts out of the template
+    bare = admin_client.post(
+        "/api/v1/commissions", json={"title": "No stages", "node_names": []}
+    )
+    assert bare.status_code == 201, bare.text
+    assert [n for n in bare.json()["nodes"] if not n["is_detached"]] == []
 
 
 def test_visibility_settings_are_admin_only_and_patchable(admin_client: TestClient):

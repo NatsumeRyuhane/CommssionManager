@@ -78,6 +78,8 @@ def update_site_settings(
     row = crud.ensure_app_settings(db)
     if body.site_title is not None:
         row.site_title = body.site_title
+    if body.default_stage_names is not None:
+        row.default_stage_names = ", ".join(body.default_stage_names)
     row.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(row)
