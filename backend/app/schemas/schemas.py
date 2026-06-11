@@ -472,12 +472,14 @@ class VisibilitySettingsUpdate(BaseModel):
 class SiteSettingsOut(BaseModel):
     site_title: str
     default_stage_names: list[str]
+    allow_public_original_download: bool
     updated_at: datetime | None = None
 
 
 class SiteSettingsUpdate(BaseModel):
     site_title: str | None = Field(default=None, max_length=120)
     default_stage_names: list[str] | None = None
+    allow_public_original_download: bool | None = None
 
     @field_validator("site_title")
     @classmethod

@@ -226,12 +226,15 @@ export interface SiteSettings {
   site_title: string;
   /** Stage template for new commissions, display order (first = topmost). */
   default_stage_names: string[];
+  /** When false, visitors get lossy derivatives only (no /raw, no png). */
+  allow_public_original_download: boolean;
   updated_at: string | null;
 }
 
 export interface SiteSettingsUpdate {
   site_title?: string | null;
   default_stage_names?: string[] | null;
+  allow_public_original_download?: boolean | null;
 }
 
 export interface CommissionVisibilityField {

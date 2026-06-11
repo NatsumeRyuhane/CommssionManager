@@ -170,6 +170,12 @@
     persists in localStorage and re-applies across image switches (clamped per file)
   - Detail page: in-page cover removed (stage tiles open the viewer); lifecycle joined the
     left column and the metadata rail is sticky on desktop
+  - Title optional: omitted/blank titles default to "Untitled" (create and update)
+  - Original-download gate: `app_settings.allow_public_original_download` (Settings → Site
+    toggle, default on); when off, `/files/{id}/raw` and lossless `format=png` derivatives
+    require write access — visitors get lossy (jpeg/webp) derivatives only, the viewer hides
+    "Original" and saves jpeg for png sources (gif animation is admin-only while gated, since
+    derivatives are static)
 
 ## Phase 3 — Optional / advanced (deferred)
 - [ ] MCP server wrapping the REST API (tools: create_commission, upload_file, search, set_focal_point)

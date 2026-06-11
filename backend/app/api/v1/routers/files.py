@@ -214,6 +214,13 @@ def get_raw(
     carry credentials across a cross-origin redirect, so downloads opt out).
     """
     file, public = _visible_file_or_404(db, file_id, principal)
+    # visitors only ever reach this point with public image files (the gate above
+    # already hides everything else), so this check is exactly the original-art gate
+    if (principal is None or not principal.can_write) and not crud.public_originals_allowed(db):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Original downloads are disabled on this site",
+        )
     obj = db.get(StorageObject, file.storage_object_id)
     storage = get_storage()
 
@@ -269,6 +276,17 @@ def get_image(
     file, public = _visible_file_or_404(db, file_id, principal)
     if not file.is_image:
         raise HTTPException(status_code=400, detail="Derivatives only exist for image files")
+    # a png derivative is lossless — at source size it reproduces the original
+    # bit-for-bit, so it falls under the same gate as /raw
+    if (
+        format == "png"
+        and (principal is None or not principal.can_write)
+        and not crud.public_originals_allowed(db)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Lossless downloads are disabled on this site",
+        )
     obj = db.get(StorageObject, file.storage_object_id)
     storage = get_storage()
     key = images.derivative_key(obj.id, obj.checksum, size, format)

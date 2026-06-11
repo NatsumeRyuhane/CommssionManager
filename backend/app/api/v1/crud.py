@@ -437,8 +437,16 @@ def site_settings_out(settings: AppSettings | None) -> SiteSettingsOut:
         default_stage_names=split_stage_names(
             settings.default_stage_names if settings is not None else DEFAULT_STAGE_NAMES
         ),
+        allow_public_original_download=(
+            settings.allow_public_original_download if settings is not None else True
+        ),
         updated_at=settings.updated_at if settings is not None else None,
     )
+
+
+def public_originals_allowed(db: Session) -> bool:
+    settings = db.get(AppSettings, SETTINGS_ID)
+    return settings.allow_public_original_download if settings is not None else True
 
 
 def ensure_visibility_settings(db: Session) -> tuple[AppSettings, list[VisibilityStageDefault]]:

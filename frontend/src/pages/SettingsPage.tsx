@@ -198,6 +198,7 @@ export function SettingsPage() {
                     await api.updateSiteSettings({
                       site_title: site.site_title,
                       default_stage_names: stageNames,
+                      allow_public_original_download: site.allow_public_original_download,
                     }),
                   );
                 } catch (e) {
@@ -352,6 +353,22 @@ function SitePanel({
               Comma-separated, applied when a commission is created. First stage renders topmost.
             </span>
           </label>
+          <div className="settings-list-row">
+            <div>
+              <strong>Allow original downloads</strong>
+              <span className="mono-sm muted">
+                {" "}
+                · when off, visitors only get resampled lossy image variants
+              </span>
+            </div>
+            <ToggleSwitch
+              checked={value.allow_public_original_download}
+              onChange={(next) =>
+                onChange({ ...value, allow_public_original_download: next })
+              }
+              label="Allow visitors to download original files"
+            />
+          </div>
           <div className="settings-form-actions">
             <button
               className="btn primary"

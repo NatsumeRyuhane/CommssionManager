@@ -80,6 +80,8 @@ def update_site_settings(
         row.site_title = body.site_title
     if body.default_stage_names is not None:
         row.default_stage_names = ", ".join(body.default_stage_names)
+    if body.allow_public_original_download is not None:
+        row.allow_public_original_download = body.allow_public_original_download
     row.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(row)

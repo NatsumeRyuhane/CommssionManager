@@ -181,6 +181,11 @@ class AppSettings(Base):
     default_stage_names: Mapped[str] = mapped_column(
         String(500), nullable=False, default="Delivered, Color, Lineart, Sketching"
     )
+    # when false, visitors get lossy derivatives only: /raw and lossless (png)
+    # derivative formats require write access
+    allow_public_original_download: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True
+    )
     visibility_preset: Mapped[VisibilityPreset] = mapped_column(
         Enum(VisibilityPreset, name="visibility_preset"),
         nullable=False,

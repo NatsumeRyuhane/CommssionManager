@@ -1,10 +1,19 @@
+import io
+
 from fastapi.testclient import TestClient
+from PIL import Image
 
 
 def _create_key(admin_client: TestClient, *, name: str, scopes: list[str]) -> dict:
     res = admin_client.post("/api/v1/api-keys", json={"name": name, "scopes": scopes})
     assert res.status_code == 201, res.text
     return res.json()
+
+
+def _png(color: str) -> bytes:
+    buf = io.BytesIO()
+    Image.new("RGB", (20, 20), color).save(buf, format="PNG")
+    return buf.getvalue()
 
 
 def test_site_settings_are_public_with_default(client: TestClient):
@@ -70,6 +79,53 @@ def test_default_stage_template_applies_to_new_commissions(admin_client: TestCli
     )
     assert bare.status_code == 201, bare.text
     assert [n for n in bare.json()["nodes"] if not n["is_detached"]] == []
+
+
+def test_original_download_gate(admin_client: TestClient):
+    created = admin_client.post(
+        "/api/v1/commissions",
+        json={"title": "Download gate", "node_names": ["Delivered"]},
+    )
+    assert created.status_code == 201, created.text
+    node = next(n for n in created.json()["nodes"] if n["name"] == "Delivered")
+    uploaded = admin_client.post(
+        f"/api/v1/nodes/{node['id']}/files",
+        files={"upload": ("art.png", _png("#aa3322"), "image/png")},
+    )
+    assert uploaded.status_code == 201, uploaded.text
+    file_id = uploaded.json()["id"]
+
+    # default: originals are open to visitors
+    assert admin_client.get("/api/v1/settings/site").json()[
+        "allow_public_original_download"
+    ] is True
+
+    patched = admin_client.patch(
+        "/api/v1/settings/site", json={"allow_public_original_download": False}
+    )
+    assert patched.status_code == 200, patched.text
+    assert patched.json()["allow_public_original_download"] is False
+
+    # write access keeps originals and lossless derivatives
+    assert admin_client.get(f"/api/v1/files/{file_id}/raw").status_code == 200
+    assert admin_client.get(
+        f"/api/v1/files/{file_id}/image?size=small&format=png"
+    ).status_code in (200, 202)
+
+    admin_client.cookies.clear()
+
+    # visitors lose original bytes and lossless (png) derivatives...
+    assert admin_client.get(f"/api/v1/files/{file_id}/raw").status_code == 403
+    assert admin_client.get(
+        f"/api/v1/files/{file_id}/image?size=small&format=png"
+    ).status_code == 403
+    # ...but lossy derivatives stay open
+    assert admin_client.get(
+        f"/api/v1/files/{file_id}/image?size=small&format=jpeg"
+    ).status_code in (200, 202)
+    assert admin_client.get(
+        f"/api/v1/files/{file_id}/image?size=small&format=webp"
+    ).status_code in (200, 202)
 
 
 def test_visibility_settings_are_admin_only_and_patchable(admin_client: TestClient):

@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Download, X } from "lucide-react";
 
+import { api } from "../api/client";
 import type { CommissionFile, ImagePreset } from "../api/types";
+import { useAuth } from "../hooks/useAuth";
 import { DerivedImg, PRESET_EDGES, presetUrl } from "./DerivedImg";
 
 interface ResolutionOption {
@@ -30,16 +32,25 @@ function dimensionsFor(file: CommissionFile, maxEdge: number | null): string {
   return `${Math.round(file.width * scale)} x ${Math.round(file.height * scale)}`;
 }
 
-function availableResolutions(file: CommissionFile): ResolutionOption[] {
+function availableResolutions(file: CommissionFile, allowOriginal: boolean): ResolutionOption[] {
   // derivatives are static re-encodes; only the original keeps gif animation
-  if (file.format === "gif") return RESOLUTIONS.filter((option) => option.preset === null);
+  if (file.format === "gif" && allowOriginal) {
+    return RESOLUTIONS.filter((option) => option.preset === null);
+  }
   const maxDimension = Math.max(file.width ?? 0, file.height ?? 0);
   // <= keeps the preset matching the source's exact size: same dimensions,
   // but the re-encoded derivative still transfers far fewer bytes than /raw
-  return RESOLUTIONS.filter((option) => {
+  const options = RESOLUTIONS.filter((option) => {
     const maxEdge = maxEdgeOf(option);
-    return maxEdge === null || !maxDimension || maxEdge <= maxDimension;
+    if (maxEdge === null) return allowOriginal;
+    return !maxDimension || maxEdge <= maxDimension;
   });
+  if (!allowOriginal && !options.some((option) => option.preset !== null)) {
+    // source smaller than every preset: the smallest derivative re-encodes
+    // at native size, which is all a visitor may fetch
+    return RESOLUTIONS.filter((option) => option.preset === "small");
+  }
+  return options;
 }
 
 function readStoredPreset(): ImagePreset | null {
@@ -61,16 +72,23 @@ function writeStoredPreset(preset: ImagePreset | null) {
 }
 
 /** The remembered preset, clamped to what this file offers: when the preferred
- *  derivative doesn't exist (small source, gif) take the next size down, else original. */
-function resolvePreset(file: CommissionFile, preferred: ImagePreset | null): ImagePreset | null {
-  const options = availableResolutions(file);
-  if (preferred === null) return null;
+ *  derivative doesn't exist (small source, gif) take the next size down; the
+ *  original only resolves when the site allows it for this viewer. */
+function resolvePreset(
+  file: CommissionFile,
+  preferred: ImagePreset | null,
+  allowOriginal: boolean,
+): ImagePreset | null {
+  const options = availableResolutions(file, allowOriginal);
+  if (preferred === null && allowOriginal) return null;
   const descending: ImagePreset[] = ["large", "medium", "small"];
-  const start = descending.indexOf(preferred);
+  const start = preferred === null ? 0 : descending.indexOf(preferred);
   for (const candidate of descending.slice(start === -1 ? 0 : start)) {
     if (options.some((option) => option.preset === candidate)) return candidate;
   }
-  return null;
+  if (options.some((option) => option.preset === null)) return null;
+  // nothing at or below the preference: take the smallest offered preset
+  return options[options.length - 1]?.preset ?? null;
 }
 
 function safeFilename(file: CommissionFile): string {
@@ -81,12 +99,20 @@ function safeFilename(file: CommissionFile): string {
   return base || `image-${file.id}`;
 }
 
-function outputType(file: CommissionFile): { format: string; extension: string } {
+function outputType(
+  file: CommissionFile,
+  allowOriginal: boolean,
+): { format: string; extension: string } {
   if (file.format === "jpg" || file.format === "jpeg") {
     return { format: "jpeg", extension: "jpg" };
   }
   if (file.format === "webp") {
     return { format: "webp", extension: "webp" };
+  }
+  // png derivatives are lossless, so the server reserves them for write access
+  // when original downloads are disabled; visitors get jpeg instead
+  if (!allowOriginal) {
+    return { format: "jpeg", extension: "jpg" };
   }
   return { format: "png", extension: "png" };
 }
@@ -157,13 +183,36 @@ export function ImageViewerModal({
 }) {
   const index = Math.max(0, images.findIndex((file) => file.id === activeFileId));
   const active = images[index];
-  const resolutions = useMemo(() => availableResolutions(active), [active]);
+  const { canWrite } = useAuth();
+  // conservative until the site settings answer; the server enforces regardless
+  const [publicOriginals, setPublicOriginals] = useState(false);
+  const allowOriginal = canWrite || publicOriginals;
+  const resolutions = useMemo(
+    () => availableResolutions(active, allowOriginal),
+    [active, allowOriginal],
+  );
   const [preset, setPreset] = useState<ImagePreset | null>(() =>
-    resolvePreset(active, readStoredPreset()),
+    resolvePreset(active, readStoredPreset(), allowOriginal),
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [transform, setTransform] = useState<Transform>(IDENTITY);
+
+  useEffect(() => {
+    if (canWrite) return;
+    let cancelled = false;
+    api
+      .getSiteSettings()
+      .then((settings) => {
+        if (!cancelled) setPublicOriginals(settings.allow_public_original_download);
+      })
+      .catch(() => {
+        if (!cancelled) setPublicOriginals(true); // fail open; the server still enforces
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [canWrite]);
 
   const stageRef = useRef<HTMLDivElement>(null);
   // live pointers on the stage; two of them = pinch
@@ -173,13 +222,14 @@ export function ImageViewerModal({
   const transformRef = useRef(transform);
   transformRef.current = transform;
 
-  // switching images re-applies the remembered quality and resets the zoom
+  // switching images re-applies the remembered quality and resets the zoom;
+  // allowOriginal arrives async, so it re-resolves the preset too
   useEffect(() => {
     const file = images.find((candidate) => candidate.id === activeFileId);
-    if (file) setPreset(resolvePreset(file, readStoredPreset()));
+    if (file) setPreset(resolvePreset(file, readStoredPreset(), allowOriginal));
     setError(null);
     setTransform(IDENTITY);
-  }, [activeFileId, images]);
+  }, [activeFileId, images, allowOriginal]);
 
   useEffect(() => {
     function keydown(event: KeyboardEvent) {
@@ -298,7 +348,7 @@ export function ImageViewerModal({
       }
       const derivativeUrl = active.image_urls?.[preset];
       if (!derivativeUrl) throw new Error("No derivative available for this image");
-      const { format, extension } = outputType(active);
+      const { format, extension } = outputType(active, allowOriginal);
       const blob = await fetchDerivative(`${derivativeUrl}&format=${format}`);
       downloadBlob(
         blob,
