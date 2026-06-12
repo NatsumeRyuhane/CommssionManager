@@ -90,12 +90,11 @@ export function DetailPage() {
   const paddedId = String(data.id).padStart(3, "0");
 
   const isPublic = data.effective_visibility !== "private";
-  const subBits = [
-    `commission #${paddedId}`,
-    data.completed_at || null,
-    data.cover?.width && data.cover?.height ? `${data.cover.width}×${data.cover.height}` : null,
-    data.formats.length ? data.formats.join("/") : null,
-  ].filter(Boolean) as string[];
+  // no dimensions or file types here: those are per-file facts that vary
+  // across the lifecycle, so the stage tiles carry them instead
+  const subBits = [`commission #${paddedId}`, data.completed_at || null].filter(
+    Boolean,
+  ) as string[];
 
   return (
     <div className="app">
