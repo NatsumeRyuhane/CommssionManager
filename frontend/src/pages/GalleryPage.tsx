@@ -46,12 +46,18 @@ function FilterChips({
       <div className="row wrap gap-4" style={{ marginBottom: 12 }}>
         {options.length === 0 && <span className="mono-sm muted">none yet</span>}
         {options.map((value) => (
-          <span key={value} onClick={() => onToggle(value)} style={{ cursor: "pointer" }}>
+          <button
+            key={value}
+            type="button"
+            className="chip-button"
+            aria-pressed={selected.includes(value)}
+            onClick={() => onToggle(value)}
+          >
             <Chip kind={kind} ghost={!selected.includes(value)}>
               {selected.includes(value) ? "✓ " : ""}
               {value}
             </Chip>
-          </span>
+          </button>
         ))}
       </div>
     </>
@@ -272,21 +278,20 @@ export function GalleryPage() {
                 {RATING_ORDER.map((r) => {
                   const gated = !allowedRatings.includes(r);
                   return (
-                    <span
+                    <button
                       key={r}
-                      onClick={gated ? undefined : () => toggle(ratings, setRatings, r)}
-                      style={
-                        gated
-                          ? { cursor: "not-allowed", opacity: 0.35 }
-                          : { cursor: "pointer" }
-                      }
+                      type="button"
+                      className="chip-button"
+                      disabled={gated}
+                      aria-pressed={ratings.includes(r)}
+                      onClick={() => toggle(ratings, setRatings, r)}
                       title={gated ? "Raise the content gate to include this rating" : undefined}
                     >
                       <Chip kind="rating" ghost={!ratings.includes(r)}>
                         {ratings.includes(r) ? "✓ " : ""}
                         {capitalize(r)}
                       </Chip>
-                    </span>
+                    </button>
                   );
                 })}
               </div>

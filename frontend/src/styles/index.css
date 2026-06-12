@@ -616,6 +616,10 @@ a { color: inherit; text-decoration: none; }
   cursor: pointer;
   font: inherit;
 }
+.chip-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
 
 @media (max-width: 880px) {
   .edit-page { grid-template-columns: 1fr; }

@@ -199,19 +199,30 @@ export function SettingsPage() {
                     .filter((row) => row.stage_name);
                   // one editor, two stores: ordered names feed the site stage
                   // template, the full rows feed the visibility stage defaults
+                  const previousStageNames = site.default_stage_names;
                   const nextSite = await api.updateSiteSettings({
                     site_title: site.site_title,
                     default_stage_names: cleaned.map((row) => row.stage_name),
                     allow_public_original_download: site.allow_public_original_download,
                   });
-                  const nextVisibility = await api.updateVisibilitySettings({
-                    stage_defaults: cleaned.map((row, index) => ({
-                      stage_name: row.stage_name,
-                      visibility: row.visibility,
-                      position: index,
-                      note: row.note || null,
-                    })),
-                  });
+                  let nextVisibility;
+                  try {
+                    nextVisibility = await api.updateVisibilitySettings({
+                      stage_defaults: cleaned.map((row, index) => ({
+                        stage_name: row.stage_name,
+                        visibility: row.visibility,
+                        position: index,
+                        note: row.note || null,
+                      })),
+                    });
+                  } catch (visibilityError) {
+                    // keep the two stores in step: revert the template before
+                    // surfacing the error (best effort — the revert may fail too)
+                    await api
+                      .updateSiteSettings({ default_stage_names: previousStageNames })
+                      .catch(() => undefined);
+                    throw visibilityError;
+                  }
                   setSite(nextSite);
                   setVisibility(nextVisibility);
                 } catch (e) {
@@ -307,10 +318,17 @@ export function SettingsPage() {
 const STAGE_ROW_DRAG_TYPE = "application/x-cmgr-stage-row";
 
 interface StageRow {
+  /** Client-side identity so list keys survive reorders and removals. */
+  id: string;
   stage_name: string;
   visibility: Visibility;
   note: string;
 }
+
+const newRowId = () =>
+  typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : Math.random().toString(36).slice(2);
 
 /** The single stage editor drives both stores, so its initial state merges
  *  them: template names in order (visibility/note from the matching stage
@@ -323,13 +341,19 @@ function mergeStageRows(site: SiteSettings, visibility: VisibilitySettings): Sta
     const match = byName.get(name.toLowerCase());
     if (match) byName.delete(name.toLowerCase());
     return {
+      id: newRowId(),
       stage_name: name,
       visibility: match?.visibility ?? visibility.default_stage_visibility,
       note: match?.note ?? "",
     };
   });
   for (const row of byName.values()) {
-    rows.push({ stage_name: row.stage_name, visibility: row.visibility, note: row.note ?? "" });
+    rows.push({
+      id: newRowId(),
+      stage_name: row.stage_name,
+      visibility: row.visibility,
+      note: row.note ?? "",
+    });
   }
   return rows;
 }
@@ -352,9 +376,18 @@ function SitePanel({
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
 
+  // re-derive the editor from the canonical server state after a save;
+  // keying on updated_at (not the objects) keeps in-progress edits to other
+  // fields from resetting the rows on every keystroke
+  useEffect(() => {
+    setRows(mergeStageRows(site, visibility));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [site.updated_at, visibility.updated_at]);
+
   const names = rows.map((row) => row.stage_name.trim()).filter(Boolean);
   const hasDuplicates = new Set(names.map((name) => name.toLowerCase())).size !== names.length;
-  const canSave = !busy && Boolean(site.site_title.trim()) && names.length > 0 && !hasDuplicates;
+  // an empty template is valid: new commissions then start stage-less
+  const canSave = !busy && Boolean(site.site_title.trim()) && !hasDuplicates;
 
   function setRow(index: number, patch: Partial<StageRow>) {
     setRows(rows.map((row, i) => (i === index ? { ...row, ...patch } : row)));
@@ -365,7 +398,7 @@ function SitePanel({
     if (!name) return;
     setRows([
       ...rows,
-      { stage_name: name, visibility: visibility.default_stage_visibility, note: "" },
+      { id: newRowId(), stage_name: name, visibility: visibility.default_stage_visibility, note: "" },
     ]);
     setNewStage("");
   }
@@ -442,7 +475,7 @@ function SitePanel({
           )}
           {rows.map((row, index) => (
             <div
-              key={index}
+              key={row.id}
               className={`stage-default-row${dropIndex === index ? " reorder-target" : ""}`}
               onDragOver={(e) => {
                 if (!Array.from(e.dataTransfer.types).includes(STAGE_ROW_DRAG_TYPE)) return;
