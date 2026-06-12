@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import enum
-from datetime import date, datetime
+from datetime import datetime
 
 from sqlalchemy import (
     BigInteger,
     Boolean,
-    Date,
     DateTime,
     Enum,
     Float,

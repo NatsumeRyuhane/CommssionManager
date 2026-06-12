@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import io
 import random
-from datetime import datetime
 
 from PIL import Image, ImageDraw
 
