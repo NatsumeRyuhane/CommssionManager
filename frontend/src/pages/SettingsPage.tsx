@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, Copy, Plus, X } from "lucide-react";
+import { Copy, Plus, X } from "lucide-react";
 
 import { api } from "../api/client";
 import type {
@@ -185,22 +185,36 @@ export function SettingsPage() {
         <main className="settings-content">
           {loading && <div className="mono-sm muted">Loading settings…</div>}
           {error && <div className="error-text">{error}</div>}
-          {!loading && !error && tab === "site" && site && (
+          {!loading && !error && tab === "site" && site && visibility && (
             <SitePanel
-              value={site}
+              site={site}
+              visibility={visibility}
               busy={saving}
               onChange={setSite}
-              onSave={async (stageNames) => {
+              onSave={async (rows) => {
                 setSaving(true);
                 setError(null);
                 try {
-                  setSite(
-                    await api.updateSiteSettings({
-                      site_title: site.site_title,
-                      default_stage_names: stageNames,
-                      allow_public_original_download: site.allow_public_original_download,
-                    }),
-                  );
+                  const cleaned = rows
+                    .map((row) => ({ ...row, stage_name: row.stage_name.trim() }))
+                    .filter((row) => row.stage_name);
+                  // one editor, two stores: ordered names feed the site stage
+                  // template, the full rows feed the visibility stage defaults
+                  const nextSite = await api.updateSiteSettings({
+                    site_title: site.site_title,
+                    default_stage_names: cleaned.map((row) => row.stage_name),
+                    allow_public_original_download: site.allow_public_original_download,
+                  });
+                  const nextVisibility = await api.updateVisibilitySettings({
+                    stage_defaults: cleaned.map((row, index) => ({
+                      stage_name: row.stage_name,
+                      visibility: row.visibility,
+                      position: index,
+                      note: row.note || null,
+                    })),
+                  });
+                  setSite(nextSite);
+                  setVisibility(nextVisibility);
                 } catch (e) {
                   setError(String(e));
                 } finally {
@@ -245,17 +259,12 @@ export function SettingsPage() {
                 setSaving(true);
                 setError(null);
                 try {
+                  // stage defaults are managed from the Site tab's stage editor
                   const body = {
                     preset: visibility.preset,
                     default_commission_visibility: visibility.default_commission_visibility,
                     default_stage_visibility: visibility.default_stage_visibility,
                     fields: visibility.fields,
-                    stage_defaults: visibility.stage_defaults.map((row, index) => ({
-                      stage_name: row.stage_name,
-                      visibility: row.visibility,
-                      position: index,
-                      note: row.note || null,
-                    })),
                   };
                   setVisibility(await api.updateVisibilitySettings(body));
                 } catch (e) {
@@ -296,25 +305,78 @@ export function SettingsPage() {
   );
 }
 
+const STAGE_ROW_DRAG_TYPE = "application/x-cmgr-stage-row";
+
+interface StageRow {
+  stage_name: string;
+  visibility: Visibility;
+  note: string;
+}
+
+/** The single stage editor drives both stores, so its initial state merges
+ *  them: template names in order (visibility/note from the matching stage
+ *  default), then any leftover stage defaults that weren't in the template. */
+function mergeStageRows(site: SiteSettings, visibility: VisibilitySettings): StageRow[] {
+  const byName = new Map(
+    visibility.stage_defaults.map((row) => [row.stage_name.toLowerCase(), row]),
+  );
+  const rows: StageRow[] = site.default_stage_names.map((name) => {
+    const match = byName.get(name.toLowerCase());
+    if (match) byName.delete(name.toLowerCase());
+    return {
+      stage_name: name,
+      visibility: match?.visibility ?? visibility.default_stage_visibility,
+      note: match?.note ?? "",
+    };
+  });
+  for (const row of byName.values()) {
+    rows.push({ stage_name: row.stage_name, visibility: row.visibility, note: row.note ?? "" });
+  }
+  return rows;
+}
+
 function SitePanel({
-  value,
+  site,
+  visibility,
   busy,
   onChange,
   onSave,
 }: {
-  value: SiteSettings;
+  site: SiteSettings;
+  visibility: VisibilitySettings;
   busy: boolean;
   onChange: (next: SiteSettings) => void;
-  onSave: (stageNames: string[]) => void;
+  onSave: (rows: StageRow[]) => void;
 }) {
-  // edited as raw text so typed commas/spaces survive; parsed on save
-  const [stagesText, setStagesText] = useState(value.default_stage_names.join(", "));
-  const stageNames = stagesText.split(",").map((s) => s.trim()).filter(Boolean);
+  const [rows, setRows] = useState<StageRow[]>(() => mergeStageRows(site, visibility));
+  const [newStage, setNewStage] = useState("");
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dropIndex, setDropIndex] = useState<number | null>(null);
 
-  function submit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!value.site_title.trim() || stageNames.length === 0) return;
-    onSave(stageNames);
+  const names = rows.map((row) => row.stage_name.trim()).filter(Boolean);
+  const hasDuplicates = new Set(names.map((name) => name.toLowerCase())).size !== names.length;
+  const canSave = !busy && Boolean(site.site_title.trim()) && names.length > 0 && !hasDuplicates;
+
+  function setRow(index: number, patch: Partial<StageRow>) {
+    setRows(rows.map((row, i) => (i === index ? { ...row, ...patch } : row)));
+  }
+
+  function addRow() {
+    const name = newStage.trim();
+    if (!name) return;
+    setRows([
+      ...rows,
+      { stage_name: name, visibility: visibility.default_stage_visibility, note: "" },
+    ]);
+    setNewStage("");
+  }
+
+  function reorder(from: number, to: number) {
+    if (from === to) return;
+    const next = [...rows];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    setRows(next);
   }
 
   return (
@@ -323,36 +385,142 @@ function SitePanel({
         <div>
           <h1>Site</h1>
           <div className="mono-sm muted">
-            {value.updated_at ? `Updated ${value.updated_at.slice(0, 10)}` : "Default settings"}
+            {site.updated_at ? `Updated ${site.updated_at.slice(0, 10)}` : "Default settings"}
           </div>
         </div>
+        <button className="btn primary" disabled={!canSave} onClick={() => onSave(rows)}>
+          {busy ? "Saving…" : "Save site"}
+        </button>
       </div>
 
-      <form className="settings-panel" onSubmit={submit}>
-        <div className="settings-panel-title">Header</div>
-        <div className="settings-form-grid">
-          <label>
-            <span className="label">Site title</span>
-            <input
-              className="field"
-              value={value.site_title}
-              onChange={(e) => onChange({ ...value, site_title: e.target.value })}
-              placeholder="Commissions"
-              maxLength={120}
-            />
-          </label>
-          <label>
-            <span className="label">New-commission stage template</span>
-            <input
-              className="field"
-              value={stagesText}
-              onChange={(e) => setStagesText(e.target.value)}
-              placeholder="Delivered, Color, Lineart, Sketching"
-            />
-            <span className="mono-sm muted">
-              Comma-separated, applied when a commission is created. First stage renders topmost.
-            </span>
-          </label>
+      <div className="settings-panel">
+        <div className="settings-panel-title">General</div>
+        <label style={{ display: "block", maxWidth: 360 }}>
+          <span className="label">Site title</span>
+          <input
+            className="field"
+            value={site.site_title}
+            onChange={(e) => onChange({ ...site, site_title: e.target.value })}
+            placeholder="Commissions"
+            maxLength={120}
+          />
+        </label>
+      </div>
+
+      <div className="settings-panel">
+        <div className="settings-panel-title">Default lifecycle stages</div>
+        <div className="mono-sm muted" style={{ marginBottom: 12 }}>
+          Applied when a commission is created; the first stage renders topmost. Each
+          stage&apos;s visibility is the default for stages of that name.
+        </div>
+        <div className="row gap-8" style={{ marginBottom: 12 }}>
+          <input
+            className="field"
+            style={{ maxWidth: 280 }}
+            placeholder="New stage name (e.g. Lineart)"
+            value={newStage}
+            onChange={(e) => setNewStage(e.target.value.replace(/,/g, ""))}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                addRow();
+              }
+            }}
+          />
+          <button
+            type="button"
+            className="btn sm"
+            onClick={addRow}
+            disabled={busy || !newStage.trim()}
+          >
+            <Plus />
+            Add stage
+          </button>
+        </div>
+        <div className="stage-default-list">
+          {rows.length === 0 && (
+            <div className="mono-sm muted">No stages — new commissions start empty.</div>
+          )}
+          {rows.map((row, index) => (
+            <div
+              key={index}
+              className={`stage-default-row${dropIndex === index ? " reorder-target" : ""}`}
+              onDragOver={(e) => {
+                if (!Array.from(e.dataTransfer.types).includes(STAGE_ROW_DRAG_TYPE)) return;
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+                setDropIndex(index);
+              }}
+              onDragLeave={() => setDropIndex((current) => (current === index ? null : current))}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDropIndex(null);
+                if (dragIndex !== null) reorder(dragIndex, index);
+                setDragIndex(null);
+              }}
+            >
+              <button
+                type="button"
+                className="lifecycle-stage-handle"
+                draggable={!busy}
+                disabled={busy}
+                title="Drag to reorder stage"
+                aria-label={`Drag ${row.stage_name || "stage"} to reorder`}
+                onDragStart={(e) => {
+                  e.dataTransfer.setData(STAGE_ROW_DRAG_TYPE, String(index));
+                  e.dataTransfer.effectAllowed = "move";
+                  setDragIndex(index);
+                }}
+                onDragEnd={() => {
+                  setDragIndex(null);
+                  setDropIndex(null);
+                }}
+              >
+                <span className="lifecycle-stage-handle-dots" aria-hidden="true" />
+              </button>
+              <input
+                className="field"
+                value={row.stage_name}
+                placeholder="Delivered"
+                // commas would split the stored template back into stages
+                onChange={(e) => setRow(index, { stage_name: e.target.value.replace(/,/g, "") })}
+              />
+              <select
+                className="field"
+                value={row.visibility}
+                onChange={(e) => setRow(index, { visibility: e.target.value as Visibility })}
+              >
+                <option value="public">Public</option>
+                <option value="private">Private</option>
+              </select>
+              <input
+                className="field"
+                value={row.note}
+                onChange={(e) => setRow(index, { note: e.target.value })}
+                placeholder="note"
+              />
+              <button
+                className="btn sm danger"
+                disabled={busy}
+                onClick={() => setRows(rows.filter((_, i) => i !== index))}
+                title="Remove stage"
+                aria-label="Remove stage"
+              >
+                <X />
+              </button>
+            </div>
+          ))}
+        </div>
+        {hasDuplicates && (
+          <div className="error-text" style={{ marginTop: 8 }}>
+            Stage names must be unique.
+          </div>
+        )}
+      </div>
+
+      <div className="settings-panel">
+        <div className="settings-panel-title">Downloads</div>
+        <div className="settings-list">
           <div className="settings-list-row">
             <div>
               <strong>Allow original downloads</strong>
@@ -362,23 +530,13 @@ function SitePanel({
               </span>
             </div>
             <ToggleSwitch
-              checked={value.allow_public_original_download}
-              onChange={(next) =>
-                onChange({ ...value, allow_public_original_download: next })
-              }
+              checked={site.allow_public_original_download}
+              onChange={(next) => onChange({ ...site, allow_public_original_download: next })}
               label="Allow visitors to download original files"
             />
           </div>
-          <div className="settings-form-actions">
-            <button
-              className="btn primary"
-              disabled={busy || !value.site_title.trim() || stageNames.length === 0}
-            >
-              {busy ? "Saving…" : "Save site"}
-            </button>
-          </div>
         </div>
-      </form>
+      </div>
     </section>
   );
 }
@@ -537,21 +695,6 @@ function VisibilityPanel({
     onChange({ ...value, fields: { ...value.fields, [field]: next } });
   }
 
-  function setStage(index: number, patch: Partial<{ stage_name: string; visibility: Visibility; note: string }>) {
-    const stage_defaults = value.stage_defaults.map((row, i) =>
-      i === index ? { ...row, ...patch } : row
-    );
-    onChange({ ...value, stage_defaults });
-  }
-
-  function moveStage(index: number, dir: -1 | 1) {
-    const next = [...value.stage_defaults];
-    const target = index + dir;
-    if (target < 0 || target >= next.length) return;
-    [next[index], next[target]] = [next[target], next[index]];
-    onChange({ ...value, stage_defaults: next });
-  }
-
   return (
     <section>
       <div className="settings-heading">
@@ -613,88 +756,10 @@ function VisibilityPanel({
         </div>
       </div>
 
-      <div className="settings-panel">
-        <div className="row" style={{ justifyContent: "space-between", marginBottom: 10 }}>
-          <div className="settings-panel-title" style={{ margin: 0 }}>
-            Stage defaults
-          </div>
-          <button
-            className="btn sm"
-            onClick={() =>
-              onChange({
-                ...value,
-                stage_defaults: [
-                  ...value.stage_defaults,
-                  { stage_name: "", visibility: value.default_stage_visibility, position: value.stage_defaults.length, note: "" },
-                ],
-              })
-            }
-          >
-            <Plus />
-            Add stage
-          </button>
-        </div>
-        <div className="stage-default-list">
-          {value.stage_defaults.map((stage, index) => (
-            <div className="stage-default-row" key={`${stage.id ?? "new"}-${index}`}>
-              <input
-                className="field"
-                value={stage.stage_name}
-                onChange={(e) => setStage(index, { stage_name: e.target.value })}
-                placeholder="Delivered"
-              />
-              <select
-                className="field"
-                value={stage.visibility}
-                onChange={(e) => setStage(index, { visibility: e.target.value as Visibility })}
-              >
-                <option value="public">Public</option>
-                <option value="private">Private</option>
-              </select>
-              <input
-                className="field"
-                value={stage.note ?? ""}
-                onChange={(e) => setStage(index, { note: e.target.value })}
-                placeholder="note"
-              />
-              <button
-                className="btn sm"
-                disabled={index === 0}
-                onClick={() => moveStage(index, -1)}
-                title="Move up"
-                aria-label="Move stage up"
-              >
-                <ArrowUp />
-              </button>
-              <button
-                className="btn sm"
-                disabled={index === value.stage_defaults.length - 1}
-                onClick={() => moveStage(index, 1)}
-                title="Move down"
-                aria-label="Move stage down"
-              >
-                <ArrowDown />
-              </button>
-              <button
-                className="btn sm danger"
-                onClick={() =>
-                  onChange({
-                    ...value,
-                    stage_defaults: value.stage_defaults.filter((_, i) => i !== index),
-                  })
-                }
-                title="Remove stage"
-                aria-label="Remove stage"
-              >
-                <X />
-              </button>
-            </div>
-          ))}
-        </div>
-      </div>
-
       <div className="settings-note">
         <strong>Precedence:</strong> global preset → commission override → stage override → file override.
+        Per-stage defaults (template order and visibility) are managed under Site → Default
+        lifecycle stages.
       </div>
     </section>
   );

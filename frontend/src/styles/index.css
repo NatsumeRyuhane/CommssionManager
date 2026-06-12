@@ -821,9 +821,14 @@ a { color: inherit; text-decoration: none; }
 .stage-default-list { display: grid; gap: 8px; }
 .stage-default-row {
   display: grid;
-  grid-template-columns: minmax(150px, 1fr) 120px minmax(180px, 1.4fr) auto auto auto;
+  grid-template-columns: auto minmax(150px, 1fr) 110px minmax(140px, 1.2fr) auto;
   gap: 8px;
   align-items: center;
+}
+.stage-default-row.reorder-target {
+  outline: 2px dashed var(--accent);
+  outline-offset: 3px;
+  border-radius: 6px;
 }
 .settings-note {
   border-left: 3px solid var(--accent);
@@ -2207,13 +2212,13 @@ a { color: inherit; text-decoration: none; }
   .artists-page { padding: 20px 16px 40px; }
 }
 
-/* stage-default rows rewrap: name on its own line, controls below */
+/* stage-default rows rewrap: handle + name on the first line, controls below */
 @media (max-width: 700px) {
   .stage-default-row {
     display: flex;
     flex-wrap: wrap;
   }
-  .stage-default-row > input:first-of-type { flex: 1 1 100%; }
+  .stage-default-row > input:first-of-type { flex: 1 1 calc(100% - 40px); }
   .stage-default-row > select { flex: 0 0 110px; }
   .stage-default-row > input:nth-of-type(2) { flex: 1 1 90px; }
 }
