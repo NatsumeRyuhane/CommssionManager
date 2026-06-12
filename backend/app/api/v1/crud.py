@@ -319,8 +319,11 @@ def create_commission(db: Session, data: CommissionCreate) -> Commission:
 
 def update_commission(db: Session, commission: Commission, data: CommissionUpdate) -> Commission:
     meta = commission.meta
+    # title is nullable: an explicit null/blank clears it, so omission is
+    # detected via model_fields_set instead of a None sentinel
+    if "title" in data.model_fields_set:
+        meta.title = data.title
     for field in (
-        "title",
         "description",
         "completed_at",
         "rating",
@@ -833,7 +836,7 @@ def serialize_copy_json(commission: Commission) -> CopyJsonOut:
     cats = categories_of(commission)
     return CopyJsonOut(
         id=commission.id,
-        title=meta.title if meta else f"#{commission.id}",
+        title=(meta.title if meta else None) or f"#{commission.id}",
         completed_date=meta.completed_at if meta else None,
         confirmed_at=meta.confirmed_at if meta else None,
         category=cats[0] if cats else None,

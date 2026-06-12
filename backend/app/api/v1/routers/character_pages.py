@@ -99,7 +99,7 @@ def _commission_payload(
     if public_only and cover is None:
         return None
     meta = commission.meta
-    title = meta.title if meta else f"#{commission.id}"
+    title = (meta.title if meta else None) or f"#{commission.id}"
     return CharacterPageCommission(
         commission_id=commission.id,
         title=title,

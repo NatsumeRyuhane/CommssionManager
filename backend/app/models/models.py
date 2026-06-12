@@ -271,7 +271,7 @@ class CommissionMetadata(Base):
     commission_id: Mapped[int] = mapped_column(
         ForeignKey("commissions.id", ondelete="CASCADE"), nullable=False, unique=True
     )
-    title: Mapped[str] = mapped_column(String, nullable=False)
+    title: Mapped[str | None] = mapped_column(String)
     description: Mapped[str | None] = mapped_column(Text)
     completed_at: Mapped[date | None] = mapped_column(Date)
     rating: Mapped[Rating] = mapped_column(
