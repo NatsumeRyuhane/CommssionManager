@@ -59,8 +59,16 @@ export function FaGallery({
             // mature/adult tint the tile border instead of wearing a chip
             const ratingClass =
               it.rating === "mature" || it.rating === "adult" ? ` rating-${it.rating}` : "";
+            // visitors never receive private items, so the wash only ever
+            // shows for a signed-in admin as a "not publicly visible" hint
+            const privateClass = it.effective_visibility === "private" ? " is-private" : "";
             return (
-              <Link to={`/commissions/${it.id}`} className={`fa-tile${ratingClass}`} key={it.id}>
+              <Link
+                to={`/commissions/${it.id}`}
+                className={`fa-tile${ratingClass}${privateClass}`}
+                key={it.id}
+                title={privateClass ? "Not publicly visible" : undefined}
+              >
                 <Cover
                   cover={it.cover}
                   rounded={false}
