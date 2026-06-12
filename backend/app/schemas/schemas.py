@@ -497,7 +497,12 @@ class SiteSettingsUpdate(BaseModel):
         if names is None:
             return None
         cleaned = [name.strip() for name in names if name.strip()]
-        if sum(len(name) for name in cleaned) + 2 * len(cleaned) > 500:
+        # the template persists comma-separated, so a comma inside a name would
+        # split into separate stages on the way back out
+        if any("," in name for name in cleaned):
+            raise ValueError("stage names must not contain commas")
+        # mirror the stored ", ".join(...) form: n - 1 two-character separators
+        if sum(len(name) for name in cleaned) + 2 * max(0, len(cleaned) - 1) > 500:
             raise ValueError("default_stage_names is too long")
         return cleaned
 

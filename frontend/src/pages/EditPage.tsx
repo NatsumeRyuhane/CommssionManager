@@ -30,6 +30,7 @@ const RATINGS: { value: Rating; label: string }[] = [
 export function EditPage() {
   const { id } = useParams();
   const commissionId = Number(id);
+  const validId = Number.isInteger(commissionId) && commissionId > 0;
   const navigate = useNavigate();
   const { canWrite, loading: authLoading } = useAuth();
 
@@ -47,27 +48,44 @@ export function EditPage() {
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // block saves until the commission loads, so a quick Save can't overwrite
+  // real data with the form's empty defaults
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [initialError, setInitialError] = useState<string | null>(
+    validId ? null : "Commission not found.",
+  );
   const [coverVersion, setCoverVersion] = useState(0);
   const bumpCoverVersion = () => setCoverVersion((v) => v + 1);
   // focal edits stage here and commit together with the form submit
   const [pendingFocal, setPendingFocal] = useState<StagedFocal | null>(null);
 
   useEffect(() => {
-    if (!commissionId) return;
-    api.getCommission(commissionId).then((d) => {
-      setTitle(d.title);
-      setDescription(d.description ?? "");
-      setCompletedAt(d.completed_at ?? "");
-      setConfirmedAt(d.confirmed_at ? d.confirmed_at.slice(0, 10) : "");
-      setPriceAmount(d.price_amount ?? "");
-      setPriceCurrency(d.price_currency ?? "USD");
-      setRating(d.rating ?? "general");
-      setCategories(d.categories);
-      setTags(d.tags);
-      setCharacters(d.characters);
-      setArtists(d.artists);
-    });
-  }, [commissionId]);
+    if (!validId) return;
+    let cancelled = false;
+    setInitialLoading(true);
+    setInitialError(null);
+    api
+      .getCommission(commissionId)
+      .then((d) => {
+        if (cancelled) return;
+        setTitle(d.title);
+        setDescription(d.description ?? "");
+        setCompletedAt(d.completed_at ?? "");
+        setConfirmedAt(d.confirmed_at ? d.confirmed_at.slice(0, 10) : "");
+        setPriceAmount(d.price_amount ?? "");
+        setPriceCurrency(d.price_currency ?? "USD");
+        setRating(d.rating ?? "general");
+        setCategories(d.categories);
+        setTags(d.tags);
+        setCharacters(d.characters);
+        setArtists(d.artists);
+      })
+      .catch((e) => !cancelled && setInitialError(String(e)))
+      .finally(() => !cancelled && setInitialLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [commissionId, validId]);
 
   if (!authLoading && !canWrite) {
     return (
@@ -80,8 +98,18 @@ export function EditPage() {
     );
   }
 
+  if (initialError) {
+    return (
+      <div className="app">
+        <TopBar />
+        <div style={{ padding: 24 }} className="error-text">{initialError}</div>
+      </div>
+    );
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (initialLoading) return;
     setBusy(true);
     setError(null);
     const payload: CommissionUpdate = {
@@ -136,7 +164,7 @@ export function EditPage() {
               document.getElementById("commission-edit-form")) as HTMLFormElement | null;
             form?.requestSubmit();
           }}
-          disabled={busy}
+          disabled={busy || initialLoading}
         >
           {!busy && <Check />}
           {busy ? "Saving…" : "Save"}

@@ -69,6 +69,13 @@ def test_default_stage_template_applies_to_new_commissions(admin_client: TestCli
     assert patched.status_code == 200, patched.text
     assert patched.json()["default_stage_names"] == ["Done", "WIP"]
 
+    # commas can't survive the comma-separated storage round-trip
+    rejected = admin_client.patch(
+        "/api/v1/settings/site",
+        json={"default_stage_names": ["Done, almost"]},
+    )
+    assert rejected.status_code == 422, rejected.text
+
     custom = admin_client.post("/api/v1/commissions", json={"title": "From custom template"})
     assert custom.status_code == 201, custom.text
     assert [n["name"] for n in custom.json()["nodes"] if not n["is_detached"]] == ["Done", "WIP"]
