@@ -41,8 +41,9 @@ export function FaGallery({
   );
   for (const it of items) {
     const target = cols.reduce((a, b) => (a.h <= b.h ? a : b));
+    // coverless tiles render a square placeholder, so weigh them as 1:1
     const ratio =
-      it.cover?.width && it.cover?.height ? it.cover.width / it.cover.height : 0.8;
+      it.cover?.width && it.cover?.height ? it.cover.width / it.cover.height : 1;
     target.items.push(it);
     target.h += 1 / ratio + 0.1;
   }
@@ -71,6 +72,7 @@ export function FaGallery({
               >
                 <Cover
                   cover={it.cover}
+                  ratio={it.cover ? undefined : 1}
                   rounded={false}
                   size="thumb"
                   sizes="(max-width: 859px) 50vw, (max-width: 1179px) 33vw, 25vw"
