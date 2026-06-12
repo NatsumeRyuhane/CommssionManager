@@ -63,10 +63,11 @@ def _assert_commission_visible(
     visibility_context: crud.VisibilityContext,
     principal: Principal | None,
 ) -> None:
-    if (
-        crud.effective_commission_visibility(commission, visibility_context) != Visibility.public
-        and not _can_view_private(principal)
-    ):
+    if _can_view_private(principal):
+        return
+    if crud.effective_commission_visibility(
+        commission, visibility_context
+    ) != Visibility.public or not crud.has_public_file(commission, visibility_context):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Commission not found")
 
 
@@ -134,10 +135,13 @@ def list_commissions(
 
     filtered = [c for c in items if keep(c)]
     if not _can_view_private(principal):
+        # a public commission with nothing public to show (no files, or only
+        # private ones) is hidden from visitors entirely
         filtered = [
             c
             for c in filtered
             if crud.effective_commission_visibility(c, visibility_context) == Visibility.public
+            and crud.has_public_file(c, visibility_context)
         ]
 
     def sort_key(c: Commission):

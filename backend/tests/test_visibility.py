@@ -183,11 +183,10 @@ def test_detached_node_and_files_cannot_be_public(admin_client: TestClient):
 
     admin_client.cookies.clear()
     assert admin_client.get(detached_image["url"]).status_code == 404
-    assert admin_client.get(f"/api/v1/commissions/{commission['id']}/images").json() == []
-    assert all(
-        not node["is_detached"]
-        for node in admin_client.get(f"/api/v1/commissions/{commission['id']}").json()["nodes"]
-    )
+    # the only file is detached (private), so visitors don't see the
+    # commission at all — not even an empty shell
+    assert admin_client.get(f"/api/v1/commissions/{commission['id']}/images").status_code == 404
+    assert admin_client.get(f"/api/v1/commissions/{commission['id']}").status_code == 404
 
 
 def test_public_detail_redacts_fields_marked_private(admin_client: TestClient):
@@ -264,3 +263,45 @@ def test_public_detail_redacts_fields_marked_private(admin_client: TestClient):
     assert admin_detail["characters"] == ["Heiyao"]
     assert admin_detail["description"] == "private notes"
     assert admin_detail["price_amount"] == "125.00"
+
+
+def test_commission_without_public_files_is_hidden_from_visitors(admin_client: TestClient):
+    # no files at all
+    empty = admin_client.post(
+        "/api/v1/commissions",
+        json={"title": "Empty", "node_names": ["Delivered"]},
+    ).json()
+    # one file, but its stage is private
+    hidden = admin_client.post(
+        "/api/v1/commissions",
+        json={"title": "Hidden file", "node_names": ["Delivered"]},
+    ).json()
+    hidden_image = _upload_image(admin_client, _node(hidden, "Delivered")["id"], "h.png", "#111111")
+    res = admin_client.patch(
+        f"/api/v1/commissions/{hidden['id']}/visibility",
+        json={"files": {hidden_image["id"]: "private"}},
+    )
+    assert res.status_code == 200, res.text
+    # one public file
+    shown = admin_client.post(
+        "/api/v1/commissions",
+        json={"title": "Shown", "node_names": ["Delivered"]},
+    ).json()
+    _upload_image(admin_client, _node(shown, "Delivered")["id"], "s.png", "#222222")
+
+    admin_list = admin_client.get("/api/v1/commissions")
+    assert {item["id"] for item in admin_list.json()} == {empty["id"], hidden["id"], shown["id"]}
+
+    admin_client.cookies.clear()
+    public_list = admin_client.get("/api/v1/commissions")
+    assert [item["id"] for item in public_list.json()] == [shown["id"]]
+    assert admin_client.get(f"/api/v1/commissions/{empty['id']}").status_code == 404
+    assert admin_client.get(f"/api/v1/commissions/{hidden['id']}").status_code == 404
+    assert admin_client.get(f"/api/v1/commissions/{shown['id']}").status_code == 200
+
+    login = admin_client.post(
+        "/api/v1/auth/login",
+        json={"username": settings.admin_username, "password": settings.admin_password},
+    )
+    assert login.status_code == 200
+    assert admin_client.get(f"/api/v1/commissions/{empty['id']}").status_code == 200

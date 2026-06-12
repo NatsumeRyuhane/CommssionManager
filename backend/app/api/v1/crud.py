@@ -525,6 +525,16 @@ def effective_file_visibility(file, context: VisibilityContext) -> Visibility:
     return effective_node_visibility(file.node, context)
 
 
+def has_public_file(commission: Commission, context: VisibilityContext) -> bool:
+    """Whether any file is effectively public. Visitors never see commissions
+    without one: nothing would render, so they are hidden outright."""
+    return any(
+        effective_file_visibility(file, context) == Visibility.public
+        for node in commission.nodes
+        for file in node.files
+    )
+
+
 def _effective_field_public(
     commission: Commission, field: str, context: VisibilityContext
 ) -> bool:
