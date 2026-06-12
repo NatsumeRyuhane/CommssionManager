@@ -46,6 +46,10 @@
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+@keyframes viewer-img-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
 .spin { animation: spin 0.9s linear infinite; }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1192,6 +1196,26 @@ a { color: inherit; text-decoration: none; }
   box-shadow: 0 12px 48px rgba(0, 0, 0, 0.45);
   user-select: none;
   -webkit-user-drag: none;
+  /* the img remounts on every source switch, so this replays as a
+     deliberate "the preview changed" cue */
+  animation: viewer-img-in 200ms ease-out;
+}
+/* status pill while the next source downloads or is still being generated */
+.image-viewer-loading {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 2;
+  transform: translate(-50%, -50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: rgba(28, 26, 23, 0.88);
+  color: rgba(255, 255, 255, 0.92);
+  font: 12px "IBM Plex Mono", monospace;
+  pointer-events: none;
 }
 .image-viewer-top {
   position: absolute;
