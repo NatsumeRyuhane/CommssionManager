@@ -11,6 +11,8 @@ import { useAuth } from "../hooks/useAuth";
 
 const PAGE_SIZE = 24;
 
+const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
 /**
  * Render the gallery page with search, category and rating filters, sorting controls, and paginated commission results.
  *
@@ -155,7 +157,7 @@ export function GalleryPage() {
                   >
                     <Chip kind="rating" ghost={!ratings.includes(r)}>
                       {ratings.includes(r) ? "✓ " : ""}
-                      {r}
+                      {capitalize(r)}
                     </Chip>
                   </span>
                 ))}

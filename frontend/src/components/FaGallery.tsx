@@ -56,20 +56,22 @@ export function FaGallery({
               it.cover?.width && it.cover?.height
                 ? `${it.cover.width}×${it.cover.height}`
                 : null;
+            // mature/adult tint the tile border instead of wearing a chip
+            const ratingClass =
+              it.rating === "mature" || it.rating === "adult" ? ` rating-${it.rating}` : "";
             return (
-              <Link to={`/commissions/${it.id}`} className="fa-tile" key={it.id}>
+              <Link to={`/commissions/${it.id}`} className={`fa-tile${ratingClass}`} key={it.id}>
                 <Cover
                   cover={it.cover}
                   rounded={false}
                   size="thumb"
                   sizes="(max-width: 859px) 50vw, (max-width: 1179px) 33vw, 25vw"
                 />
-                <div className="label-row">
-                  {it.categories[0] && <Chip kind="cat">{it.categories[0]}</Chip>}
-                  {it.rating !== "general" && (
-                    <Chip kind="rating">{it.rating}</Chip>
-                  )}
-                </div>
+                {it.categories[0] && (
+                  <div className="label-row">
+                    <Chip kind="cat">{it.categories[0]}</Chip>
+                  </div>
+                )}
                 {(it.title || dims || it.formats.length > 0) && (
                   <div className="caption">
                     <div className="caption-text">

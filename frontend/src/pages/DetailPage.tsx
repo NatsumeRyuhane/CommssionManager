@@ -151,7 +151,11 @@ export function DetailPage() {
               {data.categories.map((c) => (
                 <Chip key={c} kind="cat">{c}</Chip>
               ))}
-              {data.rating && <Chip kind="rating">{data.rating}</Chip>}
+              {data.rating && (
+                <Chip kind="rating">
+                  {data.rating.charAt(0).toUpperCase() + data.rating.slice(1)}
+                </Chip>
+              )}
               {data.tags.map((t) => (
                 <Chip key={t} kind="tag">{t}</Chip>
               ))}
