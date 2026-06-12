@@ -184,9 +184,24 @@
     require write access — visitors get lossy (jpeg/webp) derivatives only, the viewer hides
     "Original" and saves jpeg for png sources. GIFs are exempt in all circumstances: re-encodes
     can't preserve animation, so visible gifs are always served raw
+- [x] Public gallery gating + SFW mode
+  - Visitors only see commissions with ≥1 effectively-public file (no files, or only
+    private/detached ones → hidden from list and 404 on detail/images); admins see all,
+    with a semi-transparent white wash on effectively-private tiles as a hint
+  - Coverless tiles render a square no-image placeholder
+  - **Breaking:** `commission_metadata.completed_at` dropped (with its visibility field
+    plumbing) — the topmost stage is the most recent update, so the "date" sort,
+    date_from/date_to filters, and character-page recency derive from the topmost stage's
+    start date (fallback: created_at). Copy-JSON loses its `date` key
+  - SFW by default: a General/Mature/Adult content gate in the gallery top controls,
+    cumulative (Mature ⊇ General, Adult ⊇ all), persisted in localStorage; popover rating
+    filters are pruned/disabled above the gate
+  - Search & filter popover gains Tags, Characters, and Artists chip groups
 
 ## Phase 3 — Optional / advanced (deferred)
 - [ ] MCP server wrapping the REST API (tools: create_commission, upload_file, search, set_focal_point)
+- [ ] Advanced search syntax (`tag:x character:"y" -tag:z …`) — proposal in issue #29
+- [ ] Tag i18n: locale-bound translations alongside aliases, surfaced in autocomplete — issue #30
 - [ ] CLIP image2txt accessibility
 - [ ] PSD layer extraction for export
 - [ ] Physical / digital watermarking
