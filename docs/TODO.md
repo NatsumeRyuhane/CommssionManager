@@ -170,7 +170,15 @@
     persists in localStorage and re-applies across image switches (clamped per file)
   - Detail page: in-page cover removed (stage tiles open the viewer); lifecycle joined the
     left column and the metadata rail is sticky on desktop
-  - Title optional: omitted/blank titles default to "Untitled" (create and update)
+  - Title nullable: omitted/blank/null titles store NULL (migration folds existing
+    "Untitled" rows into NULL); PATCH distinguishes omitted (unchanged) from explicit
+    null/blank (cleared) via `model_fields_set`. Gallery covers hide a null title;
+    detail/visibility pages and character-page tiles fall back to the commission number
+  - Gallery cover overlays: file type moved to a monospace badge pinned bottom-right
+    (lifecycle tiles share it; their text label shows image dimensions instead of the
+    format); rating chip replaced by tile border color (mature = yellow, adult = red,
+    general = neutral) with capitalized rating text in the filter popover and detail
+    page; phone-size viewports render covers with no overlays at all
   - Original-download gate: `app_settings.allow_public_original_download` (Settings → Site
     toggle, default on); when off, `/files/{id}/raw` and lossless `format=png` derivatives
     require write access — visitors get lossy (jpeg/webp) derivatives only, the viewer hides
