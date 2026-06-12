@@ -51,31 +51,43 @@ export function FaGallery({
     <div className="fa-grid" style={{ gridTemplateColumns: `repeat(${columns}, 1fr)` }}>
       {cols.map((col, i) => (
         <div className="fa-col" key={i}>
-          {col.items.map((it) => (
-            <Link to={`/commissions/${it.id}`} className="fa-tile" key={it.id}>
-              <Cover
-                cover={it.cover}
-                rounded={false}
-                size="thumb"
-                sizes="(max-width: 859px) 50vw, (max-width: 1179px) 33vw, 25vw"
-              />
-              <div className="label-row">
-                {it.categories[0] && <Chip kind="cat">{it.categories[0]}</Chip>}
-                {it.rating !== "general" && (
-                  <Chip kind="rating">{it.rating}</Chip>
-                )}
-              </div>
-              <div className="caption">
-                {it.title && <div style={{ fontWeight: 500 }}>{it.title}</div>}
-                <div className="mono" style={{ opacity: 0.85, fontSize: 10 }}>
-                  {it.cover?.width && it.cover?.height
-                    ? `${it.cover.width}×${it.cover.height}`
-                    : "—"}{" "}
-                  · {it.formats.join(",") || "—"}
+          {col.items.map((it) => {
+            const dims =
+              it.cover?.width && it.cover?.height
+                ? `${it.cover.width}×${it.cover.height}`
+                : null;
+            return (
+              <Link to={`/commissions/${it.id}`} className="fa-tile" key={it.id}>
+                <Cover
+                  cover={it.cover}
+                  rounded={false}
+                  size="thumb"
+                  sizes="(max-width: 859px) 50vw, (max-width: 1179px) 33vw, 25vw"
+                />
+                <div className="label-row">
+                  {it.categories[0] && <Chip kind="cat">{it.categories[0]}</Chip>}
+                  {it.rating !== "general" && (
+                    <Chip kind="rating">{it.rating}</Chip>
+                  )}
                 </div>
-              </div>
-            </Link>
-          ))}
+                {(it.title || dims || it.formats.length > 0) && (
+                  <div className="caption">
+                    <div className="caption-text">
+                      {it.title && <div style={{ fontWeight: 500 }}>{it.title}</div>}
+                      {dims && (
+                        <div className="mono" style={{ opacity: 0.85, fontSize: 10 }}>
+                          {dims}
+                        </div>
+                      )}
+                    </div>
+                    {it.formats.length > 0 && (
+                      <span className="format-badge">{it.formats.join(",")}</span>
+                    )}
+                  </div>
+                )}
+              </Link>
+            );
+          })}
         </div>
       ))}
     </div>

@@ -274,6 +274,25 @@ a { color: inherit; text-decoration: none; }
   background: linear-gradient(to top, rgba(0, 0, 0, 0.55), transparent);
   color: white;
   font-size: 12px;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+.fa-tile .caption .caption-text {
+  flex: 1;
+  min-width: 0;
+}
+
+/* file-type pill pinned to a cover's bottom-right corner */
+.format-badge {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.55);
+  color: white;
+  font: 10px "IBM Plex Mono", monospace;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 /* ---- generic layout utils ---- */
@@ -1030,9 +1049,16 @@ a { color: inherit; text-decoration: none; }
   outline-offset: 3px;
 }
 .lifecycle-file-cover {
+  position: relative;
   border-radius: 5px;
   outline: 0 solid transparent;
   outline-offset: 2px;
+}
+.lifecycle-file-cover .file-format-badge {
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  pointer-events: none;
 }
 .lifecycle-file-cover.is-cover {
   outline: 2px solid var(--accent);
