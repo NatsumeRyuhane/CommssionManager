@@ -2183,6 +2183,9 @@ a { color: inherit; text-decoration: none; }
     padding: 10px 12px;
   }
   .fa-col { gap: 8px; }
+  /* covers stay clean on phones: no chips, captions, or badges */
+  .fa-tile .label-row,
+  .fa-tile .caption { display: none; }
 
   .detail-crumb { padding: 10px 14px; }
   .page-title { padding: 22px 16px 6px; }

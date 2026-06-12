@@ -76,7 +76,7 @@ export function DetailPage() {
 
   async function onDelete() {
     if (!data) return;
-    if (!confirm(`Delete “${data.title}”? This cannot be undone.`)) return;
+    if (!confirm(`Delete “${data.title || `commission #${data.id}`}”? This cannot be undone.`)) return;
     await api.deleteCommission(data.id);
     navigate("/");
   }
@@ -131,7 +131,7 @@ export function DetailPage() {
       <div className="detail-crumb">
         <Link to="/" className="mono-sm muted">← gallery</Link>
         <span className="mono-sm muted">/</span>
-        <strong className="detail-crumb-title">{data.title}</strong>
+        {data.title && <strong className="detail-crumb-title">{data.title}</strong>}
         <span className="mono-sm muted">#{paddedId}</span>
         <span className="spacer" />
         <span
@@ -156,7 +156,7 @@ export function DetailPage() {
                 <Chip key={t} kind="tag">{t}</Chip>
               ))}
             </div>
-            <h1>{data.title}</h1>
+            {data.title && <h1>{data.title}</h1>}
             {subBits.length > 0 && (
               <div className="sub mono">{subBits.join(" · ")}</div>
             )}

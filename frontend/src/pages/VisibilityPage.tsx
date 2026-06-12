@@ -181,7 +181,7 @@ export function VisibilityPage() {
       <div className="visibility-page">
         <div className="settings-heading">
           <div>
-            <h1>{detail.title}</h1>
+            <h1>{detail.title || `Commission #${detail.id}`}</h1>
             <div className="mono-sm muted">
               commission #{String(detail.id).padStart(3, "0")} visibility overrides
             </div>

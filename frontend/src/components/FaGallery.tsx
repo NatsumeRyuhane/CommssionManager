@@ -66,7 +66,7 @@ export function FaGallery({
                 )}
               </div>
               <div className="caption">
-                <div style={{ fontWeight: 500 }}>{it.title}</div>
+                {it.title && <div style={{ fontWeight: 500 }}>{it.title}</div>}
                 <div className="mono" style={{ opacity: 0.85, fontSize: 10 }}>
                   {it.cover?.width && it.cover?.height
                     ? `${it.cover.width}×${it.cover.height}`
