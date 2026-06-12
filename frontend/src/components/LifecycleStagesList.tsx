@@ -33,7 +33,6 @@ export interface FileUploadPreview {
 
 interface LifecycleStagesListProps {
   nodes: CommissionNode[];
-  currentStage?: string | null;
   coverFileId?: number | null;
   busy?: boolean;
   uploads?: FileUploadPreview[];
@@ -52,7 +51,6 @@ interface LifecycleStagesListProps {
  * Renders a list of lifecycle stage sections for the provided nodes.
  *
  * @param nodes - Array of stage nodes to render; each node's files are shown within its stage
- * @param currentStage - Name of the current stage (used to mark the active stage)
  * @param coverFileId - ID of the file currently used as the commission cover
  * @param busy - When true, interactive controls are disabled
  * @param onMoveFile - Optional callback invoked when a file is moved into a different stage
@@ -67,7 +65,6 @@ interface LifecycleStagesListProps {
  */
 export function LifecycleStagesList({
   nodes,
-  currentStage,
   coverFileId,
   busy = false,
   uploads = [],
@@ -99,7 +96,6 @@ export function LifecycleStagesList({
           <LifecycleStage
             key={node.id}
             node={node}
-            currentStage={currentStage}
             coverFileId={coverFileId}
             busy={busy}
             uploads={uploads.filter((upload) => upload.nodeId === node.id)}
@@ -137,7 +133,6 @@ export function LifecycleStagesList({
  * and per-file actions (set cover, delete) depending on the provided callbacks and node state.
  *
  * @param node - The lifecycle node/stage data to render (name, files, flags, dates).
- * @param currentStage - The name of the currently active stage, used to show a "current" chip.
  * @param coverFileId - File id treated as the stage cover; used to mark the cover tile.
  * @param busy - When true, disables user interactions (drag handles, buttons).
  * @param filesById - Map of file id → file used to resolve files during drop operations.
@@ -153,7 +148,6 @@ export function LifecycleStagesList({
  */
 function LifecycleStage({
   node,
-  currentStage,
   coverFileId,
   busy,
   uploads,
@@ -170,7 +164,6 @@ function LifecycleStage({
   stageActions,
 }: {
   node: CommissionNode;
-  currentStage?: string | null;
   coverFileId?: number | null;
   busy: boolean;
   uploads: FileUploadPreview[];
@@ -258,7 +251,6 @@ function LifecycleStage({
         )}
         <strong>{node.name}</strong>
         {node.is_detached && <Chip kind="rating">detached</Chip>}
-        {node.name === currentStage && <Chip kind="cat">current</Chip>}
         <span className="mono-sm muted">
           {node.files.length} files
           {uploadingCount > 0 && ` · ${uploadingCount} uploading`}

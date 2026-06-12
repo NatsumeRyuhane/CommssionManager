@@ -319,7 +319,6 @@ class CommissionListItem(BaseModel):
     characters: list[str] = []
     artists: list[str] = []
     formats: list[str] = []
-    current_stage: str | None = None
     cover: CoverOut | None = None
 
 
@@ -335,7 +334,7 @@ class CommissionDetail(CommissionListItem):
 
 # ---------------------------------------------------------------- commission input
 class CommissionCreate(BaseModel):
-    title: str
+    title: str = "Untitled"
     description: str | None = None
     completed_at: date | None = None
     rating: Rating = Rating.general
@@ -348,6 +347,11 @@ class CommissionCreate(BaseModel):
     character_names: list[str] = []
     artist_names: list[str] = []
     node_names: list[str] = []
+
+    @field_validator("title")
+    @classmethod
+    def title_defaults_to_untitled(cls, title: str) -> str:
+        return title.strip() or "Untitled"
 
 
 class CommissionUpdate(BaseModel):
@@ -365,6 +369,14 @@ class CommissionUpdate(BaseModel):
     character_names: list[str] | None = None
     artist_names: list[str] | None = None
 
+    @field_validator("title")
+    @classmethod
+    def title_defaults_to_untitled(cls, title: str | None) -> str | None:
+        # None means "leave unchanged"; a blank string falls back to Untitled
+        if title is None:
+            return None
+        return title.strip() or "Untitled"
+
 
 # ---------------------------------------------------------------- agent payload
 class CopyJsonOut(BaseModel):
@@ -379,7 +391,6 @@ class CopyJsonOut(BaseModel):
     tags: list[str] = []
     characters: list[str] = []
     artists: list[str] = []
-    current_stage: str | None = None
     files_endpoint: str
     public_images_endpoint: str
 
@@ -460,11 +471,15 @@ class VisibilitySettingsUpdate(BaseModel):
 
 class SiteSettingsOut(BaseModel):
     site_title: str
+    default_stage_names: list[str]
+    allow_public_original_download: bool
     updated_at: datetime | None = None
 
 
 class SiteSettingsUpdate(BaseModel):
     site_title: str | None = Field(default=None, max_length=120)
+    default_stage_names: list[str] | None = None
+    allow_public_original_download: bool | None = None
 
     @field_validator("site_title")
     @classmethod
@@ -475,6 +490,21 @@ class SiteSettingsUpdate(BaseModel):
         if not title:
             raise ValueError("site_title must not be empty")
         return title
+
+    @field_validator("default_stage_names")
+    @classmethod
+    def stage_names_must_not_be_blank(cls, names: list[str] | None) -> list[str] | None:
+        if names is None:
+            return None
+        cleaned = [name.strip() for name in names if name.strip()]
+        # the template persists comma-separated, so a comma inside a name would
+        # split into separate stages on the way back out
+        if any("," in name for name in cleaned):
+            raise ValueError("stage names must not contain commas")
+        # mirror the stored ", ".join(...) form: n - 1 two-character separators
+        if sum(len(name) for name in cleaned) + 2 * max(0, len(cleaned) - 1) > 500:
+            raise ValueError("default_stage_names is too long")
+        return cleaned
 
 
 class VisibilityFieldState(BaseModel):

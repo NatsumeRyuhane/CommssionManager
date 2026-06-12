@@ -176,6 +176,16 @@ class AppSettings(Base):
     site_title: Mapped[str] = mapped_column(
         String(120), nullable=False, default="Commissions"
     )
+    # comma-separated lifecycle stage names applied to new commissions,
+    # in display order (first = topmost)
+    default_stage_names: Mapped[str] = mapped_column(
+        String(500), nullable=False, default="Delivered, Color, Lineart, Sketching"
+    )
+    # when false, visitors get lossy derivatives only: /raw and lossless (png)
+    # derivative formats require write access
+    allow_public_original_download: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True
+    )
     visibility_preset: Mapped[VisibilityPreset] = mapped_column(
         Enum(VisibilityPreset, name="visibility_preset"),
         nullable=False,

@@ -155,6 +155,27 @@
     `TEST_S3_BUCKET` variable, skipped otherwise); the Backend job stays hermetic on the
     fake S3 client
 - [ ] Webhooks delivery (`commission.created/updated/delivered`)
+- [x] UX streamline pass (creation friction, viewer, detail layout)
+  - Site-level stage template: `app_settings.default_stage_names` (comma-separated, display
+    order, first = topmost), editable under Settings → Site; `POST /commissions` applies it
+    when `node_names` is omitted (explicit `[]` still opts out)
+  - "+ New" creates an Untitled commission from the template and lands directly on the edit
+    page; the separate create form and `/commissions/new` route are gone (EditPage is
+    edit-only)
+  - Dropped `current_stage` everywhere (API list/detail, copy-json, chips, crumb, rail block):
+    the topmost stage conveys progress — **breaking API change**
+  - Image viewer reworked Preview-style: floats over the page on a translucent backdrop,
+    controls on top, thumbnail pill at the bottom, click the dark area to dismiss,
+    wheel/trackpad + touch pinch zoom with pan and double-click zoom; resolution choice
+    persists in localStorage and re-applies across image switches (clamped per file)
+  - Detail page: in-page cover removed (stage tiles open the viewer); lifecycle joined the
+    left column and the metadata rail is sticky on desktop
+  - Title optional: omitted/blank titles default to "Untitled" (create and update)
+  - Original-download gate: `app_settings.allow_public_original_download` (Settings → Site
+    toggle, default on); when off, `/files/{id}/raw` and lossless `format=png` derivatives
+    require write access — visitors get lossy (jpeg/webp) derivatives only, the viewer hides
+    "Original" and saves jpeg for png sources. GIFs are exempt in all circumstances: re-encodes
+    can't preserve animation, so visible gifs are always served raw
 
 ## Phase 3 — Optional / advanced (deferred)
 - [ ] MCP server wrapping the REST API (tools: create_commission, upload_file, search, set_focal_point)

@@ -3,15 +3,13 @@ import { Check, Eye } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { api } from "../api/client";
-import type { CommissionCreate, Rating } from "../api/types";
+import type { CommissionUpdate, Rating } from "../api/types";
 import { Chip } from "../components/Chip";
 import { CoverFocalEditor, type StagedFocal } from "../components/CoverFocalEditor";
 import { StagesEditor } from "../components/StagesEditor";
 import { TaxonomyPicker } from "../components/TaxonomyPicker";
 import { TopBar } from "../components/TopBar";
 import { useAuth } from "../hooks/useAuth";
-
-const splitList = (s: string) => s.split(",").map((x) => x.trim()).filter(Boolean);
 
 const RATINGS: { value: Rating; label: string }[] = [
   { value: "general", label: "General" },
@@ -20,15 +18,19 @@ const RATINGS: { value: Rating; label: string }[] = [
 ];
 
 /**
- * Render the commission creation and edit page, including form fields, taxonomy pickers, cover/stages editors, and submission handling.
+ * Render the commission edit page, including form fields, taxonomy pickers, cover/stages editors, and submission handling.
  *
- * The component reads an optional `id` route param to determine edit mode, loads existing commission data when editing, enforces write authorization, manages local form state (title, description, dates, price, rating, taxonomies, nodes), and submits a create or update request that navigates to the appropriate commission route on success.
+ * Commissions are created up front from the site's stage template (see GalleryPage), so this page
+ * always edits an existing commission: it loads the data, enforces write authorization, manages
+ * local form state (title, description, dates, price, rating, taxonomies), and submits an update
+ * request that navigates to the commission detail route on success.
  *
- * @returns The React element for the commission create/edit page.
+ * @returns The React element for the commission edit page.
  */
 export function EditPage() {
   const { id } = useParams();
-  const isEdit = Boolean(id);
+  const commissionId = Number(id);
+  const validId = Number.isInteger(commissionId) && commissionId > 0;
   const navigate = useNavigate();
   const { canWrite, loading: authLoading } = useAuth();
 
@@ -43,31 +45,47 @@ export function EditPage() {
   const [tags, setTags] = useState<string[]>([]);
   const [characters, setCharacters] = useState<string[]>([]);
   const [artists, setArtists] = useState<string[]>([]);
-  const [nodes, setNodes] = useState("Sketching, Lineart, Color, Delivered");
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // block saves until the commission loads, so a quick Save can't overwrite
+  // real data with the form's empty defaults
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [initialError, setInitialError] = useState<string | null>(
+    validId ? null : "Commission not found.",
+  );
   const [coverVersion, setCoverVersion] = useState(0);
   const bumpCoverVersion = () => setCoverVersion((v) => v + 1);
   // focal edits stage here and commit together with the form submit
   const [pendingFocal, setPendingFocal] = useState<StagedFocal | null>(null);
 
   useEffect(() => {
-    if (!isEdit || !id) return;
-    api.getCommission(Number(id)).then((d) => {
-      setTitle(d.title);
-      setDescription(d.description ?? "");
-      setCompletedAt(d.completed_at ?? "");
-      setConfirmedAt(d.confirmed_at ? d.confirmed_at.slice(0, 10) : "");
-      setPriceAmount(d.price_amount ?? "");
-      setPriceCurrency(d.price_currency ?? "USD");
-      setRating(d.rating ?? "general");
-      setCategories(d.categories);
-      setTags(d.tags);
-      setCharacters(d.characters);
-      setArtists(d.artists);
-    });
-  }, [id, isEdit]);
+    if (!validId) return;
+    let cancelled = false;
+    setInitialLoading(true);
+    setInitialError(null);
+    api
+      .getCommission(commissionId)
+      .then((d) => {
+        if (cancelled) return;
+        setTitle(d.title);
+        setDescription(d.description ?? "");
+        setCompletedAt(d.completed_at ?? "");
+        setConfirmedAt(d.confirmed_at ? d.confirmed_at.slice(0, 10) : "");
+        setPriceAmount(d.price_amount ?? "");
+        setPriceCurrency(d.price_currency ?? "USD");
+        setRating(d.rating ?? "general");
+        setCategories(d.categories);
+        setTags(d.tags);
+        setCharacters(d.characters);
+        setArtists(d.artists);
+      })
+      .catch((e) => !cancelled && setInitialError(String(e)))
+      .finally(() => !cancelled && setInitialLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [commissionId, validId]);
 
   if (!authLoading && !canWrite) {
     return (
@@ -80,16 +98,22 @@ export function EditPage() {
     );
   }
 
+  if (initialError) {
+    return (
+      <div className="app">
+        <TopBar />
+        <div style={{ padding: 24 }} className="error-text">{initialError}</div>
+      </div>
+    );
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!title.trim()) {
-      setError("Title is required.");
-      return;
-    }
+    if (initialLoading) return;
     setBusy(true);
     setError(null);
-    const payload: CommissionCreate = {
-      title: title.trim(),
+    const payload: CommissionUpdate = {
+      title: title.trim() || "Untitled",
       description: description || null,
       completed_at: completedAt || null,
       confirmed_at: confirmedAt || null,
@@ -102,21 +126,16 @@ export function EditPage() {
       artist_names: artists,
     };
     try {
-      if (isEdit && id) {
-        await api.updateCommission(Number(id), payload);
-        if (pendingFocal) {
-          await api.setFocal(
-            pendingFocal.fileId,
-            pendingFocal.x,
-            pendingFocal.y,
-            pendingFocal.zoom,
-          );
-        }
-        navigate(`/commissions/${id}`);
-      } else {
-        const created = await api.createCommission({ ...payload, node_names: splitList(nodes) });
-        navigate(`/commissions/${created.id}/edit`);
+      await api.updateCommission(commissionId, payload);
+      if (pendingFocal) {
+        await api.setFocal(
+          pendingFocal.fileId,
+          pendingFocal.x,
+          pendingFocal.y,
+          pendingFocal.zoom,
+        );
       }
+      navigate(`/commissions/${commissionId}`);
     } catch (err) {
       // stay on the page: form fields and any staged focal edit are kept
       setError(String(err));
@@ -128,11 +147,11 @@ export function EditPage() {
   return (
     <div className="app">
       <TopBar>
-        <span className="mono-sm muted">{isEdit ? "editing" : "new commission"}</span>
+        <span className="mono-sm muted">editing</span>
         <button
           type="button"
           className="btn sm"
-          onClick={() => (isEdit && id ? navigate(`/commissions/${id}`) : navigate(-1))}
+          onClick={() => navigate(`/commissions/${commissionId}`)}
         >
           Cancel
         </button>
@@ -145,10 +164,10 @@ export function EditPage() {
               document.getElementById("commission-edit-form")) as HTMLFormElement | null;
             form?.requestSubmit();
           }}
-          disabled={busy}
+          disabled={busy || initialLoading}
         >
           {!busy && <Check />}
-          {busy ? "Saving…" : isEdit ? "Save" : "Create"}
+          {busy ? "Saving…" : "Save"}
         </button>
       </TopBar>
 
@@ -168,36 +187,19 @@ export function EditPage() {
             onChange={(e) => setDescription(e.target.value)}
           />
 
-          {isEdit && id ? (
-            <div style={{ marginTop: 18 }}>
-              <StagesEditor commissionId={Number(id)} onChange={bumpCoverVersion} />
-            </div>
-          ) : (
-            <div className="settings-panel" style={{ marginTop: 18 }}>
-              <div className="settings-panel-title">Lifecycle stages</div>
-              <input
-                className="field"
-                value={nodes}
-                onChange={(e) => setNodes(e.target.value)}
-                placeholder="Sketching, Lineart, Color, Delivered"
-              />
-              <div className="mono-sm muted" style={{ marginTop: 6 }}>
-                Comma-separated. After creating, you can upload files into each stage.
-              </div>
-            </div>
-          )}
+          <div style={{ marginTop: 18 }}>
+            <StagesEditor commissionId={commissionId} onChange={bumpCoverVersion} />
+          </div>
 
           {error && <div className="error-text" style={{ marginTop: 12 }}>{error}</div>}
         </div>
 
         <aside className="edit-rail">
-          {isEdit && id && (
-            <CoverFocalEditor
-              commissionId={Number(id)}
-              version={coverVersion}
-              onStage={setPendingFocal}
-            />
-          )}
+          <CoverFocalEditor
+            commissionId={commissionId}
+            version={coverVersion}
+            onStage={setPendingFocal}
+          />
           <FieldGroup label="Completed">
             <input
               className="field"
@@ -268,12 +270,10 @@ export function EditPage() {
             <TaxonomyPicker kind="artist" values={artists} onChange={setArtists} />
           </FieldGroup>
 
-          {isEdit && id && (
-            <Link to={`/commissions/${id}/visibility`} className="btn">
-              <Eye />
-              Edit visibility
-            </Link>
-          )}
+          <Link to={`/commissions/${commissionId}/visibility`} className="btn">
+            <Eye />
+            Edit visibility
+          </Link>
         </aside>
       </form>
     </div>

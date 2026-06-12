@@ -262,7 +262,6 @@ export function StagesEditor({
 
       <LifecycleStagesList
         nodes={displayNodes}
-        currentStage={detail.current_stage}
         coverFileId={detail.cover?.file_id ?? null}
         busy={busy}
         uploads={uploads}

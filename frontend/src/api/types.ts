@@ -41,7 +41,6 @@ export interface CommissionListItem {
   characters: string[];
   artists: string[];
   formats: string[];
-  current_stage: string | null;
   cover: Cover | null;
 }
 
@@ -86,7 +85,8 @@ export interface CommissionDetail extends CommissionListItem {
 }
 
 export interface CommissionCreate {
-  title: string;
+  /** Defaults to "Untitled" server-side when omitted or blank. */
+  title?: string;
   description?: string | null;
   completed_at?: string | null;
   rating?: Rating;
@@ -224,11 +224,17 @@ export interface StorageSettings {
 
 export interface SiteSettings {
   site_title: string;
+  /** Stage template for new commissions, display order (first = topmost). */
+  default_stage_names: string[];
+  /** When false, visitors get lossy derivatives only (no /raw, no png). */
+  allow_public_original_download: boolean;
   updated_at: string | null;
 }
 
 export interface SiteSettingsUpdate {
   site_title?: string | null;
+  default_stage_names?: string[] | null;
+  allow_public_original_download?: boolean | null;
 }
 
 export interface CommissionVisibilityField {
