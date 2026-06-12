@@ -21,7 +21,6 @@ const FIELD_LABELS: Record<VisibilityFieldKey, string> = {
   rating: "Rating",
   characters: "Characters",
   artists: "Artists",
-  completed_at: "Completed date",
   confirmed_at: "Confirmed at",
   price: "Price",
 };

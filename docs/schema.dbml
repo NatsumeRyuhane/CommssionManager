@@ -129,7 +129,6 @@ Table app_settings {
   rating_public                 boolean           [not null, default: true]
   characters_public             boolean           [not null, default: true]
   artists_public                boolean           [not null, default: true]
-  completed_at_public           boolean           [not null, default: true]
   confirmed_at_public           boolean           [not null, default: false]
   price_public                  boolean           [not null, default: false]
   updated_at                    timestamp         [default: `now()`]
@@ -183,7 +182,6 @@ Table commission_metadata {
   commission_id   integer        [not null, ref: - commissions.id, Note: 'One-to-one with commissions']
   title           varchar        [Note: 'Nullable; null means untitled and the UI hides it']
   description     text
-  completed_at    date           [Note: 'Completion date of the commission, day-precise']
   rating          rating         [not null, default: 'general']
   cover_file_id   integer        [ref: - commission_files.id, Note: 'Nullable; must point to a commission_file where is_image = true']
   confirmed_at    timestamp      [Note: 'When the commission was accepted/confirmed by the admin']
@@ -196,7 +194,6 @@ Table commission_metadata {
   rating_public_override       boolean
   characters_public_override   boolean
   artists_public_override      boolean
-  completed_at_public_override boolean
   confirmed_at_public_override boolean
   price_public_override        boolean
 

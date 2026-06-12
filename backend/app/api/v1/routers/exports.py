@@ -182,7 +182,6 @@ def _commission_export(commission: Commission) -> dict[str, object]:
         "metadata": {
             "title": meta.title,
             "description": meta.description,
-            "completed_at": meta.completed_at,
             "rating": meta.rating.value,
             "cover_file_id": meta.cover_file_id,
             "confirmed_at": meta.confirmed_at,

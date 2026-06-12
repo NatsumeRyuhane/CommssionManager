@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
@@ -60,7 +60,6 @@ FIELD_DEFAULTS: dict[str, bool] = {
     "rating": True,
     "characters": True,
     "artists": True,
-    "completed_at": True,
     "confirmed_at": False,
     "price": False,
 }
@@ -272,7 +271,6 @@ def create_commission(db: Session, data: CommissionCreate) -> Commission:
         commission_id=commission.id,
         title=data.title,
         description=data.description,
-        completed_at=data.completed_at,
         rating=data.rating,
         confirmed_at=data.confirmed_at,
         price_amount=data.price_amount,
@@ -325,7 +323,6 @@ def update_commission(db: Session, commission: Commission, data: CommissionUpdat
         meta.title = data.title
     for field in (
         "description",
-        "completed_at",
         "rating",
         "confirmed_at",
         "price_amount",
@@ -525,6 +522,16 @@ def effective_file_visibility(file, context: VisibilityContext) -> Visibility:
     return effective_node_visibility(file.node, context)
 
 
+def has_public_file(commission: Commission, context: VisibilityContext) -> bool:
+    """Whether any file is effectively public. Visitors never see commissions
+    without one: nothing would render, so they are hidden outright."""
+    return any(
+        effective_file_visibility(file, context) == Visibility.public
+        for node in commission.nodes
+        for file in node.files
+    )
+
+
 def _effective_field_public(
     commission: Commission, field: str, context: VisibilityContext
 ) -> bool:
@@ -567,6 +574,16 @@ def ordered_nodes(commission: Commission) -> list[CommissionNode]:
         (n for n in commission.nodes if not n.is_detached), key=lambda n: n.position or 0
     )
     return regular
+
+
+def commission_date(commission: Commission) -> date | None:
+    """The commission's date for sorting/filtering: the topmost stage is the
+    most recent update, so its start date stands in; stage-less commissions
+    fall back to their creation date."""
+    nodes = ordered_nodes(commission)
+    if nodes and nodes[0].started_at:
+        return nodes[0].started_at.date()
+    return commission.created_at.date() if commission.created_at else None
 
 
 def _cover(
@@ -644,12 +661,6 @@ def serialize_list_item(
         rating=(
             meta.rating
             if meta and (include_private or _effective_field_public(commission, "rating", visibility_context))
-            else None
-        ),
-        completed_at=(
-            meta.completed_at
-            if meta
-            and (include_private or _effective_field_public(commission, "completed_at", visibility_context))
             else None
         ),
         visibility=meta.visibility_override if meta else None,
@@ -837,7 +848,6 @@ def serialize_copy_json(commission: Commission) -> CopyJsonOut:
     return CopyJsonOut(
         id=commission.id,
         title=(meta.title if meta else None) or f"#{commission.id}",
-        completed_date=meta.completed_at if meta else None,
         confirmed_at=meta.confirmed_at if meta else None,
         category=cats[0] if cats else None,
         rating=meta.rating if meta else None,

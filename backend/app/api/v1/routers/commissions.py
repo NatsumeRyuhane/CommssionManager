@@ -63,10 +63,11 @@ def _assert_commission_visible(
     visibility_context: crud.VisibilityContext,
     principal: Principal | None,
 ) -> None:
-    if (
-        crud.effective_commission_visibility(commission, visibility_context) != Visibility.public
-        and not _can_view_private(principal)
-    ):
+    if _can_view_private(principal):
+        return
+    if crud.effective_commission_visibility(
+        commission, visibility_context
+    ) != Visibility.public or not crud.has_public_file(commission, visibility_context):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Commission not found")
 
 
@@ -121,10 +122,12 @@ def list_commissions(
             return False
         if formats and not set(formats) & set(crud.formats_of(c)):
             return False
-        if date_from and (not meta or not meta.completed_at or meta.completed_at < date_from):
-            return False
-        if date_to and (not meta or not meta.completed_at or meta.completed_at > date_to):
-            return False
+        if date_from or date_to:
+            commission_date = crud.commission_date(c)
+            if date_from and (commission_date is None or commission_date < date_from):
+                return False
+            if date_to and (commission_date is None or commission_date > date_to):
+                return False
         n_chars = len(c.characters)
         if char_min is not None and n_chars < char_min:
             return False
@@ -134,17 +137,21 @@ def list_commissions(
 
     filtered = [c for c in items if keep(c)]
     if not _can_view_private(principal):
+        # a public commission with nothing public to show (no files, or only
+        # private ones) is hidden from visitors entirely
         filtered = [
             c
             for c in filtered
             if crud.effective_commission_visibility(c, visibility_context) == Visibility.public
+            and crud.has_public_file(c, visibility_context)
         ]
 
     def sort_key(c: Commission):
         meta = c.meta
         if sort == "title":
             return (meta.title or "").lower() if meta else ""
-        return (meta.completed_at or date.min) if meta else date.min
+        # "date" sorts by the latest update: the topmost stage's start date
+        return crud.commission_date(c) or date.min
 
     filtered.sort(key=sort_key, reverse=(order == "desc"))
     response.headers["X-Total-Count"] = str(len(filtered))

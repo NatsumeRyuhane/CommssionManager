@@ -3,7 +3,7 @@ import { ArrowDown, ArrowUp, ChevronDown, ChevronUp, Loader2, Plus, Search, User
 import { Link, useNavigate } from "react-router-dom";
 
 import { api } from "../api/client";
-import type { CommissionListItem } from "../api/types";
+import type { CommissionListItem, Rating } from "../api/types";
 import { Chip } from "../components/Chip";
 import { FaGallery } from "../components/FaGallery";
 import { TopBar } from "../components/TopBar";
@@ -12,6 +12,57 @@ import { useAuth } from "../hooks/useAuth";
 const PAGE_SIZE = 24;
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+const RATING_ORDER: Rating[] = ["general", "mature", "adult"];
+const MAX_RATING_KEY = "cmgr:max-rating";
+
+/** The site starts SFW: only the stored gate can raise it past General. */
+function readMaxRating(): Rating {
+  try {
+    const raw = window.localStorage.getItem(MAX_RATING_KEY);
+    if (raw === "mature" || raw === "adult") return raw;
+  } catch {
+    /* storage unavailable */
+  }
+  return "general";
+}
+
+function FilterChips({
+  label,
+  kind,
+  options,
+  selected,
+  onToggle,
+}: {
+  label: string;
+  kind: "cat" | "tag" | "char" | "artist";
+  options: string[];
+  selected: string[];
+  onToggle: (value: string) => void;
+}) {
+  return (
+    <>
+      <div className="label">{label}</div>
+      <div className="row wrap gap-4" style={{ marginBottom: 12 }}>
+        {options.length === 0 && <span className="mono-sm muted">none yet</span>}
+        {options.map((value) => (
+          <button
+            key={value}
+            type="button"
+            className="chip-button"
+            aria-pressed={selected.includes(value)}
+            onClick={() => onToggle(value)}
+          >
+            <Chip kind={kind} ghost={!selected.includes(value)}>
+              {selected.includes(value) ? "✓ " : ""}
+              {value}
+            </Chip>
+          </button>
+        ))}
+      </div>
+    </>
+  );
+}
 
 /**
  * Render the gallery page with search, category and rating filters, sorting controls, and paginated commission results.
@@ -34,24 +85,57 @@ export function GalleryPage() {
 
   const [q, setQ] = useState("");
   const [cats, setCats] = useState<string[]>([]);
+  const [tags, setTags] = useState<string[]>([]);
+  const [chars, setChars] = useState<string[]>([]);
+  const [artists, setArtists] = useState<string[]>([]);
   const [ratings, setRatings] = useState<string[]>([]);
+  const [maxRating, setMaxRating] = useState<Rating>(readMaxRating);
   const [sort, setSort] = useState<"date" | "title">("date");
   const [order, setOrder] = useState<"asc" | "desc">("desc");
   const [filterOpen, setFilterOpen] = useState(false);
   const [allCats, setAllCats] = useState<string[]>([]);
+  const [allTags, setAllTags] = useState<string[]>([]);
+  const [allChars, setAllChars] = useState<string[]>([]);
+  const [allArtists, setAllArtists] = useState<string[]>([]);
 
-  // category options come from the label set, not the current page
+  // ratings the content gate lets through, in cumulative order
+  const allowedRatings = RATING_ORDER.slice(0, RATING_ORDER.indexOf(maxRating) + 1);
+
+  function setGate(next: Rating) {
+    setMaxRating(next);
+    try {
+      window.localStorage.setItem(MAX_RATING_KEY, next);
+    } catch {
+      /* storage unavailable */
+    }
+    // explicit rating filters above the lowered gate are pruned
+    const kept = RATING_ORDER.slice(0, RATING_ORDER.indexOf(next) + 1);
+    setRatings((current) => current.filter((r) => kept.includes(r as Rating)));
+  }
+
+  // filter options come from the taxonomy, not the current page
   useEffect(() => {
     api
       .labels()
-      .then((ls) => setAllCats(ls.filter((l) => l.type === "category").map((l) => l.name).sort()))
+      .then((ls) => {
+        setAllCats(ls.filter((l) => l.type === "category").map((l) => l.name).sort());
+        setAllTags(ls.filter((l) => l.type === "tag").map((l) => l.name).sort());
+      })
+      .catch(() => undefined);
+    api
+      .characters()
+      .then((rows) => setAllChars(rows.map((row) => row.name).sort()))
+      .catch(() => undefined);
+    api
+      .artists()
+      .then((rows) => setAllArtists(rows.map((row) => row.name).sort()))
       .catch(() => undefined);
   }, []);
 
   // reset to the first page whenever the query changes
   useEffect(() => {
     setLimit(PAGE_SIZE);
-  }, [q, cats, ratings, sort, order]);
+  }, [q, cats, tags, chars, artists, ratings, maxRating, sort, order]);
 
   useEffect(() => {
     let cancelled = false;
@@ -60,7 +144,16 @@ export function GalleryPage() {
       .listCommissionsPaged({
         q: q || undefined,
         categories: cats,
-        rating: ratings,
+        tags,
+        characters: chars,
+        artists,
+        // explicit picks are already gate-pruned; otherwise the gate itself
+        // filters (an all-open gate needs no param)
+        rating: ratings.length
+          ? ratings
+          : allowedRatings.length === RATING_ORDER.length
+            ? []
+            : allowedRatings,
         sort,
         order,
         limit,
@@ -76,9 +169,12 @@ export function GalleryPage() {
     return () => {
       cancelled = true;
     };
-  }, [q, cats, ratings, sort, order, limit]);
+    // allowedRatings is derived from maxRating
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q, cats, tags, chars, artists, ratings, maxRating, sort, order, limit]);
 
-  const activeCount = cats.length + ratings.length + (q ? 1 : 0);
+  const activeCount =
+    cats.length + tags.length + chars.length + artists.length + ratings.length + (q ? 1 : 0);
 
   function toggle(list: string[], set: (v: string[]) => void, value: string) {
     set(list.includes(value) ? list.filter((v) => v !== value) : [...list, value]);
@@ -104,6 +200,24 @@ export function GalleryPage() {
           <Users />
           Characters
         </Link>
+        <div
+          className="rating-gate"
+          role="group"
+          aria-label="Maximum content rating"
+          title="Show content rated up to the selected level"
+        >
+          {RATING_ORDER.map((r) => (
+            <button
+              key={r}
+              type="button"
+              className={maxRating === r ? `active ${r}` : ""}
+              aria-pressed={maxRating === r}
+              onClick={() => setGate(r)}
+            >
+              {capitalize(r)}
+            </button>
+          ))}
+        </div>
         <div style={{ position: "relative" }}>
           <button
             className="btn sm"
@@ -131,36 +245,55 @@ export function GalleryPage() {
                   autoFocus
                 />
               </div>
-              <div className="label">Categories</div>
-              <div className="row wrap gap-4" style={{ marginBottom: 12 }}>
-                {allCats.length === 0 && <span className="mono-sm muted">none yet</span>}
-                {allCats.map((c) => (
-                  <span
-                    key={c}
-                    onClick={() => toggle(cats, setCats, c)}
-                    style={{ cursor: "pointer" }}
-                  >
-                    <Chip kind="cat" ghost={!cats.includes(c)}>
-                      {cats.includes(c) ? "✓ " : ""}
-                      {c}
-                    </Chip>
-                  </span>
-                ))}
-              </div>
+              <FilterChips
+                label="Categories"
+                kind="cat"
+                options={allCats}
+                selected={cats}
+                onToggle={(value) => toggle(cats, setCats, value)}
+              />
+              <FilterChips
+                label="Tags"
+                kind="tag"
+                options={allTags}
+                selected={tags}
+                onToggle={(value) => toggle(tags, setTags, value)}
+              />
+              <FilterChips
+                label="Characters"
+                kind="char"
+                options={allChars}
+                selected={chars}
+                onToggle={(value) => toggle(chars, setChars, value)}
+              />
+              <FilterChips
+                label="Artists"
+                kind="artist"
+                options={allArtists}
+                selected={artists}
+                onToggle={(value) => toggle(artists, setArtists, value)}
+              />
               <div className="label">Rating</div>
               <div className="row wrap gap-4" style={{ marginBottom: 12 }}>
-                {["general", "mature", "adult"].map((r) => (
-                  <span
-                    key={r}
-                    onClick={() => toggle(ratings, setRatings, r)}
-                    style={{ cursor: "pointer" }}
-                  >
-                    <Chip kind="rating" ghost={!ratings.includes(r)}>
-                      {ratings.includes(r) ? "✓ " : ""}
-                      {capitalize(r)}
-                    </Chip>
-                  </span>
-                ))}
+                {RATING_ORDER.map((r) => {
+                  const gated = !allowedRatings.includes(r);
+                  return (
+                    <button
+                      key={r}
+                      type="button"
+                      className="chip-button"
+                      disabled={gated}
+                      aria-pressed={ratings.includes(r)}
+                      onClick={() => toggle(ratings, setRatings, r)}
+                      title={gated ? "Raise the content gate to include this rating" : undefined}
+                    >
+                      <Chip kind="rating" ghost={!ratings.includes(r)}>
+                        {ratings.includes(r) ? "✓ " : ""}
+                        {capitalize(r)}
+                      </Chip>
+                    </button>
+                  );
+                })}
               </div>
               <div className="row" style={{ justifyContent: "space-between" }}>
                 <button
@@ -168,6 +301,9 @@ export function GalleryPage() {
                   onClick={() => {
                     setQ("");
                     setCats([]);
+                    setTags([]);
+                    setChars([]);
+                    setArtists([]);
                     setRatings([]);
                   }}
                 >

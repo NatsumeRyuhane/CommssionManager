@@ -9,7 +9,6 @@ export type VisibilityFieldKey =
   | "rating"
   | "characters"
   | "artists"
-  | "completed_at"
   | "confirmed_at"
   | "price";
 
@@ -34,7 +33,6 @@ export interface CommissionListItem {
   /** Null means untitled; surfaces hide it instead of showing a placeholder. */
   title: string | null;
   rating: Rating | null;
-  completed_at: string | null;
   visibility: Visibility | null;
   effective_visibility: Visibility | null;
   categories: string[];
@@ -89,7 +87,6 @@ export interface CommissionCreate {
   /** Omitted, null, or blank stores NULL server-side (untitled). */
   title?: string | null;
   description?: string | null;
-  completed_at?: string | null;
   rating?: Rating;
   confirmed_at?: string | null;
   price_amount?: string | null;
@@ -281,7 +278,6 @@ export interface CharacterPageCommission {
   commission_id: number;
   title: string;
   cover: Cover | null;
-  completed_at: string | null;
 }
 
 export interface CharacterPageSetItem {

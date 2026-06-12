@@ -104,10 +104,9 @@ def test_update_commission(admin_client: TestClient):
 
 
 def test_copy_json_shape_has_no_credentials(admin_client: TestClient):
-    created = _make_commission(admin_client, completed_at="2024-09-12")
+    created = _make_commission(admin_client)
     payload = admin_client.get(f"/api/v1/commissions/{created['id']}/copy-json").json()
     assert payload["id"] == created["id"]
-    assert payload["date"] == "2024-09-12"  # alias is emitted, not 'completed_date'
     assert payload["files_endpoint"].endswith(f"/commissions/{created['id']}/files")
     assert "key" not in payload and "api_key" not in payload and "credentials" not in payload
 
