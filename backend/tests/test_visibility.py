@@ -195,7 +195,6 @@ def test_public_detail_redacts_fields_marked_private(admin_client: TestClient):
         json={
             "title": "Sensitive title",
             "description": "private notes",
-            "completed_at": "2026-05-01",
             "confirmed_at": "2026-04-20T12:00:00Z",
             "price_amount": "125.00",
             "price_currency": "USD",
@@ -222,7 +221,6 @@ def test_public_detail_redacts_fields_marked_private(admin_client: TestClient):
                 "rating": False,
                 "characters": False,
                 "artists": False,
-                "completed_at": False,
                 "confirmed_at": False,
                 "price": False,
             }
@@ -236,7 +234,6 @@ def test_public_detail_redacts_fields_marked_private(admin_client: TestClient):
     public_item = listed.json()[0]
     assert public_item["title"] == f"#{commission['id']}"
     assert public_item["rating"] is None
-    assert public_item["completed_at"] is None
     assert public_item["categories"] == []
     assert public_item["tags"] == []
     assert public_item["characters"] == []

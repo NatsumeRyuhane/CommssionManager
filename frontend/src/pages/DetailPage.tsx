@@ -90,11 +90,9 @@ export function DetailPage() {
   const paddedId = String(data.id).padStart(3, "0");
 
   const isPublic = data.effective_visibility !== "private";
-  // no dimensions or file types here: those are per-file facts that vary
-  // across the lifecycle, so the stage tiles carry them instead
-  const subBits = [`commission #${paddedId}`, data.completed_at || null].filter(
-    Boolean,
-  ) as string[];
+  // no dimensions, file types, or dates here: those are per-file/per-stage
+  // facts that vary across the lifecycle, so the stage tiles carry them
+  const subBits = [`commission #${paddedId}`];
 
   return (
     <div className="app">
@@ -215,9 +213,6 @@ export function DetailPage() {
               )}
             </div>
 
-            {data.completed_at && (
-              <MetaRow label="Date" value={data.completed_at} pub />
-            )}
             {canWrite && data.confirmed_at && (
               <MetaRow label="Confirmed" value={data.confirmed_at.slice(0, 10)} pub={false} />
             )}

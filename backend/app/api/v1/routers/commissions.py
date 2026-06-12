@@ -122,10 +122,12 @@ def list_commissions(
             return False
         if formats and not set(formats) & set(crud.formats_of(c)):
             return False
-        if date_from and (not meta or not meta.completed_at or meta.completed_at < date_from):
-            return False
-        if date_to and (not meta or not meta.completed_at or meta.completed_at > date_to):
-            return False
+        if date_from or date_to:
+            commission_date = crud.commission_date(c)
+            if date_from and (commission_date is None or commission_date < date_from):
+                return False
+            if date_to and (commission_date is None or commission_date > date_to):
+                return False
         n_chars = len(c.characters)
         if char_min is not None and n_chars < char_min:
             return False
@@ -148,7 +150,8 @@ def list_commissions(
         meta = c.meta
         if sort == "title":
             return (meta.title or "").lower() if meta else ""
-        return (meta.completed_at or date.min) if meta else date.min
+        # "date" sorts by the latest update: the topmost stage's start date
+        return crud.commission_date(c) or date.min
 
     filtered.sort(key=sort_key, reverse=(order == "desc"))
     response.headers["X-Total-Count"] = str(len(filtered))

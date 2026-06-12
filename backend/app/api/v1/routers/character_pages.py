@@ -1,6 +1,8 @@
 """Character page (profile + curated commission showcases) endpoints."""
 from __future__ import annotations
 
+from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
@@ -16,7 +18,6 @@ from app.models import (
     Commission,
     CommissionCharacter,
     CommissionFile,
-    CommissionMetadata,
     CommissionNode,
 )
 from app.schemas import (
@@ -104,7 +105,6 @@ def _commission_payload(
         commission_id=commission.id,
         title=title,
         cover=cover,
-        completed_at=meta.completed_at if meta else None,
     )
 
 
@@ -331,12 +331,7 @@ def list_eligible_commissions(
     """
     _character_or_404(db, character_id)
 
-    stmt = (
-        select(Commission)
-        .join(CommissionMetadata, CommissionMetadata.commission_id == Commission.id)
-        .options(*_commission_loader_opts())
-        .order_by(CommissionMetadata.completed_at.desc().nulls_last(), Commission.id.desc())
-    )
+    stmt = select(Commission).options(*_commission_loader_opts())
     if only_tagged:
         stmt = stmt.join(
             CommissionCharacter, CommissionCharacter.commission_id == Commission.id
@@ -349,6 +344,10 @@ def list_eligible_commissions(
 
     context = crud.load_visibility_context(db)
     commissions = list(db.scalars(stmt))
+    # newest update first: the topmost stage's date stands in for the commission
+    commissions.sort(
+        key=lambda c: (crud.commission_date(c) or date.min, c.id), reverse=True
+    )
     payloads: list[CharacterPageCommission] = []
     for c in commissions:
         payload = _commission_payload(c, context, public_only=False)

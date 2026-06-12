@@ -207,7 +207,6 @@ class AppSettings(Base):
     rating_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     characters_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     artists_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    completed_at_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     confirmed_at_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     price_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     updated_at: Mapped[datetime] = mapped_column(
@@ -273,7 +272,6 @@ class CommissionMetadata(Base):
     )
     title: Mapped[str | None] = mapped_column(String)
     description: Mapped[str | None] = mapped_column(Text)
-    completed_at: Mapped[date | None] = mapped_column(Date)
     rating: Mapped[Rating] = mapped_column(
         Enum(Rating, name="rating"), nullable=False, default=Rating.general
     )
@@ -292,7 +290,6 @@ class CommissionMetadata(Base):
     rating_public_override: Mapped[bool | None] = mapped_column(Boolean)
     characters_public_override: Mapped[bool | None] = mapped_column(Boolean)
     artists_public_override: Mapped[bool | None] = mapped_column(Boolean)
-    completed_at_public_override: Mapped[bool | None] = mapped_column(Boolean)
     confirmed_at_public_override: Mapped[bool | None] = mapped_column(Boolean)
     price_public_override: Mapped[bool | None] = mapped_column(Boolean)
 

@@ -36,7 +36,6 @@ export function EditPage() {
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [completedAt, setCompletedAt] = useState("");
   const [confirmedAt, setConfirmedAt] = useState("");
   const [priceAmount, setPriceAmount] = useState("");
   const [priceCurrency, setPriceCurrency] = useState("USD");
@@ -70,7 +69,6 @@ export function EditPage() {
         if (cancelled) return;
         setTitle(d.title ?? "");
         setDescription(d.description ?? "");
-        setCompletedAt(d.completed_at ?? "");
         setConfirmedAt(d.confirmed_at ? d.confirmed_at.slice(0, 10) : "");
         setPriceAmount(d.price_amount ?? "");
         setPriceCurrency(d.price_currency ?? "USD");
@@ -115,7 +113,6 @@ export function EditPage() {
     const payload: CommissionUpdate = {
       title: title.trim() || null,
       description: description || null,
-      completed_at: completedAt || null,
       confirmed_at: confirmedAt || null,
       price_amount: priceAmount || null,
       price_currency: priceAmount ? priceCurrency : null,
@@ -200,14 +197,6 @@ export function EditPage() {
             version={coverVersion}
             onStage={setPendingFocal}
           />
-          <FieldGroup label="Completed">
-            <input
-              className="field"
-              type="date"
-              value={completedAt}
-              onChange={(e) => setCompletedAt(e.target.value)}
-            />
-          </FieldGroup>
           <FieldGroup label="Confirmed">
             <input
               className="field"

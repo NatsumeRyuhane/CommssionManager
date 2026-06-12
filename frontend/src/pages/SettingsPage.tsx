@@ -37,7 +37,6 @@ const FIELD_ROWS: { key: VisibilityFieldKey; label: string; note?: string }[] = 
   { key: "rating", label: "Rating" },
   { key: "characters", label: "Characters" },
   { key: "artists", label: "Artists" },
-  { key: "completed_at", label: "Completed date" },
   { key: "confirmed_at", label: "Confirmed at", note: "usually private" },
   { key: "price", label: "Price", note: "usually private" },
 ];

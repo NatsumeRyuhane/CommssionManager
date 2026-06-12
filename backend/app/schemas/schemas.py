@@ -311,7 +311,6 @@ class CommissionListItem(BaseModel):
     id: int
     title: str | None = None
     rating: Rating | None = None
-    completed_at: date | None = None
     visibility: Visibility | None = None
     effective_visibility: Visibility | None = None
     categories: list[str] = []
@@ -336,7 +335,6 @@ class CommissionDetail(CommissionListItem):
 class CommissionCreate(BaseModel):
     title: str | None = None
     description: str | None = None
-    completed_at: date | None = None
     rating: Rating = Rating.general
     confirmed_at: datetime | None = None
     price_amount: Decimal | None = None
@@ -359,7 +357,6 @@ class CommissionCreate(BaseModel):
 class CommissionUpdate(BaseModel):
     title: str | None = None
     description: str | None = None
-    completed_at: date | None = None
     rating: Rating | None = None
     confirmed_at: datetime | None = None
     price_amount: Decimal | None = None
@@ -383,11 +380,8 @@ class CommissionUpdate(BaseModel):
 
 # ---------------------------------------------------------------- agent payload
 class CopyJsonOut(BaseModel):
-    # `date` field name would shadow the `date` type during annotation eval, so use an alias
-    model_config = ConfigDict(populate_by_name=True)
     id: int
     title: str
-    completed_date: date | None = Field(default=None, alias="date")
     confirmed_at: datetime | None = None
     category: str | None = None
     rating: Rating
@@ -427,7 +421,6 @@ class VisibilityFieldDefaults(BaseModel):
     rating: bool
     characters: bool
     artists: bool
-    completed_at: bool
     confirmed_at: bool
     price: bool
 
@@ -439,7 +432,6 @@ class VisibilityFieldDefaultsPatch(BaseModel):
     rating: bool | None = None
     characters: bool | None = None
     artists: bool | None = None
-    completed_at: bool | None = None
     confirmed_at: bool | None = None
     price: bool | None = None
 
@@ -604,7 +596,6 @@ class CharacterPageCommission(BaseModel):
     commission_id: int
     title: str
     cover: CoverOut | None = None
-    completed_at: date | None = None
 
 
 class CharacterPageSetItemOut(BaseModel):
