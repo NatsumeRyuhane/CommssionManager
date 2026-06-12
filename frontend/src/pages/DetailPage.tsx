@@ -76,7 +76,7 @@ export function DetailPage() {
 
   async function onDelete() {
     if (!data) return;
-    if (!confirm(`Delete “${data.title}”? This cannot be undone.`)) return;
+    if (!confirm(`Delete “${data.title || `commission #${data.id}`}”? This cannot be undone.`)) return;
     await api.deleteCommission(data.id);
     navigate("/");
   }
@@ -90,12 +90,11 @@ export function DetailPage() {
   const paddedId = String(data.id).padStart(3, "0");
 
   const isPublic = data.effective_visibility !== "private";
-  const subBits = [
-    `commission #${paddedId}`,
-    data.completed_at || null,
-    data.cover?.width && data.cover?.height ? `${data.cover.width}×${data.cover.height}` : null,
-    data.formats.length ? data.formats.join("/") : null,
-  ].filter(Boolean) as string[];
+  // no dimensions or file types here: those are per-file facts that vary
+  // across the lifecycle, so the stage tiles carry them instead
+  const subBits = [`commission #${paddedId}`, data.completed_at || null].filter(
+    Boolean,
+  ) as string[];
 
   return (
     <div className="app">
@@ -131,7 +130,12 @@ export function DetailPage() {
       <div className="detail-crumb">
         <Link to="/" className="mono-sm muted">← gallery</Link>
         <span className="mono-sm muted">/</span>
-        <strong className="detail-crumb-title">{data.title}</strong>
+        <strong
+          className="detail-crumb-title"
+          style={data.title ? undefined : { color: "var(--mute)", fontWeight: 400 }}
+        >
+          {data.title || "Untitled Commission"}
+        </strong>
         <span className="mono-sm muted">#{paddedId}</span>
         <span className="spacer" />
         <span
@@ -151,12 +155,20 @@ export function DetailPage() {
               {data.categories.map((c) => (
                 <Chip key={c} kind="cat">{c}</Chip>
               ))}
-              {data.rating && <Chip kind="rating">{data.rating}</Chip>}
+              {data.rating && (
+                <Chip kind="rating">
+                  {data.rating.charAt(0).toUpperCase() + data.rating.slice(1)}
+                </Chip>
+              )}
               {data.tags.map((t) => (
                 <Chip key={t} kind="tag">{t}</Chip>
               ))}
             </div>
-            <h1>{data.title}</h1>
+            {/* the muted color keeps the placeholder distinguishable from a
+                commission literally titled "Untitled Commission" */}
+            <h1 style={data.title ? undefined : { color: "var(--mute)" }}>
+              {data.title || "Untitled Commission"}
+            </h1>
             {subBits.length > 0 && (
               <div className="sub mono">{subBits.join(" · ")}</div>
             )}

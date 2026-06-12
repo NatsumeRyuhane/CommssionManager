@@ -36,21 +36,29 @@ def test_login_grants_write(admin_client: TestClient):
     assert me["can_write"] is True
 
 
-def test_title_defaults_to_untitled(admin_client: TestClient):
+def test_title_is_nullable(admin_client: TestClient):
     omitted = admin_client.post("/api/v1/commissions", json={})
     assert omitted.status_code == 201, omitted.text
-    assert omitted.json()["title"] == "Untitled"
+    assert omitted.json()["title"] is None
 
     blank = admin_client.post("/api/v1/commissions", json={"title": "   "})
     assert blank.status_code == 201, blank.text
-    assert blank.json()["title"] == "Untitled"
+    assert blank.json()["title"] is None
 
-    # blanking the title on update also falls back
-    patched = admin_client.patch(
-        f"/api/v1/commissions/{blank.json()['id']}", json={"title": ""}
-    )
-    assert patched.status_code == 200, patched.text
-    assert patched.json()["title"] == "Untitled"
+    cid = blank.json()["id"]
+    named = admin_client.patch(f"/api/v1/commissions/{cid}", json={"title": "Named"})
+    assert named.status_code == 200, named.text
+    assert named.json()["title"] == "Named"
+
+    # omitting the field leaves the title untouched
+    untouched = admin_client.patch(f"/api/v1/commissions/{cid}", json={"rating": "mature"})
+    assert untouched.status_code == 200, untouched.text
+    assert untouched.json()["title"] == "Named"
+
+    # an explicit blank (or null) clears it again
+    cleared = admin_client.patch(f"/api/v1/commissions/{cid}", json={"title": ""})
+    assert cleared.status_code == 200, cleared.text
+    assert cleared.json()["title"] is None
 
 
 def test_create_adds_detached_node(admin_client: TestClient):

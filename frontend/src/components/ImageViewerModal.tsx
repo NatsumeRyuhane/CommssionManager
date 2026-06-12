@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Download, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Loader2, X } from "lucide-react";
 
 import { api } from "../api/client";
 import type { CommissionFile, ImagePreset } from "../api/types";
@@ -365,6 +365,11 @@ export function ImageViewerModal({
   const previous = images[(index - 1 + images.length) % images.length];
   const next = images[(index + 1) % images.length];
   const displaySrc = preset ? presetUrl(active.image_urls, preset, active.url) : active.url;
+  // switching file or resolution remounts the <img> (keyed by src), so the
+  // stale frame never lingers; until the new source loads — or while the
+  // server is still generating the derivative — a status pill shows instead
+  const [loadedSrc, setLoadedSrc] = useState<string | null>(null);
+  const sourceLoading = loadedSrc !== displaySrc;
 
   return (
     <div
@@ -392,13 +397,22 @@ export function ImageViewerModal({
           }}
         >
           <DerivedImg
+            key={displaySrc}
             src={displaySrc}
             fallbackSrc={active.url}
             alt={active.label || `${nodeName} image ${index + 1}`}
             draggable={false}
+            onLoad={() => setLoadedSrc(displaySrc)}
           />
         </div>
       </div>
+
+      {sourceLoading && (
+        <div className="image-viewer-loading" data-viewer-keep role="status">
+          <Loader2 size={15} className="spin" />
+          Preparing image…
+        </div>
+      )}
 
       <header className="image-viewer-top" data-viewer-keep>
         <div className="image-viewer-meta">

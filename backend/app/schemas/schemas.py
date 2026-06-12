@@ -309,7 +309,7 @@ class CoverOut(BaseModel):
 # ---------------------------------------------------------------- commission output
 class CommissionListItem(BaseModel):
     id: int
-    title: str
+    title: str | None = None
     rating: Rating | None = None
     completed_at: date | None = None
     visibility: Visibility | None = None
@@ -334,7 +334,7 @@ class CommissionDetail(CommissionListItem):
 
 # ---------------------------------------------------------------- commission input
 class CommissionCreate(BaseModel):
-    title: str = "Untitled"
+    title: str | None = None
     description: str | None = None
     completed_at: date | None = None
     rating: Rating = Rating.general
@@ -350,8 +350,10 @@ class CommissionCreate(BaseModel):
 
     @field_validator("title")
     @classmethod
-    def title_defaults_to_untitled(cls, title: str) -> str:
-        return title.strip() or "Untitled"
+    def blank_title_means_none(cls, title: str | None) -> str | None:
+        if title is None:
+            return None
+        return title.strip() or None
 
 
 class CommissionUpdate(BaseModel):
@@ -371,11 +373,12 @@ class CommissionUpdate(BaseModel):
 
     @field_validator("title")
     @classmethod
-    def title_defaults_to_untitled(cls, title: str | None) -> str | None:
-        # None means "leave unchanged"; a blank string falls back to Untitled
+    def blank_title_means_none(cls, title: str | None) -> str | None:
+        # omitting the field leaves the title unchanged (model_fields_set decides);
+        # an explicit null or blank string clears it
         if title is None:
             return None
-        return title.strip() or "Untitled"
+        return title.strip() or None
 
 
 # ---------------------------------------------------------------- agent payload

@@ -31,7 +31,8 @@ export interface Cover {
 
 export interface CommissionListItem {
   id: number;
-  title: string;
+  /** Null means untitled; surfaces hide it instead of showing a placeholder. */
+  title: string | null;
   rating: Rating | null;
   completed_at: string | null;
   visibility: Visibility | null;
@@ -85,8 +86,8 @@ export interface CommissionDetail extends CommissionListItem {
 }
 
 export interface CommissionCreate {
-  /** Defaults to "Untitled" server-side when omitted or blank. */
-  title?: string;
+  /** Omitted, null, or blank stores NULL server-side (untitled). */
+  title?: string | null;
   description?: string | null;
   completed_at?: string | null;
   rating?: Rating;

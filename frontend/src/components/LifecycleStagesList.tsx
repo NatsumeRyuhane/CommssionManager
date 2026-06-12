@@ -476,8 +476,12 @@ function LifecycleFileTile({
             {file.format}
           </div>
         )}
+        {file.is_image && <span className="format-badge file-format-badge">{file.format}</span>}
       </div>
-      <div className="lifecycle-file-label">{file.label || file.format}</div>
+      <div className="lifecycle-file-label">
+        {file.label ||
+          (file.width && file.height ? `${file.width}×${file.height}` : file.format)}
+      </div>
       {editable && (
         <div className="lifecycle-file-actions">
           {file.is_image && onSetCover && (

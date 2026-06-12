@@ -16,6 +16,8 @@
   --artist-bg: #ece5f2; --artist-fg: #5b3a78;
   --accent: #2f6a55;
   --warn: #b6552a;
+  --rating-mature: #c9a227;
+  --rating-adult: #b0392e;
   --shadow-1: 0 1px 0 rgba(15, 15, 15, 0.04), 0 2px 6px rgba(15, 15, 15, 0.04);
   --shadow-2: 0 1px 0 rgba(15, 15, 15, 0.05), 0 8px 24px rgba(15, 15, 15, 0.06);
   --r: 6px;
@@ -43,6 +45,10 @@
 }
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+@keyframes viewer-img-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 .spin { animation: spin 0.9s linear infinite; }
 
@@ -249,6 +255,15 @@ a { color: inherit; text-decoration: none; }
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+/* mature/adult are conveyed by the tile border instead of a rating chip */
+.fa-tile.rating-mature,
+.fa-tile.rating-mature:hover {
+  border: 2px solid var(--rating-mature);
+}
+.fa-tile.rating-adult,
+.fa-tile.rating-adult:hover {
+  border: 2px solid var(--rating-adult);
+}
 .fa-tile .imgph img {
   transition: transform 300ms ease;
 }
@@ -274,6 +289,27 @@ a { color: inherit; text-decoration: none; }
   background: linear-gradient(to top, rgba(0, 0, 0, 0.55), transparent);
   color: white;
   font-size: 12px;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+.fa-tile .caption .caption-text {
+  flex: 1;
+  min-width: 0;
+}
+
+/* file-type pill pinned to a cover's bottom-right corner */
+.format-badge {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.55);
+  color: white;
+  font: 10px "IBM Plex Mono", monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 /* ---- generic layout utils ---- */
@@ -471,7 +507,6 @@ a { color: inherit; text-decoration: none; }
 .detail-lifecycle {
   margin-top: 24px;
   padding: 24px 48px 48px;
-  max-width: 980px;
   border-top: 1px solid var(--rule);
   animation: fade-up 260ms ease-out;
 }
@@ -1030,9 +1065,16 @@ a { color: inherit; text-decoration: none; }
   outline-offset: 3px;
 }
 .lifecycle-file-cover {
+  position: relative;
   border-radius: 5px;
   outline: 0 solid transparent;
   outline-offset: 2px;
+}
+.lifecycle-file-cover .file-format-badge {
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  pointer-events: none;
 }
 .lifecycle-file-cover.is-cover {
   outline: 2px solid var(--accent);
@@ -1154,6 +1196,26 @@ a { color: inherit; text-decoration: none; }
   box-shadow: 0 12px 48px rgba(0, 0, 0, 0.45);
   user-select: none;
   -webkit-user-drag: none;
+  /* the img remounts on every source switch, so this replays as a
+     deliberate "the preview changed" cue */
+  animation: viewer-img-in 200ms ease-out;
+}
+/* status pill while the next source downloads or is still being generated */
+.image-viewer-loading {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 2;
+  transform: translate(-50%, -50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: rgba(28, 26, 23, 0.88);
+  color: rgba(255, 255, 255, 0.92);
+  font: 12px "IBM Plex Mono", monospace;
+  pointer-events: none;
 }
 .image-viewer-top {
   position: absolute;
@@ -2183,6 +2245,9 @@ a { color: inherit; text-decoration: none; }
     padding: 10px 12px;
   }
   .fa-col { gap: 8px; }
+  /* covers stay clean on phones: no chips, captions, or badges */
+  .fa-tile .label-row,
+  .fa-tile .caption { display: none; }
 
   .detail-crumb { padding: 10px 14px; }
   .page-title { padding: 22px 16px 6px; }

@@ -68,7 +68,7 @@ export function EditPage() {
       .getCommission(commissionId)
       .then((d) => {
         if (cancelled) return;
-        setTitle(d.title);
+        setTitle(d.title ?? "");
         setDescription(d.description ?? "");
         setCompletedAt(d.completed_at ?? "");
         setConfirmedAt(d.confirmed_at ? d.confirmed_at.slice(0, 10) : "");
@@ -113,7 +113,7 @@ export function EditPage() {
     setBusy(true);
     setError(null);
     const payload: CommissionUpdate = {
-      title: title.trim() || "Untitled",
+      title: title.trim() || null,
       description: description || null,
       completed_at: completedAt || null,
       confirmed_at: confirmedAt || null,
@@ -176,7 +176,7 @@ export function EditPage() {
           <input
             className="field edit-title-input"
             value={title}
-            placeholder="Untitled commission"
+            placeholder="Untitled Commission"
             onChange={(e) => setTitle(e.target.value)}
           />
           <textarea

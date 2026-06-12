@@ -181,7 +181,7 @@ Table commissions {
 Table commission_metadata {
   id              integer        [pk, increment]
   commission_id   integer        [not null, ref: - commissions.id, Note: 'One-to-one with commissions']
-  title           varchar        [not null]
+  title           varchar        [Note: 'Nullable; null means untitled and the UI hides it']
   description     text
   completed_at    date           [Note: 'Completion date of the commission, day-precise']
   rating          rating         [not null, default: 'general']
