@@ -130,7 +130,12 @@ export function DetailPage() {
       <div className="detail-crumb">
         <Link to="/" className="mono-sm muted">← gallery</Link>
         <span className="mono-sm muted">/</span>
-        {data.title && <strong className="detail-crumb-title">{data.title}</strong>}
+        <strong
+          className="detail-crumb-title"
+          style={data.title ? undefined : { color: "var(--mute)", fontWeight: 400 }}
+        >
+          {data.title || "Untitled Commission"}
+        </strong>
         <span className="mono-sm muted">#{paddedId}</span>
         <span className="spacer" />
         <span
@@ -159,7 +164,11 @@ export function DetailPage() {
                 <Chip key={t} kind="tag">{t}</Chip>
               ))}
             </div>
-            {data.title && <h1>{data.title}</h1>}
+            {/* the muted color keeps the placeholder distinguishable from a
+                commission literally titled "Untitled Commission" */}
+            <h1 style={data.title ? undefined : { color: "var(--mute)" }}>
+              {data.title || "Untitled Commission"}
+            </h1>
             {subBits.length > 0 && (
               <div className="sub mono">{subBits.join(" · ")}</div>
             )}

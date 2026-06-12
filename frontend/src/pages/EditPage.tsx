@@ -176,7 +176,7 @@ export function EditPage() {
           <input
             className="field edit-title-input"
             value={title}
-            placeholder="Untitled commission"
+            placeholder="Untitled Commission"
             onChange={(e) => setTitle(e.target.value)}
           />
           <textarea
