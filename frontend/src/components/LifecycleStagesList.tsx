@@ -27,7 +27,13 @@ export interface FileUploadPreview {
   isImage: boolean;
   previewUrl: string | null;
   progress: number;
-  status: "uploading" | "failed";
+  /** "uploading": bytes in flight (proxied or direct PUT).
+   *  "processing": bytes uploaded; server is verifying and registering the file.
+   *  "failed": surfaced for retry/dismiss.
+   *  Note: "complete" entries are removed from the list immediately on success. */
+  status: "uploading" | "processing" | "failed";
+  /** Set during direct uploads so the user can cancel an in-flight session. */
+  sessionId?: string;
   error?: string;
 }
 
@@ -185,7 +191,9 @@ function LifecycleStage({
   const canReorderFiles = Boolean(onReorderFile);
   const canUpload = Boolean(onUpload && !node.is_detached && !busy);
   const canReorder = Boolean(onReorderNode && !node.is_detached);
-  const uploadingCount = uploads.filter((upload) => upload.status === "uploading").length;
+  const uploadingCount = uploads.filter(
+    (upload) => upload.status === "uploading" || upload.status === "processing",
+  ).length;
   const failedCount = uploads.length - uploadingCount;
 
   function drop(e: DragEvent<HTMLDivElement>) {
@@ -338,7 +346,20 @@ function LifecycleUploadTile({
   onDismiss?: (id: string) => void;
 }) {
   const failed = upload.status === "failed";
-  const statusLabel = failed ? "Upload failed" : `${upload.progress}% uploaded`;
+  const processing = upload.status === "processing";
+  const statusLabel = failed
+    ? "Upload failed"
+    : processing
+      ? "Processing…"
+      : `${upload.progress}% uploaded`;
+  // Progress only reaches 100% after the server has confirmed and registered
+  // the file; during the direct-upload finalize step we hold at "Processing…"
+  // so users don't read 100% as "done" before metadata is written.
+  const headline = failed
+    ? "Failed"
+    : processing
+      ? "Processing"
+      : `${upload.progress}%`;
 
   return (
     <div className={`lifecycle-file lifecycle-upload ${failed ? "failed" : ""}`}>
@@ -356,8 +377,9 @@ function LifecycleUploadTile({
           aria-label={`${upload.fileName}: ${statusLabel}`}
           title={upload.error}
         >
-          <strong>{failed ? "Failed" : `${upload.progress}%`}</strong>
+          <strong>{headline}</strong>
           {failed && <span>Upload failed</span>}
+          {processing && <span>Registering file…</span>}
         </div>
         {failed && onDismiss && (
           <button

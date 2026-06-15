@@ -28,7 +28,10 @@ import type {
   Paged,
   SiteSettings,
   SiteSettingsUpdate,
+  StorageCapabilities,
   StorageSettings,
+  UploadSessionRequest,
+  UploadSessionResponse,
   VisibilitySettings,
   VisibilitySettingsUpdate,
 } from "./types";
@@ -129,6 +132,52 @@ function uploadFormWithProgress<T>(
   });
 }
 
+/** PUT raw bytes to an arbitrary URL (typically a presigned S3 endpoint) with
+ * per-byte progress reporting. We treat status 0 as a likely CORS failure so the
+ * UI can surface a configuration-aware error instead of a generic "network error". */
+export function directPutWithProgress(
+  url: string,
+  body: Blob,
+  options: {
+    headers?: Record<string, string>;
+    onProgress?: (percentage: number) => void;
+  } = {},
+): Promise<{ status: number; etag: string | null }> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", url);
+    // Presigned URLs are pre-authenticated; sending app cookies is unnecessary
+    // and can break the request on cross-origin S3 endpoints.
+    xhr.withCredentials = false;
+    for (const [name, value] of Object.entries(options.headers ?? {})) {
+      xhr.setRequestHeader(name, value);
+    }
+    xhr.upload.addEventListener("progress", (event) => {
+      if (!event.lengthComputable) return;
+      options.onProgress?.(Math.min(100, Math.round((event.loaded / event.total) * 100)));
+    });
+    xhr.addEventListener("load", () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve({ status: xhr.status, etag: xhr.getResponseHeader("ETag") });
+        return;
+      }
+      reject(new ApiError(xhr.status, `Direct upload rejected with status ${xhr.status}`));
+    });
+    xhr.addEventListener("error", () => {
+      // status 0 + no response usually means CORS preflight failed or the host
+      // is unreachable — the message is intentionally specific so callers can
+      // distinguish it from a routine HTTP error.
+      reject(
+        new ApiError(
+          0,
+          "Direct upload failed — bucket CORS may not be configured for this origin.",
+        ),
+      );
+    });
+    xhr.send(body);
+  });
+}
+
 export const api = {
   me: () => request<MeResponse>("/auth/me"),
   login: (username: string, password: string) =>
@@ -183,6 +232,19 @@ export const api = {
       body: JSON.stringify(body),
     }),
   getStorageSettings: () => request<StorageSettings>("/settings/storage"),
+  getStorageCapabilities: () =>
+    request<StorageCapabilities>("/settings/storage/capabilities"),
+
+  // direct-to-S3 upload session lifecycle
+  createUploadSession: (nodeId: number, body: UploadSessionRequest) =>
+    request<UploadSessionResponse>(`/nodes/${nodeId}/uploads`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  finalizeUpload: (sessionId: string) =>
+    request<CommissionFile>(`/uploads/${sessionId}/finalize`, { method: "POST" }),
+  cancelUpload: (sessionId: string) =>
+    request<void>(`/uploads/${sessionId}`, { method: "DELETE" }),
 
   // lifecycle nodes
   listNodes: (commissionId: number) =>

@@ -226,6 +226,8 @@ export interface SiteSettings {
   default_stage_names: string[];
   /** When false, visitors get lossy derivatives only (no /raw, no png). */
   allow_public_original_download: boolean;
+  /** When true and the backend supports it, uploads bypass the app server. */
+  allow_direct_upload: boolean;
   updated_at: string | null;
 }
 
@@ -233,6 +235,32 @@ export interface SiteSettingsUpdate {
   site_title?: string | null;
   default_stage_names?: string[] | null;
   allow_public_original_download?: boolean | null;
+  allow_direct_upload?: boolean | null;
+}
+
+export interface StorageCapabilities {
+  backend: string;
+  /** Direct uploads are usable right now (backend + env + admin toggle all green). */
+  direct_upload_available: boolean;
+  /** Reflects the admin toggle alone, independent of backend support. */
+  direct_upload_enabled: boolean;
+  /** The backend itself supports direct uploads (s3 with env switch on). */
+  direct_upload_supported: boolean;
+}
+
+export interface UploadSessionRequest {
+  filename: string;
+  content_type: string;
+  size_bytes: number;
+  label?: string | null;
+}
+
+export interface UploadSessionResponse {
+  session_id: string;
+  upload_url: string;
+  upload_method: string;
+  upload_headers: Record<string, string>;
+  expires_at: string;
 }
 
 export interface CommissionVisibilityField {

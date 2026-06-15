@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 
-import { api } from "../api/client";
-import type { CommissionDetail, CommissionFile, CommissionNode } from "../api/types";
+import { api, ApiError, directPutWithProgress } from "../api/client";
+import type {
+  CommissionDetail,
+  CommissionFile,
+  CommissionNode,
+  StorageCapabilities,
+} from "../api/types";
 import { LifecycleStagesList, type FileUploadPreview } from "./LifecycleStagesList";
 import { NodeDateModal } from "./NodeDateModal";
 
@@ -29,6 +34,7 @@ export function StagesEditor({
   const [error, setError] = useState<string | null>(null);
   const [dateNode, setDateNode] = useState<CommissionNode | null>(null);
   const [uploads, setUploads] = useState<FileUploadPreview[]>([]);
+  const [capabilities, setCapabilities] = useState<StorageCapabilities | null>(null);
   const uploadSequence = useRef(0);
   const previewUrls = useRef(new Map<string, string>());
 
@@ -43,6 +49,17 @@ export function StagesEditor({
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  useEffect(() => {
+    // Capabilities are sampled once per editor mount. New uploads pick up
+    // toggle changes on the next reload; in-flight uploads keep the path
+    // they started with, so a mid-upload toggle change never leaves bytes
+    // stranded in S3 with no session to finalize.
+    api
+      .getStorageCapabilities()
+      .then(setCapabilities)
+      .catch(() => setCapabilities(null));
+  }, []);
 
   useEffect(
     () => () => {
@@ -138,6 +155,10 @@ export function StagesEditor({
   }
 
   function upload(node: CommissionNode, files: File[]) {
+    // Snapshot capability state at the moment of upload so a mid-batch toggle
+    // change doesn't half-route the same selection.
+    const useDirect = capabilities?.direct_upload_available === true;
+
     const pending = files.map((file) => {
       const id = `${node.id}-${Date.now()}-${uploadSequence.current++}`;
       const isImage = file.type.startsWith("image/");
@@ -162,27 +183,64 @@ export function StagesEditor({
     setBusy(true);
     setError(null);
 
+    function updateUpload(id: string, patch: Partial<FileUploadPreview>) {
+      setUploads((current) =>
+        current.map((entry) => (entry.id === id ? { ...entry, ...patch } : entry)),
+      );
+    }
+
+    async function runDirect(file: File, preview: FileUploadPreview): Promise<string> {
+      // 1) Server mints the presigned URL and records the pending session.
+      const session = await api.createUploadSession(node.id, {
+        filename: file.name,
+        content_type: file.type || "application/octet-stream",
+        size_bytes: file.size,
+      });
+      updateUpload(preview.id, { sessionId: session.session_id });
+
+      // 2) Browser PUTs straight to S3; the app server sees none of the bytes.
+      try {
+        await directPutWithProgress(session.upload_url, file, {
+          headers: session.upload_headers,
+          onProgress: (progress) => updateUpload(preview.id, { progress }),
+        });
+      } catch (putError) {
+        // Don't silently fall back to the proxied endpoint — bytes may already
+        // be in S3 under the same key; that would risk a duplicate file.
+        // Cancel the pending session so the orphaned object gets cleaned up.
+        try {
+          await api.cancelUpload(session.session_id);
+        } catch {
+          /* best-effort cleanup */
+        }
+        throw putError;
+      }
+
+      // 3) Finalize: server verifies HeadObject, creates CommissionFile,
+      // schedules derivatives. Idempotent on retry — but we don't retry
+      // automatically here so the user can decide.
+      updateUpload(preview.id, { status: "processing", progress: 100 });
+      await api.finalizeUpload(session.session_id);
+      return preview.id;
+    }
+
+    async function runProxied(file: File, preview: FileUploadPreview): Promise<string> {
+      await api.uploadFile(node.id, file, {
+        onProgress: (progress) => updateUpload(preview.id, { progress }),
+      });
+      return preview.id;
+    }
+
     void Promise.allSettled(
       pending.map(async ({ file, preview }) => {
         try {
-          await api.uploadFile(node.id, file, {
-            onProgress: (progress) => {
-              setUploads((current) =>
-                current.map((upload) =>
-                  upload.id === preview.id ? { ...upload, progress } : upload,
-                ),
-              );
-            },
-          });
-          return preview.id;
+          return await (useDirect ? runDirect(file, preview) : runProxied(file, preview));
         } catch (uploadError) {
-          setUploads((current) =>
-            current.map((upload) =>
-              upload.id === preview.id
-                ? { ...upload, status: "failed", error: String(uploadError) }
-                : upload,
-            ),
-          );
+          const message =
+            uploadError instanceof ApiError
+              ? uploadError.message
+              : String(uploadError);
+          updateUpload(preview.id, { status: "failed", error: message });
           throw uploadError;
         }
       }),
