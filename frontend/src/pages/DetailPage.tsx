@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Braces, Check, Download, Eye, Globe, Lock, Pencil, Trash2 } from "lucide-react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 
 import { api } from "../api/client";
 import type { Character, CommissionDetail } from "../api/types";
@@ -38,7 +38,7 @@ function CopyJsonButton({ id }: { id: number }) {
 export function DetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { canWrite } = useAuth();
+  const { me, loading: authLoading, canWrite } = useAuth();
   const [data, setData] = useState<CommissionDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [characterIndex, setCharacterIndex] = useState<Map<string, Character>>(new Map());
@@ -79,6 +79,14 @@ export function DetailPage() {
     if (!confirm(`Delete “${data.title || `commission #${data.id}`}”? This cannot be undone.`)) return;
     await api.deleteCommission(data.id);
     navigate("/");
+  }
+
+  // Edit view is a strict superset of detail for admins — redirect so the
+  // rail's metadata is editable in place. Wait for auth to resolve so we don't
+  // briefly render the detail view and then jump (use `replace` so the back
+  // button skips the detail route entirely).
+  if (!authLoading && me?.kind === "admin" && id) {
+    return <Navigate to={`/commissions/${id}/edit`} replace />;
   }
 
   if (error) return <div className="app"><TopBar /><div style={{ padding: 24 }} className="error-text">{error}</div></div>;
