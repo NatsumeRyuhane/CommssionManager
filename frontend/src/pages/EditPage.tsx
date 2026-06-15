@@ -70,6 +70,13 @@ export function EditPage() {
   // below to avoid scanning the array on every render.
   const [visibility, setVisibility] = useState<CommissionVisibility | null>(null);
 
+  // Surfaced from StagesEditor via onPendingUploadsChange. Save is disabled
+  // until both counts reach zero so the admin can't navigate away mid-upload
+  // (which would unmount the editor and lose the upload state — the bytes
+  // still land server-side but the user never sees the success/failure).
+  const [pendingUploads, setPendingUploads] = useState({ uploading: 0, failed: 0 });
+  const hasPendingUploads = pendingUploads.uploading > 0 || pendingUploads.failed > 0;
+
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // block saves until the commission loads, so a quick Save can't overwrite
@@ -255,6 +262,19 @@ export function EditPage() {
     <div className="app">
       <TopBar>
         <span className="mono-sm muted">editing</span>
+        {hasPendingUploads && (
+          <span
+            className="mono-sm muted edit-pending-uploads-hint"
+            role="status"
+            title={
+              pendingUploads.failed > 0
+                ? "Retry or dismiss the failed upload(s) before saving — Save navigates away and the upload state would be lost."
+                : "Wait for uploads to finish — Save navigates away and the upload state would be lost."
+            }
+          >
+            {pendingUploadsHint(pendingUploads)}
+          </span>
+        )}
         <button
           type="button"
           className="btn sm"
@@ -271,7 +291,7 @@ export function EditPage() {
               document.getElementById("commission-edit-form")) as HTMLFormElement | null;
             form?.requestSubmit();
           }}
-          disabled={busy || initialLoading}
+          disabled={busy || initialLoading || hasPendingUploads}
         >
           {!busy && <Check />}
           {busy ? "Saving…" : "Save"}
@@ -335,6 +355,7 @@ export function EditPage() {
               }}
               onNodeVisibilityChange={setNodeVisibility}
               onFileVisibilityChange={setFileVisibility}
+              onPendingUploadsChange={setPendingUploads}
             />
           </div>
 
@@ -512,6 +533,16 @@ export function EditPage() {
       </form>
     </div>
   );
+}
+
+/** Human-readable summary of the pending upload counts, rendered next to the
+ * Save button while Save is disabled. The shape ("N uploading, M failed")
+ * mirrors what the user sees on the tiles themselves. */
+function pendingUploadsHint(counts: { uploading: number; failed: number }): string {
+  const parts: string[] = [];
+  if (counts.uploading > 0) parts.push(`${counts.uploading} uploading`);
+  if (counts.failed > 0) parts.push(`${counts.failed} failed — retry or dismiss`);
+  return parts.join(", ");
 }
 
 /**
