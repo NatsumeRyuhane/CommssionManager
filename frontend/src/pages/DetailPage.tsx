@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Braces, Check, Download, Eye, Globe, Lock, Pencil, Trash2 } from "lucide-react";
+import { Braces, Check, Download, Globe, Lock, Pencil, Trash2 } from "lucide-react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 
 import { api } from "../api/client";
@@ -26,12 +26,9 @@ function CopyJsonButton({ id }: { id: number }) {
 }
 
 /**
- * Render the commission detail page, fetching a commission by route `id` and exposing view and management UI.
- *
- * Fetches commission data from the API based on the `id` route param, shows loading and error states, and when data
- * is available displays commission metadata, cover, lifecycle stages, and a side rail of metadata. If the current
- * user has write permission, exposes actions to copy JSON, edit visibility, export files, edit, and delete the
- * commission (delete prompts for confirmation and navigates to the gallery on success).
+ * Render the read-only commission detail page. Admins are bounced to /edit on
+ * entry (the edit view is a strict superset of detail), so this page renders
+ * the visitor experience: metadata, cover, lifecycle stages, side rail.
  *
  * @returns The commission detail page UI as a JSX element
  */
@@ -106,12 +103,6 @@ export function DetailPage() {
     <div className="app">
       <TopBar>
         {canWrite && <CopyJsonButton id={data.id} />}
-        {canWrite && (
-          <Link to={`/commissions/${data.id}/visibility`} className="btn sm">
-            <Eye />
-            Visibility
-          </Link>
-        )}
         {canWrite && (
           <a className="btn sm" href={api.filesExportUrl(data.id)} download>
             <Download />
@@ -207,18 +198,6 @@ export function DetailPage() {
                 {isPublic ? <Globe size={12} /> : <Lock size={12} />}
                 {isPublic ? "public" : "private"}
               </span>
-              {canWrite && (
-                <>
-                  <span className="spacer" />
-                  <Link
-                    to={`/commissions/${data.id}/visibility`}
-                    className="mono-sm"
-                    style={{ color: "var(--accent)" }}
-                  >
-                    edit
-                  </Link>
-                </>
-              )}
             </div>
 
             {canWrite && data.confirmed_at && (

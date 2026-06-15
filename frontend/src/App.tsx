@@ -7,18 +7,19 @@ import { DetailPage } from "./pages/DetailPage";
 import { EditPage } from "./pages/EditPage";
 import { GalleryPage } from "./pages/GalleryPage";
 import { SettingsPage } from "./pages/SettingsPage";
-import { VisibilityPage } from "./pages/VisibilityPage";
 
 /**
  * Root application component that provides authentication context and client-side routing.
  *
  * Renders the app wrapped with AuthProvider and BrowserRouter and declares routes:
  * - `/` → GalleryPage
- * - `/commissions/:id` → DetailPage
- * - `/commissions/:id/edit` → EditPage
- * - `/commissions/:id/visibility` → VisibilityPage
+ * - `/commissions/:id` → DetailPage (admins are redirected to the edit route on entry)
+ * - `/commissions/:id/edit` → EditPage (visibility toggles are inline, no separate page)
  * - `/artists` → redirects to `/settings` (replace)
  * - `/settings` → SettingsPage
+ *
+ * Bookmarks to the legacy `/commissions/:id/visibility` route fall through to
+ * the catch-all redirect into the edit page.
  *
  * @returns The root React element for the application
  */
@@ -30,7 +31,12 @@ export default function App() {
           <Route path="/" element={<GalleryPage />} />
           <Route path="/commissions/:id" element={<DetailPage />} />
           <Route path="/commissions/:id/edit" element={<EditPage />} />
-          <Route path="/commissions/:id/visibility" element={<VisibilityPage />} />
+          {/* Visibility was its own page until inline toggles landed; preserve
+              the URL so existing bookmarks land somewhere useful. */}
+          <Route
+            path="/commissions/:id/visibility"
+            element={<Navigate to=".." relative="path" replace />}
+          />
           <Route path="/characters" element={<CharactersDirectoryPage />} />
           <Route path="/characters/:id" element={<CharacterPage />} />
           <Route path="/artists" element={<Navigate to="/settings" replace />} />

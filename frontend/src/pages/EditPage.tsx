@@ -1,14 +1,23 @@
-import { useEffect, useState } from "react";
-import { Check, Eye } from "lucide-react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useCallback, useEffect, useState } from "react";
+import { Check } from "lucide-react";
+import { useNavigate, useParams } from "react-router-dom";
 
 import { api } from "../api/client";
-import type { CommissionUpdate, Rating } from "../api/types";
+import type {
+  CommissionFile,
+  CommissionNode,
+  CommissionUpdate,
+  CommissionVisibility,
+  Rating,
+  Visibility,
+  VisibilityFieldKey,
+} from "../api/types";
 import { Chip } from "../components/Chip";
 import { CoverFocalEditor, type StagedFocal } from "../components/CoverFocalEditor";
 import { StagesEditor } from "../components/StagesEditor";
 import { TaxonomyPicker } from "../components/TaxonomyPicker";
 import { TopBar } from "../components/TopBar";
+import { FieldVisibilityToggle, VisibilityToggle } from "../components/VisibilityToggle";
 import { useAuth } from "../hooks/useAuth";
 
 const RATINGS: { value: Rating; label: string }[] = [
@@ -17,15 +26,26 @@ const RATINGS: { value: Rating; label: string }[] = [
   { value: "adult", label: "Adult" },
 ];
 
+/** Field keys whose visibility override is editable inline next to its
+ * corresponding edit-page form group. The map keeps the FieldGroup → key
+ * pairing in one place so adding a new field doesn't drift between the
+ * settings UI and the visibility schema. */
+const EDITABLE_FIELDS: Record<VisibilityFieldKey, string> = {
+  title: "Title",
+  description: "Description",
+  labels: "Categories & tags",
+  rating: "Rating",
+  characters: "Characters",
+  artists: "Artists",
+  confirmed_at: "Confirmed",
+  price: "Price",
+};
+
 /**
- * Render the commission edit page, including form fields, taxonomy pickers, cover/stages editors, and submission handling.
- *
- * Commissions are created up front from the site's stage template (see GalleryPage), so this page
- * always edits an existing commission: it loads the data, enforces write authorization, manages
- * local form state (title, description, dates, price, rating, taxonomies), and submits an update
- * request that navigates to the commission detail route on success.
- *
- * @returns The React element for the commission edit page.
+ * Commission edit page. Edits live entirely on this page now — the standalone
+ * VisibilityPage was folded in: every field group, stage header, and file tile
+ * has an inline Public/Private/Inherit toggle whose changes are committed in
+ * the same Save as the metadata form.
  */
 export function EditPage() {
   const { id } = useParams();
@@ -45,6 +65,11 @@ export function EditPage() {
   const [characters, setCharacters] = useState<string[]>([]);
   const [artists, setArtists] = useState<string[]>([]);
 
+  // Mirror of GET /visibility — mutated in place by every inline toggle and
+  // shipped back wholesale on Save. Lookups by field name use a derived map
+  // below to avoid scanning the array on every render.
+  const [visibility, setVisibility] = useState<CommissionVisibility | null>(null);
+
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // block saves until the commission loads, so a quick Save can't overwrite
@@ -58,14 +83,25 @@ export function EditPage() {
   // focal edits stage here and commit together with the form submit
   const [pendingFocal, setPendingFocal] = useState<StagedFocal | null>(null);
 
+  const reloadVisibility = useCallback(async () => {
+    if (!validId) return;
+    try {
+      setVisibility(await api.getCommissionVisibility(commissionId));
+    } catch {
+      // visibility state stays null; toggles render unobtrusively as nothing
+    }
+  }, [commissionId, validId]);
+
   useEffect(() => {
     if (!validId) return;
     let cancelled = false;
     setInitialLoading(true);
     setInitialError(null);
-    api
-      .getCommission(commissionId)
-      .then((d) => {
+    Promise.all([
+      api.getCommission(commissionId),
+      api.getCommissionVisibility(commissionId),
+    ])
+      .then(([d, v]) => {
         if (cancelled) return;
         setTitle(d.title ?? "");
         setDescription(d.description ?? "");
@@ -77,6 +113,7 @@ export function EditPage() {
         setTags(d.tags);
         setCharacters(d.characters);
         setArtists(d.artists);
+        setVisibility(v);
       })
       .catch((e) => !cancelled && setInitialError(String(e)))
       .finally(() => !cancelled && setInitialLoading(false));
@@ -103,6 +140,58 @@ export function EditPage() {
         <div style={{ padding: 24 }} className="error-text">{initialError}</div>
       </div>
     );
+  }
+
+  function setCommissionVisibility(value: Visibility | null) {
+    setVisibility((current) =>
+      current ? { ...current, visibility: value } : current,
+    );
+  }
+
+  function setFieldVisibility(field: VisibilityFieldKey, value: boolean | null) {
+    setVisibility((current) =>
+      current
+        ? {
+            ...current,
+            fields: current.fields.map((f) =>
+              f.field === field ? { ...f, public: value } : f,
+            ),
+          }
+        : current,
+    );
+  }
+
+  function setNodeVisibility(node: CommissionNode, value: Visibility | null) {
+    setVisibility((current) =>
+      current
+        ? {
+            ...current,
+            nodes: current.nodes.map((n) =>
+              n.id === node.id ? { ...n, visibility: value } : n,
+            ),
+          }
+        : current,
+    );
+  }
+
+  function setFileVisibility(file: CommissionFile, value: Visibility | null) {
+    setVisibility((current) =>
+      current
+        ? {
+            ...current,
+            nodes: current.nodes.map((n) => ({
+              ...n,
+              files: n.files.map((f) =>
+                f.id === file.id ? { ...f, visibility: value } : f,
+              ),
+            })),
+          }
+        : current,
+    );
+  }
+
+  function fieldVis(field: VisibilityFieldKey) {
+    return visibility?.fields.find((f) => f.field === field) ?? null;
   }
 
   async function submit(e: React.FormEvent) {
@@ -132,9 +221,30 @@ export function EditPage() {
           pendingFocal.zoom,
         );
       }
+      if (visibility) {
+        // Whole-shot replay: the backend accepts per-id maps and applies
+        // each row, so we ship the full state. Nodes/files added by the
+        // stages editor mid-session are absent from this state but get
+        // refetched after every onChange so the next save covers them.
+        await api.updateCommissionVisibility(commissionId, {
+          visibility: visibility.visibility,
+          fields: Object.fromEntries(
+            visibility.fields.map((f) => [f.field, f.public]),
+          ),
+          nodes: Object.fromEntries(
+            visibility.nodes.map((n) => [n.id, n.visibility]),
+          ),
+          files: Object.fromEntries(
+            visibility.nodes.flatMap((n) =>
+              n.files.map((f) => [f.id, f.visibility] as const),
+            ),
+          ),
+        });
+      }
       navigate(`/commissions/${commissionId}`);
     } catch (err) {
-      // stay on the page: form fields and any staged focal edit are kept
+      // stay on the page: form fields, visibility toggles, and any staged
+      // focal edit are kept
       setError(String(err));
     } finally {
       setBusy(false);
@@ -170,34 +280,104 @@ export function EditPage() {
 
       <form id="commission-edit-form" onSubmit={submit} className="edit-page">
         <div className="edit-main">
-          <input
-            className="field edit-title-input"
-            value={title}
-            placeholder="Untitled Commission"
-            onChange={(e) => setTitle(e.target.value)}
-          />
-          <textarea
-            className="field edit-description-input"
-            rows={2}
-            placeholder="Description…"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-          />
+          <FieldGroup
+            label="Title"
+            visibility={
+              fieldVis("title") && (
+                <FieldVisibilityToggle
+                  value={fieldVis("title")!.public}
+                  effective={fieldVis("title")!.effective_public}
+                  onChange={(v) => setFieldVisibility("title", v)}
+                  ariaLabel="Title visibility"
+                />
+              )
+            }
+          >
+            <input
+              className="field edit-title-input"
+              value={title}
+              placeholder="Untitled Commission"
+              onChange={(e) => setTitle(e.target.value)}
+            />
+          </FieldGroup>
+
+          <FieldGroup
+            label="Description"
+            visibility={
+              fieldVis("description") && (
+                <FieldVisibilityToggle
+                  value={fieldVis("description")!.public}
+                  effective={fieldVis("description")!.effective_public}
+                  onChange={(v) => setFieldVisibility("description", v)}
+                  ariaLabel="Description visibility"
+                />
+              )
+            }
+          >
+            <textarea
+              className="field edit-description-input"
+              rows={2}
+              placeholder="Description…"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
+          </FieldGroup>
 
           <div style={{ marginTop: 18 }}>
-            <StagesEditor commissionId={commissionId} onChange={bumpCoverVersion} />
+            <StagesEditor
+              commissionId={commissionId}
+              onChange={() => {
+                bumpCoverVersion();
+                // Nodes or files may have appeared/disappeared (upload, delete,
+                // move). Pull a fresh visibility snapshot so the per-row
+                // toggles cover the new shape.
+                void reloadVisibility();
+              }}
+              onNodeVisibilityChange={setNodeVisibility}
+              onFileVisibilityChange={setFileVisibility}
+            />
           </div>
 
           {error && <div className="error-text" style={{ marginTop: 12 }}>{error}</div>}
         </div>
 
         <aside className="edit-rail">
+          {visibility && (
+            <div className="edit-commission-visibility">
+              <div className="edit-field-label-row">
+                <strong>Commission</strong>
+                <VisibilityToggle
+                  value={visibility.visibility}
+                  effective={visibility.effective_visibility}
+                  onChange={setCommissionVisibility}
+                  ariaLabel="Commission visibility"
+                />
+              </div>
+              <div className="mono-sm muted">
+                Default for every stage / file with no override. Precedence:
+                site default → commission → stage → file.
+              </div>
+            </div>
+          )}
+
           <CoverFocalEditor
             commissionId={commissionId}
             version={coverVersion}
             onStage={setPendingFocal}
           />
-          <FieldGroup label="Confirmed">
+          <FieldGroup
+            label={EDITABLE_FIELDS.confirmed_at}
+            visibility={
+              fieldVis("confirmed_at") && (
+                <FieldVisibilityToggle
+                  value={fieldVis("confirmed_at")!.public}
+                  effective={fieldVis("confirmed_at")!.effective_public}
+                  onChange={(v) => setFieldVisibility("confirmed_at", v)}
+                  ariaLabel="Confirmed-at visibility"
+                />
+              )
+            }
+          >
             <input
               className="field"
               type="date"
@@ -205,7 +385,19 @@ export function EditPage() {
               onChange={(e) => setConfirmedAt(e.target.value)}
             />
           </FieldGroup>
-          <FieldGroup label="Price">
+          <FieldGroup
+            label={EDITABLE_FIELDS.price}
+            visibility={
+              fieldVis("price") && (
+                <FieldVisibilityToggle
+                  value={fieldVis("price")!.public}
+                  effective={fieldVis("price")!.effective_public}
+                  onChange={(v) => setFieldVisibility("price", v)}
+                  ariaLabel="Price visibility"
+                />
+              )
+            }
+          >
             <div className="row gap-4">
               <input
                 className="field"
@@ -228,7 +420,19 @@ export function EditPage() {
             </div>
           </FieldGroup>
 
-          <FieldGroup label="Rating · pick one">
+          <FieldGroup
+            label="Rating · pick one"
+            visibility={
+              fieldVis("rating") && (
+                <FieldVisibilityToggle
+                  value={fieldVis("rating")!.public}
+                  effective={fieldVis("rating")!.effective_public}
+                  onChange={(v) => setFieldVisibility("rating", v)}
+                  ariaLabel="Rating visibility"
+                />
+              )
+            }
+          >
             <div className="row gap-4 wrap">
               {RATINGS.map((r) => (
                 <button
@@ -246,23 +450,64 @@ export function EditPage() {
             </div>
           </FieldGroup>
 
-          <FieldGroup label="Categories">
-            <TaxonomyPicker kind="category" values={categories} onChange={setCategories} />
+          <FieldGroup
+            label={EDITABLE_FIELDS.labels}
+            visibility={
+              fieldVis("labels") && (
+                <FieldVisibilityToggle
+                  value={fieldVis("labels")!.public}
+                  effective={fieldVis("labels")!.effective_public}
+                  onChange={(v) => setFieldVisibility("labels", v)}
+                  ariaLabel="Categories and tags visibility"
+                />
+              )
+            }
+          >
+            <div className="edit-labels-grid">
+              <div>
+                <div className="mono-sm muted" style={{ marginBottom: 4 }}>
+                  Categories
+                </div>
+                <TaxonomyPicker kind="category" values={categories} onChange={setCategories} />
+              </div>
+              <div>
+                <div className="mono-sm muted" style={{ marginBottom: 4 }}>
+                  Tags
+                </div>
+                <TaxonomyPicker kind="tag" values={tags} onChange={setTags} />
+              </div>
+            </div>
           </FieldGroup>
-          <FieldGroup label="Tags">
-            <TaxonomyPicker kind="tag" values={tags} onChange={setTags} />
-          </FieldGroup>
-          <FieldGroup label="Characters">
+          <FieldGroup
+            label={EDITABLE_FIELDS.characters}
+            visibility={
+              fieldVis("characters") && (
+                <FieldVisibilityToggle
+                  value={fieldVis("characters")!.public}
+                  effective={fieldVis("characters")!.effective_public}
+                  onChange={(v) => setFieldVisibility("characters", v)}
+                  ariaLabel="Characters visibility"
+                />
+              )
+            }
+          >
             <TaxonomyPicker kind="character" values={characters} onChange={setCharacters} />
           </FieldGroup>
-          <FieldGroup label="Artists">
+          <FieldGroup
+            label={EDITABLE_FIELDS.artists}
+            visibility={
+              fieldVis("artists") && (
+                <FieldVisibilityToggle
+                  value={fieldVis("artists")!.public}
+                  effective={fieldVis("artists")!.effective_public}
+                  onChange={(v) => setFieldVisibility("artists", v)}
+                  ariaLabel="Artists visibility"
+                />
+              )
+            }
+          >
             <TaxonomyPicker kind="artist" values={artists} onChange={setArtists} />
           </FieldGroup>
-
-          <Link to={`/commissions/${commissionId}/visibility`} className="btn">
-            <Eye />
-            Edit visibility
-          </Link>
         </aside>
       </form>
     </div>
@@ -270,16 +515,25 @@ export function EditPage() {
 }
 
 /**
- * Renders a labeled wrapper for a form section.
- *
- * @param label - The text shown as the group's label
- * @param children - The contents of the field group
- * @returns A JSX element containing the label and the group's children
+ * Labeled wrapper for a form section. The optional `visibility` slot renders a
+ * three-state Public/Private/Inherit toggle next to the label so every editable
+ * field carries its visibility control inline.
  */
-function FieldGroup({ label, children }: { label: string; children: React.ReactNode }) {
+function FieldGroup({
+  label,
+  children,
+  visibility,
+}: {
+  label: string;
+  children: React.ReactNode;
+  visibility?: React.ReactNode;
+}) {
   return (
     <div className="edit-field-group">
-      <div className="label">{label}</div>
+      <div className="edit-field-label-row">
+        <div className="label">{label}</div>
+        {visibility}
+      </div>
       {children}
     </div>
   );

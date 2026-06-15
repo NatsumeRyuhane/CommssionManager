@@ -1,10 +1,11 @@
 import { useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { Star, Trash2, Upload, X } from "lucide-react";
 
-import type { CommissionFile, CommissionNode } from "../api/types";
+import type { CommissionFile, CommissionNode, Visibility } from "../api/types";
 import { Chip } from "./Chip";
 import { Cover } from "./Cover";
 import { ImageViewerModal } from "./ImageViewerModal";
+import { VisibilityToggle } from "./VisibilityToggle";
 
 const NODE_DRAG_TYPE = "application/x-cmgr-node-id";
 const FILE_DRAG_TYPE = "application/x-cmgr-file-id";
@@ -50,6 +51,13 @@ interface LifecycleStagesListProps {
   onSetCover?: (file: CommissionFile) => void;
   onDeleteFile?: (file: CommissionFile) => void;
   onEditDate?: (node: CommissionNode) => void;
+  /** Edit-mode-only: when supplied, every stage header gains an inline
+   * Public/Private/Inherit toggle. Reads effective_visibility for the
+   * fallback label and node.visibility for the current override state. */
+  onNodeVisibilityChange?: (node: CommissionNode, next: Visibility | null) => void;
+  /** Edit-mode-only: when supplied, every file tile gains an inline
+   * Public/Private/Inherit toggle. */
+  onFileVisibilityChange?: (file: CommissionFile, next: Visibility | null) => void;
   renderStageActions?: (node: CommissionNode, index: number) => ReactNode;
 }
 
@@ -82,6 +90,8 @@ export function LifecycleStagesList({
   onSetCover,
   onDeleteFile,
   onEditDate,
+  onNodeVisibilityChange,
+  onFileVisibilityChange,
   renderStageActions,
 }: LifecycleStagesListProps) {
   const [viewer, setViewer] = useState<{ nodeId: number; fileId: number } | null>(null);
@@ -114,6 +124,8 @@ export function LifecycleStagesList({
             onSetCover={onSetCover}
             onDeleteFile={onDeleteFile}
             onEditDate={onEditDate}
+            onNodeVisibilityChange={onNodeVisibilityChange}
+            onFileVisibilityChange={onFileVisibilityChange}
             onOpenImage={(fileId) => setViewer({ nodeId: node.id, fileId })}
             stageActions={renderStageActions?.(node, index)}
           />
@@ -166,6 +178,8 @@ function LifecycleStage({
   onSetCover,
   onDeleteFile,
   onEditDate,
+  onNodeVisibilityChange,
+  onFileVisibilityChange,
   onOpenImage,
   stageActions,
 }: {
@@ -182,6 +196,8 @@ function LifecycleStage({
   onSetCover?: (file: CommissionFile) => void;
   onDeleteFile?: (file: CommissionFile) => void;
   onEditDate?: (node: CommissionNode) => void;
+  onNodeVisibilityChange?: (node: CommissionNode, next: Visibility | null) => void;
+  onFileVisibilityChange?: (file: CommissionFile, next: Visibility | null) => void;
   onOpenImage: (fileId: number) => void;
   stageActions?: ReactNode;
 }) {
@@ -302,6 +318,15 @@ function LifecycleStage({
             />
           </>
         )}
+        {onNodeVisibilityChange && node.effective_visibility && (
+          <VisibilityToggle
+            value={node.visibility}
+            effective={node.effective_visibility}
+            disabled={busy || node.is_detached}
+            onChange={(next) => onNodeVisibilityChange(node, next)}
+            ariaLabel={`Visibility for ${node.name}`}
+          />
+        )}
         {stageActions}
       </div>
       {node.files.length === 0 && uploads.length === 0 ? (
@@ -317,11 +342,13 @@ function LifecycleStage({
               isCover={file.id === coverFileId}
               busy={busy}
               nodeId={node.id}
+              isDetached={node.is_detached}
               filesById={filesById}
               onMoveFile={onMoveFile}
               onReorderFile={onReorderFile}
               onSetCover={onSetCover}
               onDeleteFile={onDeleteFile}
+              onFileVisibilityChange={onFileVisibilityChange}
               onOpenImage={onOpenImage}
             />
           ))}
@@ -415,25 +442,29 @@ function LifecycleFileTile({
   isCover,
   busy,
   nodeId,
+  isDetached,
   filesById,
   onMoveFile,
   onReorderFile,
   onSetCover,
   onDeleteFile,
+  onFileVisibilityChange,
   onOpenImage,
 }: {
   file: CommissionFile;
   isCover: boolean;
   busy: boolean;
   nodeId: number;
+  isDetached: boolean;
   filesById: Map<number, CommissionFile>;
   onMoveFile?: (file: CommissionFile, targetNodeId: number) => void;
   onReorderFile?: (nodeId: number, draggedFileId: number, targetFileId: number) => void;
   onSetCover?: (file: CommissionFile) => void;
   onDeleteFile?: (file: CommissionFile) => void;
+  onFileVisibilityChange?: (file: CommissionFile, next: Visibility | null) => void;
   onOpenImage: (fileId: number) => void;
 }) {
-  const editable = Boolean(onSetCover || onDeleteFile);
+  const editable = Boolean(onSetCover || onDeleteFile || onFileVisibilityChange);
   const [reorderTarget, setReorderTarget] = useState(false);
   const draggable = Boolean(!busy && (onMoveFile || onReorderFile));
   return (
@@ -506,6 +537,15 @@ function LifecycleFileTile({
       </div>
       {editable && (
         <div className="lifecycle-file-actions">
+          {onFileVisibilityChange && file.effective_visibility && (
+            <VisibilityToggle
+              value={file.visibility}
+              effective={file.effective_visibility}
+              disabled={busy || isDetached}
+              onChange={(next) => onFileVisibilityChange(file, next)}
+              ariaLabel={`Visibility for file ${file.label || file.format}`}
+            />
+          )}
           {file.is_image && onSetCover && (
             <button
               type="button"

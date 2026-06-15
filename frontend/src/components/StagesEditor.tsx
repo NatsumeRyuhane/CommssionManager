@@ -7,6 +7,7 @@ import type {
   CommissionFile,
   CommissionNode,
   StorageCapabilities,
+  Visibility,
 } from "../api/types";
 import { LifecycleStagesList, type FileUploadPreview } from "./LifecycleStagesList";
 import { NodeDateModal } from "./NodeDateModal";
@@ -24,9 +25,16 @@ import { NodeDateModal } from "./NodeDateModal";
 export function StagesEditor({
   commissionId,
   onChange,
+  onNodeVisibilityChange,
+  onFileVisibilityChange,
 }: {
   commissionId: number;
   onChange?: () => void;
+  /** Optional: forwarded to `LifecycleStagesList` so the edit page can hoist
+   * per-stage visibility changes into its pending-changes buffer. When omitted
+   * the toggles are simply not rendered (read-only contexts). */
+  onNodeVisibilityChange?: (node: CommissionNode, next: Visibility | null) => void;
+  onFileVisibilityChange?: (file: CommissionFile, next: Visibility | null) => void;
 }) {
   const [detail, setDetail] = useState<CommissionDetail | null>(null);
   const [newStage, setNewStage] = useState("");
@@ -336,6 +344,8 @@ export function StagesEditor({
           }
         }}
         onEditDate={setDateNode}
+        onNodeVisibilityChange={onNodeVisibilityChange}
+        onFileVisibilityChange={onFileVisibilityChange}
         renderStageActions={(node) => {
           if (node.is_detached) return null;
           return (
