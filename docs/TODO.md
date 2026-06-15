@@ -197,6 +197,34 @@
     cumulative (Mature ⊇ General, Adult ⊇ all), persisted in localStorage; popover rating
     filters are pruned/disabled above the gate
   - Search & filter popover gains Tags, Characters, and Artists chip groups
+- [x] Live-togglable direct-to-S3 uploads (issue #26)
+  - `app_settings.allow_direct_upload` (Settings → Storage toggle, default off);
+    when on and the configured backend is `s3`, browsers `PUT` file bytes straight
+    to the bucket via a short-lived presigned URL (15-min TTL by default,
+    `CMGR_STORAGE_UPLOAD_URL_TTL`) instead of routing them through the app
+  - `POST /nodes/{id}/uploads` mints the session + presigned PUT;
+    `POST /uploads/{sid}/finalize` verifies the object via `HeadObject`, probes
+    image metadata, and creates the `storage_objects` + `commission_files` rows
+    transactionally (idempotent on retry);
+    `DELETE /uploads/{sid}` cancels and cleans up the orphan bytes;
+    `POST /uploads/cleanup` sweeps expired-unfinalized sessions (also runs
+    opportunistically on session create)
+  - Storage abstraction grew `presign_upload` + `head_object` —
+    `LocalStorage.presign_upload` returns `None` so the proxied path keeps
+    working; `S3Storage` signs Content-Type so the browser must declare it,
+    and Etag-driven verification fills in for a checksum during finalize
+  - `GET /settings/storage/capabilities` drives the frontend path choice;
+    the upload session toggle remains read per-request from the DB so a
+    multi-worker deployment observes flips without restarts. The
+    `CMGR_STORAGE_DIRECT_UPLOAD_ALLOWED` env kill switch blocks the toggle
+    from being enabled in deployments where bucket CORS isn't configured
+  - Frontend `StagesEditor` branches on capabilities: direct path is
+    presign → XHR PUT (progress) → finalize; failures during PUT cancel the
+    session instead of silently falling back to proxied uploads (bytes may
+    already be in S3 under the same key). New `processing` upload status
+    holds the tile at "Processing…" until finalize confirms registration
+  - Provider CORS configuration (Cloudflare R2 / AWS S3 / MinIO) is
+    documented in `docs/direct-upload-cors.md`
 
 ## Phase 3 — Optional / advanced (deferred)
 - [ ] MCP server wrapping the REST API (tools: create_commission, upload_file, search, set_focal_point)
