@@ -225,6 +225,29 @@
     holds the tile at "Processing…" until finalize confirms registration
   - Provider CORS configuration (Cloudflare R2 / AWS S3 / MinIO) is
     documented in `docs/direct-upload-cors.md`
+  - Pending-upload tiles are first-class on the lifecycle grid:
+    cross-stage drag (deferred `moveFile` after the file lands),
+    click-to-retry on failure (resets the preview and re-runs the same
+    transport), and Save gated until every tile drains. Still locked out
+    of viewer, set-cover, and file-delete because `LifecycleUploadTile` is a
+    distinct component from `LifecycleFileTile`
+  - Agent-facing API: `GET /nodes/{id}/uploads` lists pending sessions
+    (admin-only, finalized rows excluded) and `GET /uploads/{sid}` returns
+    a single session with server-derived `is_expired` / `is_finalized` so
+    callers never parse timestamps. `delete_node` best-effort drops bytes
+    for the node's pending sessions before the FK cascade so the keys
+    never become permanent orphans
+- [x] Edit-page UX overhaul (companion to #26)
+  - Uploads no longer flip the shared `busy` flag — the rest of the editor
+    stays interactive (rename, reorder, more uploads) while bytes are in
+    flight; per-tile preview state communicates progress
+  - Admins clicking a commission card land directly on `/edit` (the edit
+    view is a strict superset of the read-only detail view); the catch-all
+    `/visibility` redirect preserves existing bookmarks
+  - **Breaking:** standalone `/commissions/{id}/visibility` page removed;
+    every visibility override is now an inline Public/Private/Inherit
+    toggle next to its component (commission, fields, stages, files). One
+    Save commits metadata + focal + visibility together
 
 ## Phase 3 — Optional / advanced (deferred)
 - [ ] MCP server wrapping the REST API (tools: create_commission, upload_file, search, set_focal_point)
