@@ -180,7 +180,9 @@ export function StagesEditor({
     });
 
     setUploads((current) => [...current, ...pending.map(({ preview }) => preview)]);
-    setBusy(true);
+    // Uploads run in the background — the per-tile preview communicates progress.
+    // We deliberately don't flip `busy`: the user should still be able to rename
+    // stages, reorder, edit dates, and start more uploads while bytes are in flight.
     setError(null);
 
     function updateUpload(id: string, patch: Partial<FileUploadPreview>) {
@@ -258,8 +260,7 @@ export function StagesEditor({
         if (failed > 0) {
           setError(`${failed} ${failed === 1 ? "file" : "files"} failed to upload.`);
         }
-      })
-      .finally(() => setBusy(false));
+      });
   }
 
   /**
