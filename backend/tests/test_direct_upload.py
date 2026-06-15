@@ -38,6 +38,7 @@ def s3_storage(monkeypatch: pytest.MonkeyPatch) -> S3Storage:
         signed_url_ttl=600,
     )
     monkeypatch.setattr("app.api.v1.routers.files.get_storage", lambda: storage)
+    monkeypatch.setattr("app.api.v1.routers.nodes.get_storage", lambda: storage)
     monkeypatch.setattr("app.images.get_storage", lambda: storage)
     # The direct-upload gates compare against the live env-backed settings.
     monkeypatch.setattr(settings, "storage_backend", "s3")
@@ -468,11 +469,207 @@ def test_site_settings_round_trip_includes_direct_upload(
         assert row.allow_direct_upload is True
 
 
+# ---------------------------------------------------------------- agent-facing read endpoints
+
+def test_list_node_uploads_returns_pending_only(
+    admin_client: TestClient, s3_storage: S3Storage
+):
+    """Agents listing a node should see only the sessions that need their
+    attention — finalized and cancelled sessions disappear from the listing."""
+    _enable_direct_upload(admin_client)
+    _, node_id = _create_commission(admin_client)
+    raw = _png()
+
+    # one finalized
+    s_finalized = admin_client.post(
+        f"/api/v1/nodes/{node_id}/uploads",
+        json={"filename": "done.png", "content_type": "image/png", "size_bytes": len(raw)},
+    ).json()
+    _put_bytes(s3_storage, _key_from_url(s_finalized["upload_url"]), raw, "image/png")
+    assert (
+        admin_client.post(f"/api/v1/uploads/{s_finalized['session_id']}/finalize").status_code
+        == 201
+    )
+
+    # one cancelled
+    s_cancelled = admin_client.post(
+        f"/api/v1/nodes/{node_id}/uploads",
+        json={"filename": "cancel.png", "content_type": "image/png", "size_bytes": len(raw)},
+    ).json()
+    admin_client.delete(f"/api/v1/uploads/{s_cancelled['session_id']}")
+
+    # one still pending
+    s_pending = admin_client.post(
+        f"/api/v1/nodes/{node_id}/uploads",
+        json={"filename": "wait.png", "content_type": "image/png", "size_bytes": len(raw)},
+    ).json()
+
+    res = admin_client.get(f"/api/v1/nodes/{node_id}/uploads")
+    assert res.status_code == 200
+    listed = res.json()
+    assert [row["session_id"] for row in listed] == [s_pending["session_id"]]
+    assert listed[0]["is_finalized"] is False
+    assert listed[0]["is_expired"] is False
+    assert listed[0]["filename"] == "wait.png"
+
+
+def test_list_node_uploads_requires_admin(
+    admin_client: TestClient, s3_storage: S3Storage
+):
+    """Write-scoped API keys are explicitly *not* admins — listing pending
+    uploads is admin-only, mirroring create-session."""
+    _enable_direct_upload(admin_client)
+    _, node_id = _create_commission(admin_client)
+    key = admin_client.post(
+        "/api/v1/api-keys", json={"name": "agent", "scopes": ["write"]}
+    ).json()["full_key"]
+
+    admin_client.post("/api/v1/auth/logout")
+    res = admin_client.get(
+        f"/api/v1/nodes/{node_id}/uploads",
+        headers={"X-API-Key": key},
+    )
+    assert res.status_code == 400, res.text
+
+
+def test_get_upload_session_status_pending_and_finalized(
+    admin_client: TestClient, s3_storage: S3Storage
+):
+    """An agent that holds a session id can ask whether it's finalized yet,
+    and after finalize the response carries the resulting commission_file_id."""
+    _enable_direct_upload(admin_client)
+    _, node_id = _create_commission(admin_client)
+    raw = _png()
+    session = admin_client.post(
+        f"/api/v1/nodes/{node_id}/uploads",
+        json={"filename": "tracked.png", "content_type": "image/png", "size_bytes": len(raw)},
+    ).json()
+
+    before = admin_client.get(f"/api/v1/uploads/{session['session_id']}").json()
+    assert before["is_finalized"] is False
+    assert before["is_expired"] is False
+    assert before["commission_file_id"] is None
+    assert before["filename"] == "tracked.png"
+
+    _put_bytes(s3_storage, _key_from_url(session["upload_url"]), raw, "image/png")
+    finalized = admin_client.post(
+        f"/api/v1/uploads/{session['session_id']}/finalize"
+    )
+    file_id = finalized.json()["id"]
+
+    after = admin_client.get(f"/api/v1/uploads/{session['session_id']}").json()
+    assert after["is_finalized"] is True
+    assert after["is_expired"] is False
+    assert after["commission_file_id"] == file_id
+
+
+def test_get_upload_session_status_reports_expired(
+    admin_client: TestClient, s3_storage: S3Storage, engine
+):
+    """A pending session past its presign TTL reports `is_expired=true`. We
+    derive it server-side so agents don't have to parse timestamps."""
+    _enable_direct_upload(admin_client)
+    _, node_id = _create_commission(admin_client)
+    raw = _png()
+    session = admin_client.post(
+        f"/api/v1/nodes/{node_id}/uploads",
+        json={"filename": "stale.png", "content_type": "image/png", "size_bytes": len(raw)},
+    ).json()
+
+    TestSession = sessionmaker(
+        bind=engine, autoflush=False, expire_on_commit=False, future=True
+    )
+    with TestSession() as db:
+        row = db.get(UploadSession, session["session_id"])
+        row.expires_at = datetime.now(timezone.utc) - timedelta(minutes=5)
+        db.commit()
+
+    status = admin_client.get(f"/api/v1/uploads/{session['session_id']}").json()
+    assert status["is_expired"] is True
+    assert status["is_finalized"] is False
+
+
+def test_get_upload_session_404_for_missing_id(admin_client: TestClient):
+    """An unknown session id returns 404 — important so agents can distinguish
+    "I lost the session" from "the server failed". No fixture / toggle needed
+    because the endpoint short-circuits on the missing row before touching
+    storage."""
+    res = admin_client.get("/api/v1/uploads/does-not-exist")
+    assert res.status_code == 404
+
+
+# ---------------------------------------------------------------- defensive cleanup on node delete
+
+def test_node_delete_cleans_pending_upload_bytes(
+    admin_client: TestClient, s3_storage: S3Storage, engine
+):
+    """Deleting a node with pending direct-upload sessions must not leave
+    orphan bytes in S3. The session row cascades on delete, so without this
+    cleanup the keys would become permanent garbage that cleanup_expired_
+    upload_sessions never sees."""
+    _enable_direct_upload(admin_client)
+    _, node_id = _create_commission(admin_client)
+    raw = _png()
+    session = admin_client.post(
+        f"/api/v1/nodes/{node_id}/uploads",
+        json={"filename": "orphan.png", "content_type": "image/png", "size_bytes": len(raw)},
+    ).json()
+    key = _key_from_url(session["upload_url"])
+    _put_bytes(s3_storage, key, raw, "image/png")
+    assert s3_storage.exists(key)
+
+    res = admin_client.delete(f"/api/v1/nodes/{node_id}")
+    assert res.status_code == 204, res.text
+
+    # bytes gone
+    assert not s3_storage.exists(key)
+    # session row gone too (FK cascade)
+    TestSession = sessionmaker(
+        bind=engine, autoflush=False, expire_on_commit=False, future=True
+    )
+    with TestSession() as db:
+        assert db.get(UploadSession, session["session_id"]) is None
+
+
+def test_node_delete_with_pending_session_does_not_abort_on_s3_failure(
+    admin_client: TestClient,
+    s3_storage: S3Storage,
+    engine,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """If S3 is unreachable while we're cleaning up orphans, the node delete
+    must still succeed — partial cleanup is better than aborting and leaving
+    the user stuck on a node they wanted gone."""
+    _enable_direct_upload(admin_client)
+    _, node_id = _create_commission(admin_client)
+    raw = _png()
+    session = admin_client.post(
+        f"/api/v1/nodes/{node_id}/uploads",
+        json={"filename": "flaky.png", "content_type": "image/png", "size_bytes": len(raw)},
+    ).json()
+    _put_bytes(s3_storage, _key_from_url(session["upload_url"]), raw, "image/png")
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("simulated S3 outage")
+
+    monkeypatch.setattr(s3_storage, "delete", boom)
+
+    res = admin_client.delete(f"/api/v1/nodes/{node_id}")
+    assert res.status_code == 204, res.text
+
+    TestSession = sessionmaker(
+        bind=engine, autoflush=False, expire_on_commit=False, future=True
+    )
+    with TestSession() as db:
+        # session row cascaded with the node even though byte cleanup failed
+        assert db.get(UploadSession, session["session_id"]) is None
+
+
 # ---------------------------------------------------------------- helpers
 
 def _key_from_url(url: str) -> str:
     # FakeS3Client returns URLs of the form
-    # https://signed.example/<bucket>/<key>?expires=...&op=...
+    # https://signed.example/<bucket>/<key>?op=...&expires=...
     prefix = "https://signed.example/direct-upload-test/"
     assert url.startswith(prefix), url
     return url[len(prefix) :].split("?", 1)[0]

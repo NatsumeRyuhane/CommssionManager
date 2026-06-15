@@ -596,6 +596,24 @@ class UploadSessionOut(BaseModel):
     expires_at: datetime
 
 
+class UploadSessionStatusOut(BaseModel):
+    """Agent-facing view of a pending or finalized upload session. The derived
+    `is_expired` / `is_finalized` flags keep callers from having to compare
+    timestamps client-side."""
+
+    session_id: str
+    node_id: int
+    filename: str
+    content_type: str
+    expected_size_bytes: int
+    created_at: datetime
+    expires_at: datetime
+    finalized_at: datetime | None
+    commission_file_id: int | None
+    is_expired: bool
+    is_finalized: bool
+
+
 class WebhookCreate(BaseModel):
     url: str
     events: list[WebhookEvent]

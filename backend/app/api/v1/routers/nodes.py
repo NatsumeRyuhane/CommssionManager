@@ -9,8 +9,15 @@ from sqlalchemy.orm import Session, selectinload
 from app.api.v1 import crud
 from app.auth.deps import Principal, get_principal, require_edit
 from app.db import get_db
-from app.models import Commission, CommissionFile, CommissionNode, Visibility
+from app.models import (
+    Commission,
+    CommissionFile,
+    CommissionNode,
+    UploadSession,
+    Visibility,
+)
 from app.schemas import NodeCreate, NodeOut, NodeReorder, NodeUpdate
+from app.storage import get_storage
 
 router = APIRouter(tags=["nodes"])
 
@@ -175,5 +182,27 @@ def delete_node(
         file.position = next_position + index
         file.node_id = detached.id
     db.flush()
+
+    # Best-effort cleanup of bytes from pending direct-upload sessions tied to
+    # this node. The FK cascade will drop the session rows along with the node,
+    # but `cleanup_expired_upload_sessions` only sees sessions still in the DB
+    # — without this loop the S3 keys would become permanent orphans. We
+    # swallow per-key errors so a transient S3 outage cannot block the delete.
+    pending_sessions = list(
+        db.scalars(
+            select(UploadSession).where(
+                UploadSession.node_id == node.id,
+                UploadSession.finalized_at.is_(None),
+            )
+        )
+    )
+    if pending_sessions:
+        storage = get_storage()
+        for session in pending_sessions:
+            try:
+                storage.delete(session.storage_key, bucket=session.storage_bucket)
+            except Exception:  # noqa: BLE001 — best-effort, never abort the delete
+                pass
+
     db.delete(node)
     db.commit()

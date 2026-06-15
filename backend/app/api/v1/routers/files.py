@@ -43,6 +43,7 @@ from app.schemas import (
     FileReorder,
     UploadSessionCreate,
     UploadSessionOut,
+    UploadSessionStatusOut,
 )
 from app.storage import get_storage
 
@@ -193,6 +194,30 @@ def _load_session_for_edit(
             status_code=status.HTTP_403_FORBIDDEN, detail="Edit access required"
         )
     return session
+
+
+def _session_status_out(session: UploadSession) -> UploadSessionStatusOut:
+    """Agent-facing projection of an UploadSession row. `is_expired` and
+    `is_finalized` are derived here so callers never have to compare a
+    timestamp to `now()` themselves."""
+    now = datetime.now(timezone.utc)
+    is_finalized = session.finalized_at is not None
+    # A session that finalized after its presign expired is NOT expired —
+    # finalization completed the lifecycle, so the expiry no longer matters.
+    is_expired = (not is_finalized) and session.expires_at < now
+    return UploadSessionStatusOut(
+        session_id=session.id,
+        node_id=session.node_id,
+        filename=session.filename,
+        content_type=session.content_type,
+        expected_size_bytes=session.expected_size_bytes,
+        created_at=session.created_at,
+        expires_at=session.expires_at,
+        finalized_at=session.finalized_at,
+        commission_file_id=session.commission_file_id,
+        is_expired=is_expired,
+        is_finalized=is_finalized,
+    )
 
 
 @router.post(
@@ -453,6 +478,62 @@ def finalize_upload_session(
         else None
     )
     return crud.file_out(file, cover_id, crud.load_visibility_context(db))
+
+
+@router.get(
+    "/nodes/{node_id}/uploads",
+    response_model=list[UploadSessionStatusOut],
+)
+def list_node_upload_sessions(
+    node_id: int,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_edit),
+):
+    """List pending upload sessions for a node so agents can coordinate around
+    in-flight uploads. Admin-only (matches the create-session gate); finalized
+    sessions are excluded — once a CommissionFile exists, the file APIs are
+    the right surface for further work."""
+    if principal.kind != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Upload session listing requires an admin session.",
+        )
+    if db.get(CommissionNode, node_id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Node not found"
+        )
+    sessions = list(
+        db.scalars(
+            select(UploadSession)
+            .where(
+                UploadSession.node_id == node_id,
+                UploadSession.finalized_at.is_(None),
+            )
+            .order_by(UploadSession.created_at)
+        )
+    )
+    return [_session_status_out(s) for s in sessions]
+
+
+@router.get(
+    "/uploads/{session_id}",
+    response_model=UploadSessionStatusOut,
+)
+def get_upload_session_status(
+    session_id: str,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_edit),
+):
+    """Single-session status for an agent that already holds a session id —
+    e.g., one it created itself and now wants to confirm finalized or expired.
+    Admin-only to match the listing and create-session gates."""
+    if principal.kind != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Upload session status requires an admin session.",
+        )
+    session = _load_session_for_edit(db, session_id, principal)
+    return _session_status_out(session)
 
 
 @router.post("/uploads/cleanup")
