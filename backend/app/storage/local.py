@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import hashlib
+import mimetypes
 from pathlib import Path
 from uuid import uuid4
 
-from app.storage.base import StorageBackendDriver, StoredFile
+from app.storage.base import ObjectMetadata, StorageBackendDriver, StoredFile
 
 
 class LocalStorage(StorageBackendDriver):
@@ -45,3 +46,15 @@ class LocalStorage(StorageBackendDriver):
 
     def exists(self, key: str, *, bucket: str | None = None) -> bool:
         return self._path(key).exists()
+
+    def head_object(
+        self, key: str, *, bucket: str | None = None
+    ) -> ObjectMetadata | None:
+        path = self._path(key)
+        if not path.exists():
+            return None
+        return ObjectMetadata(
+            size_bytes=path.stat().st_size,
+            content_type=mimetypes.guess_type(key)[0],
+            etag=None,
+        )
