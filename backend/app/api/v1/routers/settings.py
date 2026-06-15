@@ -14,6 +14,7 @@ from app.models import AppSettings, VisibilityStageDefault, WebhookEndpoint, Web
 from app.schemas import (
     SiteSettingsOut,
     SiteSettingsUpdate,
+    StorageCapabilitiesOut,
     StorageSettingsOut,
     VisibilitySettingsOut,
     VisibilitySettingsUpdate,
@@ -82,6 +83,23 @@ def update_site_settings(
         row.default_stage_names = ", ".join(body.default_stage_names)
     if body.allow_public_original_download is not None:
         row.allow_public_original_download = body.allow_public_original_download
+    if body.allow_direct_upload is not None:
+        # Block enabling at runtime when the deployment-level kill switch is off
+        # (bucket CORS may not be configured); disabling is always allowed.
+        if body.allow_direct_upload and not settings.storage_direct_upload_allowed:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "Direct uploads are disabled at the deployment level "
+                    "(CMGR_STORAGE_DIRECT_UPLOAD_ALLOWED=false)."
+                ),
+            )
+        if body.allow_direct_upload and settings.storage_backend != "s3":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Direct uploads require an S3-compatible storage backend.",
+            )
+        row.allow_direct_upload = body.allow_direct_upload
     row.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(row)
@@ -150,6 +168,26 @@ def get_storage_settings(principal: Principal = Depends(require_edit)):
         s3_bucket=settings.storage_s3_bucket if is_s3 else None,
         s3_endpoint=settings.storage_s3_endpoint if is_s3 else None,
         cdn_base_url=settings.storage_cdn_base_url if is_s3 else None,
+    )
+
+
+@router.get("/storage/capabilities", response_model=StorageCapabilitiesOut)
+def get_storage_capabilities(
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_edit),
+):
+    """Tells the frontend which upload path to use right now. Read per-request from
+    the DB so a multi-worker deployment observes the toggle immediately."""
+    _require_admin(principal)
+    supported = (
+        settings.storage_backend == "s3" and settings.storage_direct_upload_allowed
+    )
+    enabled = crud.direct_upload_enabled(db)
+    return StorageCapabilitiesOut(
+        backend=settings.storage_backend,
+        direct_upload_supported=supported,
+        direct_upload_enabled=enabled,
+        direct_upload_available=supported and enabled,
     )
 
 

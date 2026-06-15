@@ -208,8 +208,46 @@ class AppSettings(Base):
     artists_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     confirmed_at_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     price_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # When True and the configured backend supports browser-direct uploads, the
+    # frontend skips the proxied multipart endpoint and PUTs bytes straight to the
+    # storage backend. Read per-request — toggle changes take effect for newly
+    # initiated uploads without restarting workers.
+    allow_direct_upload: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class UploadSession(Base):
+    """Pending browser-direct upload. Created when a client requests a presigned
+    URL, finalized after the PUT completes — verification, derivative kickoff,
+    and CommissionFile creation all happen in finalize so a lost finalization
+    can be retried idempotently against the same session id."""
+
+    __tablename__ = "upload_sessions"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    node_id: Mapped[int] = mapped_column(
+        ForeignKey("commission_nodes.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    storage_backend: Mapped[StorageBackend] = mapped_column(
+        Enum(StorageBackend, name="storage_backend"), nullable=False
+    )
+    storage_bucket: Mapped[str | None] = mapped_column(String)
+    storage_key: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    filename: Mapped[str] = mapped_column(String, nullable=False)
+    content_type: Mapped[str] = mapped_column(String, nullable=False)
+    expected_size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    label: Mapped[str | None] = mapped_column(String)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    finalized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    commission_file_id: Mapped[int | None] = mapped_column(
+        ForeignKey("commission_files.id", ondelete="SET NULL")
     )
 
 

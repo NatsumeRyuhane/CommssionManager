@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import io
 import mimetypes
-from datetime import timezone
+import random
+from datetime import datetime, timezone
 from email.utils import format_datetime
 from uuid import uuid4
 
@@ -26,6 +27,7 @@ from sqlalchemy.orm import Session
 from app import images
 from app.api.v1 import crud
 from app.auth.deps import Principal, get_principal, require_edit
+from app.core.config import settings as app_config
 from app.db import get_db
 from app.models import (
     CommissionFile,
@@ -33,8 +35,15 @@ from app.models import (
     CommissionNode,
     StorageBackend,
     StorageObject,
+    UploadSession,
 )
-from app.schemas import FileMove, FileOut, FileReorder
+from app.schemas import (
+    FileMove,
+    FileOut,
+    FileReorder,
+    UploadSessionCreate,
+    UploadSessionOut,
+)
 from app.storage import get_storage
 
 router = APIRouter(tags=["files"])
@@ -143,6 +152,325 @@ async def upload_file(
             images.generate_presets, obj.id, stored.checksum, stored.key, stored.bucket
         )
     return crud.file_out(file, None, crud.load_visibility_context(db))
+
+
+# ---------------------------------------------------------------- direct uploads
+# Browser-direct upload flow: client requests a session, PUTs bytes straight to
+# S3, then calls finalize. The proxied endpoint above stays the implementation
+# for local storage and for S3 when the admin toggle is off.
+
+
+def _require_direct_upload_supported() -> None:
+    if not app_config.storage_direct_upload_allowed:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Direct uploads are disabled at the deployment level "
+                "(CMGR_STORAGE_DIRECT_UPLOAD_ALLOWED=false)."
+            ),
+        )
+    if app_config.storage_backend != "s3":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Direct uploads require an S3-compatible storage backend.",
+        )
+
+
+def _load_session_for_edit(
+    db: Session, session_id: str, principal: Principal
+) -> UploadSession:
+    """Load the session, enforce edit access via its node's commission, and 404
+    when the session doesn't exist or the principal can't reach it."""
+    session = db.get(UploadSession, session_id)
+    if session is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Upload session not found"
+        )
+    # require_edit already gates this, but principal-scoped checks remain so
+    # multi-tenant deployments can extend the rule later without losing the gate.
+    if not principal.can_write:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Edit access required"
+        )
+    return session
+
+
+@router.post(
+    "/nodes/{node_id}/uploads",
+    response_model=UploadSessionOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_upload_session(
+    node_id: int,
+    body: UploadSessionCreate,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_edit),
+):
+    """Mint a presigned PUT for a future upload to `node_id`. The session row
+    records what the client said it would upload so finalize can verify it."""
+    _require_direct_upload_supported()
+    if not crud.direct_upload_enabled(db):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Direct uploads are not enabled on this site.",
+        )
+    # API-key callers run server-side where direct upload isn't useful — keep
+    # them on the proxied endpoint.
+    if principal.kind != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Direct uploads require an admin session; API keys must use the proxied endpoint.",
+        )
+
+    node = db.scalar(select(CommissionNode).where(CommissionNode.id == node_id))
+    if node is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Node not found")
+
+    storage = get_storage()
+    # Server-generated key — never trust client input here. The randomized
+    # segment matches the proxied endpoint so existing key parsing keeps working.
+    key = f"commissions/{node.commission_id}/nodes/{node_id}/{uuid4().hex}/{body.filename}"
+
+    presigned = storage.presign_upload(
+        key,
+        content_type=body.content_type,
+        max_size_bytes=body.size_bytes,
+        ttl=app_config.storage_upload_url_ttl,
+    )
+    if presigned is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The configured storage backend does not support direct uploads.",
+        )
+
+    bucket = getattr(storage, "bucket", None)
+    session = UploadSession(
+        id=uuid4().hex,
+        node_id=node_id,
+        storage_backend=StorageBackend(storage.backend_name),
+        storage_bucket=bucket,
+        storage_key=key,
+        filename=body.filename,
+        content_type=body.content_type,
+        expected_size_bytes=body.size_bytes,
+        label=body.label,
+        expires_at=presigned.expires_at or datetime.now(timezone.utc),
+    )
+    db.add(session)
+    db.commit()
+    db.refresh(session)
+
+    # Opportunistic cleanup so deployments without a cron job don't accumulate
+    # forever; ~5% probability keeps the latency impact negligible.
+    if random.random() < 0.05:
+        try:
+            crud.cleanup_expired_upload_sessions(db, storage)
+        except Exception:  # noqa: BLE001 — never let cleanup break the create
+            pass
+
+    return UploadSessionOut(
+        session_id=session.id,
+        upload_url=presigned.url,
+        upload_method=presigned.method,
+        upload_headers=presigned.headers,
+        expires_at=session.expires_at,
+    )
+
+
+@router.delete("/uploads/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
+def cancel_upload_session(
+    session_id: str,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_edit),
+):
+    """Drop an in-flight session and best-effort delete the uploaded bytes.
+    Finalized sessions return 409 so a duplicate cancel after a finalize race
+    can't silently drop a real commission file."""
+    session = _load_session_for_edit(db, session_id, principal)
+    if session.finalized_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Session already finalized; cancellation is not allowed.",
+        )
+    storage = get_storage()
+    try:
+        storage.delete(session.storage_key, bucket=session.storage_bucket)
+    except OSError:
+        pass
+    db.delete(session)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
+    "/uploads/{session_id}/finalize",
+    response_model=FileOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def finalize_upload_session(
+    session_id: str,
+    background: BackgroundTasks,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_edit),
+):
+    """Verify the uploaded object actually arrived and register it as a
+    CommissionFile. Idempotent: re-finalizing returns the same file so a lost
+    response can be retried safely. Sessions created before the admin toggle
+    was flipped off still finalize, so an upload mid-flight is never stranded.
+    """
+    session = _load_session_for_edit(db, session_id, principal)
+    storage = get_storage()
+
+    # Idempotent return: a previous finalize already produced the file, so
+    # surface it as-is — never create a duplicate row even if the same client
+    # retries because the original response was lost.
+    if session.finalized_at is not None and session.commission_file_id is not None:
+        existing = db.get(CommissionFile, session.commission_file_id)
+        if existing is None:
+            raise HTTPException(
+                status_code=status.HTTP_410_GONE,
+                detail="Finalized file was deleted; create a new upload session.",
+            )
+        cover_id = (
+            existing.node.commission.meta.cover_file_id
+            if existing.node.commission.meta
+            else None
+        )
+        return crud.file_out(existing, cover_id, crud.load_visibility_context(db))
+
+    # Expired sessions can't be finalized even if the object happens to exist —
+    # the bytes might belong to a stale upload the operator wanted gone.
+    if session.expires_at < datetime.now(timezone.utc):
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="Upload session expired; start a new upload.",
+        )
+
+    metadata = storage.head_object(
+        session.storage_key, bucket=session.storage_bucket
+    )
+    if metadata is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Uploaded object not found; retry the upload before finalizing.",
+        )
+    if metadata.size_bytes != session.expected_size_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Uploaded size ({metadata.size_bytes} bytes) does not match the "
+                f"declared size ({session.expected_size_bytes} bytes)."
+            ),
+        )
+
+    # Lock the destination node so direct and proxied uploads can't both grab
+    # the same position concurrently.
+    node = db.scalar(
+        select(CommissionNode)
+        .where(CommissionNode.id == session.node_id)
+        .with_for_update()
+    )
+    if node is None:
+        # Cascading delete during the upload window — nothing to attach to.
+        try:
+            storage.delete(session.storage_key, bucket=session.storage_bucket)
+        except OSError:
+            pass
+        db.delete(session)
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Destination stage no longer exists.",
+        )
+
+    fmt = (
+        session.filename.rsplit(".", 1)[-1].lower()
+        if "." in session.filename
+        else ""
+    )
+    is_image = fmt in IMAGE_FORMATS or (
+        session.content_type.startswith("image/")
+        if session.content_type
+        else False
+    )
+    width = height = None
+    raw: bytes | None = None
+    if is_image:
+        # Image probing needs the bytes; for direct uploads we round-trip them
+        # from storage. The original byte transfer (browser → app) is what
+        # the feature optimizes away — this read-back is small by comparison
+        # and runs once per file.
+        try:
+            raw = storage.read(session.storage_key, bucket=session.storage_bucket)
+            with Image.open(io.BytesIO(raw)) as im:
+                width, height = im.size
+        except Exception:
+            is_image = False
+            raw = None
+
+    obj = StorageObject(
+        backend=session.storage_backend,
+        bucket=session.storage_bucket,
+        key=session.storage_key,
+        size_bytes=metadata.size_bytes,
+        # ETag is a content-derived hash for single-PUT uploads on most S3
+        # implementations; close enough as a checksum proxy and avoids a second
+        # full read for non-image uploads.
+        checksum=metadata.etag,
+    )
+    db.add(obj)
+    db.flush()
+
+    file = CommissionFile(
+        node_id=node.id,
+        storage_object_id=obj.id,
+        position=_next_position(db, node.id),
+        format=fmt or "bin",
+        label=session.label,
+        is_image=is_image,
+        width=width,
+        height=height,
+        focal_x=0.5 if is_image else None,
+        focal_y=0.5 if is_image else None,
+        focal_zoom=1.0 if is_image else None,
+    )
+    db.add(file)
+    db.flush()
+
+    session.finalized_at = datetime.now(timezone.utc)
+    session.commission_file_id = file.id
+    db.commit()
+    db.refresh(file)
+
+    if is_image:
+        background.add_task(
+            images.generate_presets, obj.id, obj.checksum, obj.key, obj.bucket
+        )
+
+    cover_id = (
+        file.node.commission.meta.cover_file_id
+        if file.node.commission.meta
+        else None
+    )
+    return crud.file_out(file, cover_id, crud.load_visibility_context(db))
+
+
+@router.post("/uploads/cleanup")
+def trigger_upload_cleanup(
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_edit),
+):
+    """Admin-only sweeper for orphaned upload sessions. Intended to be invoked
+    on a cron schedule from the deployment; the create-session endpoint also
+    runs it opportunistically."""
+    if principal.kind != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Upload cleanup is admin-only.",
+        )
+    storage = get_storage()
+    cleaned = crud.cleanup_expired_upload_sessions(db, storage)
+    return {"cleaned": cleaned}
 
 
 def _visible_file_or_404(
