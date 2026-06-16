@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check } from "lucide-react";
+import { Check, Download, Trash2 } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { api } from "../api/client";
@@ -13,6 +13,7 @@ import type {
   VisibilityFieldKey,
 } from "../api/types";
 import { Chip } from "../components/Chip";
+import { CopyJsonButton } from "../components/CopyJsonButton";
 import { CoverFocalEditor, type StagedFocal } from "../components/CoverFocalEditor";
 import { StagesEditor } from "../components/StagesEditor";
 import { TaxonomyPicker } from "../components/TaxonomyPicker";
@@ -230,6 +231,22 @@ export function EditPage() {
     return visibility?.fields.find((f) => f.field === field) ?? null;
   }
 
+  // Admins are redirected here from the detail view, so delete lives on this
+  // topbar — it's the only place a signed-in admin can reach the action.
+  async function onDelete() {
+    const label = title.trim() || `commission #${commissionId}`;
+    if (!confirm(`Delete “${label}”? This cannot be undone.`)) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.deleteCommission(commissionId);
+      navigate("/");
+    } catch (err) {
+      setError(String(err));
+      setBusy(false);
+    }
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (initialLoading) return;
@@ -310,6 +327,24 @@ export function EditPage() {
             {pendingUploadsHint(pendingUploads)}
           </span>
         )}
+        {/* Admin actions that lived on the detail topbar before admins were
+            redirected straight to /edit — restored here so they remain
+            reachable. Delete is danger-styled and sits before the safe
+            Cancel/Save pair to avoid being mistaken for them. */}
+        <CopyJsonButton id={commissionId} />
+        <a className="btn sm" href={api.filesExportUrl(commissionId)} download>
+          <Download />
+          Export zip
+        </a>
+        <button
+          type="button"
+          className="btn sm danger"
+          onClick={() => void onDelete()}
+          disabled={busy || initialLoading}
+        >
+          <Trash2 />
+          Delete
+        </button>
         <button
           type="button"
           className="btn sm"
