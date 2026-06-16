@@ -85,6 +85,12 @@ interface LifecycleStagesListProps {
   /** Edit-mode-only: when supplied, every file tile gains an inline
    * Public/Private/Inherit toggle. */
   onFileVisibilityChange?: (file: CommissionFile, next: Visibility | null) => void;
+  /** Edit-mode-only: live override maps that win over the snapshot in
+   * `nodes[i].visibility` / `files[i].visibility`. The edit page buffers
+   * unsaved toggle changes here so clicks reflect immediately without
+   * waiting for a server round-trip. */
+  nodeVisibilityOverrides?: Map<number, Visibility | null>;
+  fileVisibilityOverrides?: Map<number, Visibility | null>;
   renderStageActions?: (node: CommissionNode, index: number) => ReactNode;
 }
 
@@ -121,6 +127,8 @@ export function LifecycleStagesList({
   onEditDate,
   onNodeVisibilityChange,
   onFileVisibilityChange,
+  nodeVisibilityOverrides,
+  fileVisibilityOverrides,
   renderStageActions,
 }: LifecycleStagesListProps) {
   const [viewer, setViewer] = useState<{ nodeId: number; fileId: number } | null>(null);
@@ -157,6 +165,8 @@ export function LifecycleStagesList({
             onEditDate={onEditDate}
             onNodeVisibilityChange={onNodeVisibilityChange}
             onFileVisibilityChange={onFileVisibilityChange}
+            nodeVisibilityOverrides={nodeVisibilityOverrides}
+            fileVisibilityOverrides={fileVisibilityOverrides}
             onOpenImage={(fileId) => setViewer({ nodeId: node.id, fileId })}
             stageActions={renderStageActions?.(node, index)}
           />
@@ -213,6 +223,8 @@ function LifecycleStage({
   onEditDate,
   onNodeVisibilityChange,
   onFileVisibilityChange,
+  nodeVisibilityOverrides,
+  fileVisibilityOverrides,
   onOpenImage,
   stageActions,
 }: {
@@ -233,6 +245,8 @@ function LifecycleStage({
   onEditDate?: (node: CommissionNode) => void;
   onNodeVisibilityChange?: (node: CommissionNode, next: Visibility | null) => void;
   onFileVisibilityChange?: (file: CommissionFile, next: Visibility | null) => void;
+  nodeVisibilityOverrides?: Map<number, Visibility | null>;
+  fileVisibilityOverrides?: Map<number, Visibility | null>;
   onOpenImage: (fileId: number) => void;
   stageActions?: ReactNode;
 }) {
@@ -371,9 +385,18 @@ function LifecycleStage({
         )}
         {onNodeVisibilityChange && node.effective_visibility && (
           <VisibilityToggle
-            value={node.visibility}
+            value={
+              nodeVisibilityOverrides?.has(node.id)
+                ? (nodeVisibilityOverrides.get(node.id) ?? null)
+                : node.visibility
+            }
             effective={node.effective_visibility}
-            disabled={busy || node.is_detached}
+            disabled={busy}
+            lockedReason={
+              node.is_detached
+                ? "Detached content is always private"
+                : undefined
+            }
             onChange={(next) => onNodeVisibilityChange(node, next)}
             ariaLabel={`Visibility for ${node.name}`}
           />
@@ -400,6 +423,7 @@ function LifecycleStage({
               onSetCover={onSetCover}
               onDeleteFile={onDeleteFile}
               onFileVisibilityChange={onFileVisibilityChange}
+              fileVisibilityOverrides={fileVisibilityOverrides}
               onOpenImage={onOpenImage}
             />
           ))}
@@ -555,6 +579,7 @@ function LifecycleFileTile({
   onSetCover,
   onDeleteFile,
   onFileVisibilityChange,
+  fileVisibilityOverrides,
   onOpenImage,
 }: {
   file: CommissionFile;
@@ -568,6 +593,7 @@ function LifecycleFileTile({
   onSetCover?: (file: CommissionFile) => void;
   onDeleteFile?: (file: CommissionFile) => void;
   onFileVisibilityChange?: (file: CommissionFile, next: Visibility | null) => void;
+  fileVisibilityOverrides?: Map<number, Visibility | null>;
   onOpenImage: (fileId: number) => void;
 }) {
   const editable = Boolean(onSetCover || onDeleteFile || onFileVisibilityChange);
@@ -645,9 +671,16 @@ function LifecycleFileTile({
         <div className="lifecycle-file-actions">
           {onFileVisibilityChange && file.effective_visibility && (
             <VisibilityToggle
-              value={file.visibility}
+              value={
+                fileVisibilityOverrides?.has(file.id)
+                  ? (fileVisibilityOverrides.get(file.id) ?? null)
+                  : file.visibility
+              }
               effective={file.effective_visibility}
-              disabled={busy || isDetached}
+              disabled={busy}
+              lockedReason={
+                isDetached ? "Detached content is always private" : undefined
+              }
               compact
               onChange={(next) => onFileVisibilityChange(file, next)}
               ariaLabel={`Visibility for file ${file.label || file.format}`}

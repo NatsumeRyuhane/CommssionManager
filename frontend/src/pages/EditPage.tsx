@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Check } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -98,6 +98,23 @@ export function EditPage() {
       // visibility state stays null; toggles render unobtrusively as nothing
     }
   }, [commissionId, validId]);
+
+  // Flat lookup maps from the visibility tree — handed to StagesEditor so the
+  // stage-header and file-tile toggles read from our live state instead of the
+  // server snapshot StagesEditor fetched. Without this the toggles look broken:
+  // the click stages the change (it lands on Save) but the rendered value
+  // doesn't update.
+  const visibilityOverrides = useMemo(() => {
+    const nodes = new Map<number, import("../api/types").Visibility | null>();
+    const files = new Map<number, import("../api/types").Visibility | null>();
+    if (visibility) {
+      for (const n of visibility.nodes) {
+        nodes.set(n.id, n.visibility);
+        for (const f of n.files) files.set(f.id, f.visibility);
+      }
+    }
+    return { nodes, files };
+  }, [visibility]);
 
   useEffect(() => {
     if (!validId) return;
@@ -233,10 +250,16 @@ export function EditPage() {
         // each row, so we ship the full state. Nodes/files added by the
         // stages editor mid-session are absent from this state but get
         // refetched after every onChange so the next save covers them.
+        // Title and description are omitted from the field map — the
+        // backend rejects non-null overrides on those fields and the
+        // frontend doesn't expose a toggle for them, so a stale `false`
+        // round-tripping through Save would needlessly 422.
         await api.updateCommissionVisibility(commissionId, {
           visibility: visibility.visibility,
           fields: Object.fromEntries(
-            visibility.fields.map((f) => [f.field, f.public]),
+            visibility.fields
+              .filter((f) => f.field !== "title" && f.field !== "description")
+              .map((f) => [f.field, f.public]),
           ),
           nodes: Object.fromEntries(
             visibility.nodes.map((n) => [n.id, n.visibility]),
@@ -300,19 +323,13 @@ export function EditPage() {
 
       <form id="commission-edit-form" onSubmit={submit} className="edit-page">
         <div className="edit-main">
-          <FieldGroup
-            label="Title"
-            visibility={
-              fieldVis("title") && (
-                <FieldVisibilityToggle
-                  value={fieldVis("title")!.public}
-                  effective={fieldVis("title")!.effective_public}
-                  onChange={(v) => setFieldVisibility("title", v)}
-                  ariaLabel="Title visibility"
-                />
-              )
-            }
-          >
+          {/* Title and description don't carry a per-commission visibility
+              toggle — the override doesn't make sense at the record level
+              (a hidden title on an otherwise-public commission looks broken
+              to readers). The site-wide default applies; configure under
+              Settings → Visibility. The backend rejects non-null overrides
+              on these fields as a matching guard. */}
+          <FieldGroup label="Title">
             <input
               className="field edit-title-input"
               value={title}
@@ -321,19 +338,7 @@ export function EditPage() {
             />
           </FieldGroup>
 
-          <FieldGroup
-            label="Description"
-            visibility={
-              fieldVis("description") && (
-                <FieldVisibilityToggle
-                  value={fieldVis("description")!.public}
-                  effective={fieldVis("description")!.effective_public}
-                  onChange={(v) => setFieldVisibility("description", v)}
-                  ariaLabel="Description visibility"
-                />
-              )
-            }
-          >
+          <FieldGroup label="Description">
             <textarea
               className="field edit-description-input"
               rows={2}
@@ -353,6 +358,7 @@ export function EditPage() {
                 // toggles cover the new shape.
                 void reloadVisibility();
               }}
+              visibilityOverrides={visibilityOverrides}
               onNodeVisibilityChange={setNodeVisibility}
               onFileVisibilityChange={setFileVisibility}
               onPendingUploadsChange={setPendingUploads}

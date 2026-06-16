@@ -25,12 +25,23 @@ import { NodeDateModal } from "./NodeDateModal";
 export function StagesEditor({
   commissionId,
   onChange,
+  visibilityOverrides,
   onNodeVisibilityChange,
   onFileVisibilityChange,
   onPendingUploadsChange,
 }: {
   commissionId: number;
   onChange?: () => void;
+  /** Edit-mode-only: live override maps the parent (edit page) is buffering
+   * between Save round-trips. When supplied, the per-stage and per-file
+   * toggles read from these instead of the snapshot in `detail.nodes` so
+   * clicks reflect immediately even though the server data hasn't reloaded.
+   * Without this the toggles look broken — the change is staged but the
+   * tile keeps showing the old value. */
+  visibilityOverrides?: {
+    nodes: Map<number, Visibility | null>;
+    files: Map<number, Visibility | null>;
+  };
   /** Optional: forwarded to `LifecycleStagesList` so the edit page can hoist
    * per-stage visibility changes into its pending-changes buffer. When omitted
    * the toggles are simply not rendered (read-only contexts). */
@@ -392,6 +403,8 @@ export function StagesEditor({
         onEditDate={setDateNode}
         onMoveUpload={moveUpload}
         onRetryUpload={retryUpload}
+        nodeVisibilityOverrides={visibilityOverrides?.nodes}
+        fileVisibilityOverrides={visibilityOverrides?.files}
         onNodeVisibilityChange={onNodeVisibilityChange}
         onFileVisibilityChange={onFileVisibilityChange}
         renderStageActions={(node) => {

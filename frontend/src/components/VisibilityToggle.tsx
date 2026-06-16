@@ -4,47 +4,65 @@ import type { ReactNode } from "react";
 import type { Visibility } from "../api/types";
 
 /** Cycle-toggle visibility control. Click advances through
- * `Inherit → Public → Private → Inherit`. One button instead of a segmented
- * group keeps the rail and stage header tight while still encoding the state
- * with color + icon:
+ * `Inherit → Public → Private → Inherit`.
  *
- * - **Public override** — filled accent (green), `Eye` icon, "Public" label.
- * - **Private override** — filled warn (warm red), `EyeOff` icon, "Private" label.
- * - **Inherit** — outlined with the *effective* tone, `Link2` icon ("linked
- *   to the parent's setting"), "Inherit" label. The outlined vs filled
- *   distinction is what tells the reader "this row isn't locked in — it
- *   follows the parent's setting" while still showing what it currently
- *   resolves to.
+ * Visual rules:
  *
- * Compact mode hides the label and renders icon-only — used inside file
- * tile action rows where horizontal space is a premium.
+ * - **Enabled (editable)** → outlined: white background, colored border + text.
+ *   Tone color comes from the *forced* override when one is set, or from the
+ *   *effective* value when the row is on Inherit. A dashed border on the
+ *   inherit tones disambiguates "this is inherited" from "this is forced" so
+ *   the user can tell them apart even though the colors match.
+ *
+ * - **Locked** (`lockedReason` set, e.g. the detached node which is always
+ *   private) → solid fill in the tone color, white icon/text. The fill is
+ *   the visual cue that the row's value is fixed and not editable; the
+ *   tooltip surfaces *why* it's locked. Click is disabled.
+ *
+ * - **Transiently disabled** (`disabled=true`, e.g. a stage that's busy mid-
+ *   reorder) → outlined like normal but with reduced opacity. Distinct from
+ *   the lock state because the value is still editable — just temporarily
+ *   blocked.
+ *
+ * Compact mode hides the label and renders icon-only — used inside file tile
+ * action rows where horizontal space is at a premium.
  */
 export function VisibilityToggle({
   value,
   effective,
   onChange,
   disabled = false,
+  lockedReason,
   compact = false,
   ariaLabel,
 }: {
   value: Visibility | null;
   effective: Visibility;
   onChange: (next: Visibility | null) => void;
+  /** Transient disable (e.g. a sibling operation is in flight). The button is
+   * not clickable but stays in the editable look (outlined). */
   disabled?: boolean;
+  /** Permanent lock with the *why* surfaced in the tooltip. Implies disabled
+   * AND switches the visual to the locked look (solid fill). */
+  lockedReason?: string;
   /** Hide the text label and render the button as icon-only. */
   compact?: boolean;
   ariaLabel?: string;
 }) {
   const view = describeVisibility(value, effective);
   const next = cycleVisibility(value);
+  const tooltip = lockedReason
+    ? lockedReason
+    : `Visibility: ${view.tooltip} — click to set ${describeVisibility(next, effective).label}`;
   return (
     <CycleButton
       tone={view.tone}
       icon={view.icon}
       label={view.label}
-      tooltip={`Visibility: ${view.tooltip} — click to set ${describeVisibility(next, effective).label}`}
+      tooltip={tooltip}
       compact={compact}
-      disabled={disabled}
+      disabled={disabled || Boolean(lockedReason)}
+      locked={Boolean(lockedReason)}
       ariaLabel={ariaLabel ?? `Visibility: ${view.label}`}
       onClick={() => onChange(next)}
     />
@@ -58,6 +76,7 @@ export function FieldVisibilityToggle({
   effective,
   onChange,
   disabled = false,
+  lockedReason,
   compact = false,
   ariaLabel,
 }: {
@@ -65,6 +84,7 @@ export function FieldVisibilityToggle({
   effective: boolean;
   onChange: (next: boolean | null) => void;
   disabled?: boolean;
+  lockedReason?: string;
   compact?: boolean;
   ariaLabel?: string;
 }) {
@@ -76,14 +96,18 @@ export function FieldVisibilityToggle({
   const nextVis = cycleVisibility(asVis);
   const nextBool: boolean | null =
     nextVis === null ? null : nextVis === "public";
+  const tooltip = lockedReason
+    ? lockedReason
+    : `Visibility: ${view.tooltip} — click to set ${describeVisibility(nextVis, effectiveVis).label}`;
   return (
     <CycleButton
       tone={view.tone}
       icon={view.icon}
       label={view.label}
-      tooltip={`Visibility: ${view.tooltip} — click to set ${describeVisibility(nextVis, effectiveVis).label}`}
+      tooltip={tooltip}
       compact={compact}
-      disabled={disabled}
+      disabled={disabled || Boolean(lockedReason)}
+      locked={Boolean(lockedReason)}
       ariaLabel={ariaLabel ?? `Visibility: ${view.label}`}
       onClick={() => onChange(nextBool)}
     />
@@ -120,7 +144,6 @@ function describeVisibility(value: Visibility | null, effective: Visibility): Vi
       tooltip: "Private (forced)",
     };
   }
-  // value === null → inherit; borrow the effective tone for color
   return {
     tone: effective === "public" ? "inherit-public" : "inherit-private",
     icon: <Link2 size={14} strokeWidth={2} />,
@@ -144,6 +167,7 @@ function CycleButton({
   tooltip,
   compact,
   disabled,
+  locked,
   ariaLabel,
   onClick,
 }: {
@@ -153,13 +177,22 @@ function CycleButton({
   tooltip: string;
   compact: boolean;
   disabled: boolean;
+  locked: boolean;
   ariaLabel: string;
   onClick: () => void;
 }) {
+  const cls = [
+    "visibility-cycle",
+    `tone-${tone}`,
+    locked ? "locked" : "",
+    compact ? "compact" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
   return (
     <button
       type="button"
-      className={`visibility-cycle tone-${tone}${compact ? " compact" : ""}`}
+      className={cls}
       disabled={disabled}
       onClick={onClick}
       title={tooltip}
