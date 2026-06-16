@@ -131,9 +131,32 @@ Table app_settings {
   artists_public                boolean           [not null, default: true]
   confirmed_at_public           boolean           [not null, default: false]
   price_public                  boolean           [not null, default: false]
+  allow_direct_upload           boolean           [not null, default: false, note: 'admin toggle: when true and the configured backend supports it, browsers PUT bytes straight to object storage instead of routing through the app']
   updated_at                    timestamp         [default: `now()`]
 
   Note: 'Singleton admin settings row. Visibility defaults apply to new/public views unless overridden by commission, stage, or file visibility.'
+}
+
+Table upload_sessions {
+  id                  varchar(32)     [pk, note: 'opaque session identifier returned to the client']
+  node_id             integer         [not null, ref: > commission_nodes.id, note: 'destination stage; FK cascades on node delete']
+  storage_backend     storage_backend [not null]
+  storage_bucket      varchar         [note: 'bucket the presign was issued against; null for local backend (which never presigns)']
+  storage_key         varchar         [not null, unique, note: 'pre-generated object key; uniqueness guards against double-finalize creating duplicate files']
+  filename            varchar         [not null]
+  content_type        varchar         [not null]
+  expected_size_bytes bigint          [not null, note: 'client-declared; finalize verifies it against HeadObject before creating records']
+  label               varchar
+  expires_at          timestamp       [not null, note: 'when the presigned URL stops being valid; expired+unfinalized sessions are cleaned up']
+  created_at          timestamp       [default: `now()`]
+  finalized_at        timestamp       [note: 'set when the upload was registered as a CommissionFile; finalization is idempotent on this column']
+  commission_file_id  integer         [ref: > commission_files.id, note: 'populated on finalization; SET NULL if the file is later deleted']
+
+  indexes {
+    node_id
+  }
+
+  Note: 'Pending browser-direct upload. Bytes go straight from the browser to object storage via a presigned PUT; the server creates this row, hands back the URL, and after the PUT verifies the object and creates the CommissionFile.'
 }
 
 Table visibility_stage_defaults {

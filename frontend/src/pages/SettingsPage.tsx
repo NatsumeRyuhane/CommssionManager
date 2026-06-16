@@ -285,7 +285,27 @@ export function SettingsPage() {
               }}
             />
           )}
-          {!loading && !error && tab === "storage" && storage && <StoragePanel storage={storage} />}
+          {!loading && !error && tab === "storage" && storage && site && (
+            <StoragePanel
+              storage={storage}
+              site={site}
+              busy={saving}
+              onToggleDirectUpload={async (next) => {
+                setSaving(true);
+                setError(null);
+                try {
+                  const updated = await api.updateSiteSettings({
+                    allow_direct_upload: next,
+                  });
+                  setSite(updated);
+                } catch (e) {
+                  setError(String(e));
+                } finally {
+                  setSaving(false);
+                }
+              }}
+            />
+          )}
           {tab === "categories" && (
             <TaxonomyManagementPanel
               kind="category"
@@ -817,13 +837,29 @@ function SelectVisibility({
   );
 }
 
-function StoragePanel({ storage }: { storage: StorageSettings }) {
+function StoragePanel({
+  storage,
+  site,
+  busy,
+  onToggleDirectUpload,
+}: {
+  storage: StorageSettings;
+  site: SiteSettings;
+  busy: boolean;
+  onToggleDirectUpload: (next: boolean) => Promise<void>;
+}) {
+  // Only S3-backed deployments can route bytes around the app server. Local
+  // storage has no presigned-PUT analog and stays on the proxied path.
+  const directUploadSupported = storage.backend === "s3";
   return (
     <section>
       <div className="settings-heading">
         <div>
           <h1>Storage</h1>
-          <div className="mono-sm muted">Read-only summary from environment configuration.</div>
+          <div className="mono-sm muted">
+            Backend, bucket, and credentials come from environment configuration.
+            Direct uploads can be toggled live.
+          </div>
         </div>
       </div>
       <div className="settings-panel storage-summary">
@@ -860,6 +896,33 @@ function StoragePanel({ storage }: { storage: StorageSettings }) {
           </div>
         )}
       </div>
+
+      {directUploadSupported && (
+        <div className="settings-panel" style={{ marginTop: 16 }}>
+          <div className="row gap-12" style={{ alignItems: "flex-start" }}>
+            <ToggleSwitch
+              checked={site.allow_direct_upload}
+              disabled={busy}
+              onChange={(next) => void onToggleDirectUpload(next)}
+              label="Direct uploads"
+            />
+            <div className="mono-sm muted" style={{ flex: 1 }}>
+              When enabled, browsers PUT file bytes straight to the configured
+              S3 bucket instead of routing them through this app. Requires
+              bucket CORS to allow <code>PUT</code> from the app origin and to
+              expose the <code>ETag</code> header. See
+              {" "}
+              <code>docs/direct-upload-cors.md</code> for provider-specific
+              examples.
+            </div>
+          </div>
+        </div>
+      )}
+      {!directUploadSupported && (
+        <div className="mono-sm muted" style={{ marginTop: 16 }}>
+          Direct uploads are available only with the S3 storage backend.
+        </div>
+      )}
     </section>
   );
 }

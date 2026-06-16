@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { Braces, Check, Download, Eye, Globe, Lock, Pencil, Trash2 } from "lucide-react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Braces, Check, Download, Globe, Lock, Pencil, Trash2 } from "lucide-react";
+// `Globe` / `Lock` are kept for the per-field public/private hint in MetaRow
+// (admin/write-scope only) — they're not used for the commission-level chip
+// any longer; that chip was redundant because the detail view itself is the
+// "public" view of the commission.
+import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 
 import { api } from "../api/client";
 import type { Character, CommissionDetail } from "../api/types";
@@ -26,19 +30,16 @@ function CopyJsonButton({ id }: { id: number }) {
 }
 
 /**
- * Render the commission detail page, fetching a commission by route `id` and exposing view and management UI.
- *
- * Fetches commission data from the API based on the `id` route param, shows loading and error states, and when data
- * is available displays commission metadata, cover, lifecycle stages, and a side rail of metadata. If the current
- * user has write permission, exposes actions to copy JSON, edit visibility, export files, edit, and delete the
- * commission (delete prompts for confirmation and navigates to the gallery on success).
+ * Render the read-only commission detail page. Admins are bounced to /edit on
+ * entry (the edit view is a strict superset of detail), so this page renders
+ * the visitor experience: metadata, cover, lifecycle stages, side rail.
  *
  * @returns The commission detail page UI as a JSX element
  */
 export function DetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { canWrite } = useAuth();
+  const { me, loading: authLoading, canWrite } = useAuth();
   const [data, setData] = useState<CommissionDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [characterIndex, setCharacterIndex] = useState<Map<string, Character>>(new Map());
@@ -81,6 +82,14 @@ export function DetailPage() {
     navigate("/");
   }
 
+  // Edit view is a strict superset of detail for admins — redirect so the
+  // rail's metadata is editable in place. Wait for auth to resolve so we don't
+  // briefly render the detail view and then jump (use `replace` so the back
+  // button skips the detail route entirely).
+  if (!authLoading && me?.kind === "admin" && id) {
+    return <Navigate to={`/commissions/${id}/edit`} replace />;
+  }
+
   if (error) return <div className="app"><TopBar /><div style={{ padding: 24 }} className="error-text">{error}</div></div>;
   if (!data) return <div className="app"><TopBar /><div style={{ padding: 24 }} className="mono-sm">Loading…</div></div>;
 
@@ -88,8 +97,6 @@ export function DetailPage() {
   const detached = data.nodes.filter((n) => n.is_detached && n.files.length > 0);
   const lifecycle = [...detached, ...regular];
   const paddedId = String(data.id).padStart(3, "0");
-
-  const isPublic = data.effective_visibility !== "private";
   // no dimensions, file types, or dates here: those are per-file/per-stage
   // facts that vary across the lifecycle, so the stage tiles carry them
   const subBits = [`commission #${paddedId}`];
@@ -98,12 +105,6 @@ export function DetailPage() {
     <div className="app">
       <TopBar>
         {canWrite && <CopyJsonButton id={data.id} />}
-        {canWrite && (
-          <Link to={`/commissions/${data.id}/visibility`} className="btn sm">
-            <Eye />
-            Visibility
-          </Link>
-        )}
         {canWrite && (
           <a className="btn sm" href={api.filesExportUrl(data.id)} download>
             <Download />
@@ -135,14 +136,10 @@ export function DetailPage() {
           {data.title || "Untitled Commission"}
         </strong>
         <span className="mono-sm muted">#{paddedId}</span>
-        <span className="spacer" />
-        <span
-          className="mono-sm detail-visibility inline-ic"
-          style={{ color: isPublic ? "var(--accent)" : "var(--warn)" }}
-        >
-          {isPublic ? <Globe size={12} /> : <Lock size={12} />}
-          {isPublic ? "public" : "private"}
-        </span>
+        {/* Commission-level visibility chip removed — by construction
+            anything reaching this page is publicly visible (admins are
+            redirected to /edit, and non-admins only ever see public
+            commissions thanks to the gallery / detail gating). */}
       </div>
 
       {/* scrolling content + sticky side rail; images open in the viewer from the stage list */}
@@ -193,25 +190,8 @@ export function DetailPage() {
 
         <aside className="detail-rail">
           <div className="detail-rail-inner">
-            <div className="detail-rail-visibility">
-              <span className="mono-sm">visibility:</span>
-              <span className="inline-ic" style={{ color: isPublic ? "var(--accent)" : "var(--warn)" }}>
-                {isPublic ? <Globe size={12} /> : <Lock size={12} />}
-                {isPublic ? "public" : "private"}
-              </span>
-              {canWrite && (
-                <>
-                  <span className="spacer" />
-                  <Link
-                    to={`/commissions/${data.id}/visibility`}
-                    className="mono-sm"
-                    style={{ color: "var(--accent)" }}
-                  >
-                    edit
-                  </Link>
-                </>
-              )}
-            </div>
+            {/* Rail visibility row removed for the same reason as the crumb
+                chip — anything on this page is public by construction. */}
 
             {canWrite && data.confirmed_at && (
               <MetaRow label="Confirmed" value={data.confirmed_at.slice(0, 10)} pub={false} />

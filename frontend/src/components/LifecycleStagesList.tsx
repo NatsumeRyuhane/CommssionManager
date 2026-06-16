@@ -1,13 +1,18 @@
 import { useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { Star, Trash2, Upload, X } from "lucide-react";
 
-import type { CommissionFile, CommissionNode } from "../api/types";
+import type { CommissionFile, CommissionNode, Visibility } from "../api/types";
 import { Chip } from "./Chip";
 import { Cover } from "./Cover";
 import { ImageViewerModal } from "./ImageViewerModal";
+import { VisibilityToggle } from "./VisibilityToggle";
 
 const NODE_DRAG_TYPE = "application/x-cmgr-node-id";
 const FILE_DRAG_TYPE = "application/x-cmgr-file-id";
+// Pending uploads carry string ids (not numeric file ids), so they need their
+// own drag type — the stage drop handler can then distinguish "move this
+// real file" from "move this pending tile".
+const UPLOAD_DRAG_TYPE = "application/x-cmgr-upload-id";
 
 function filesFromDrop(dataTransfer: DataTransfer): File[] {
   const files = Array.from(dataTransfer.files);
@@ -21,13 +26,35 @@ function filesFromDrop(dataTransfer: DataTransfer): File[] {
 
 export interface FileUploadPreview {
   id: string;
+  /** Where the file should end up after upload — may differ from
+   * `originalNodeId` if the user dragged the pending tile to a different
+   * stage. The deferred-move step at the end of the upload compares the two
+   * and issues a `moveFile` call when they diverge. */
   nodeId: number;
+  /** The node the upload was actually initiated against — i.e. the bucket
+   * key was generated for this node, and the server will land the file here
+   * before the deferred move runs. Kept stable for the lifetime of the
+   * preview so retry can pick the same destination. */
+  originalNodeId: number;
+  /** The user-selected File handle, kept in state so a click-to-retry can
+   * re-send the bytes without re-prompting from disk. React state holds
+   * non-serializable values fine. */
+  file: File;
+  /** Captured at the time of upload — direct vs proxied — so a retry uses
+   * the same transport even if the storage capability state changes mid-flight. */
+  directPath: boolean;
   fileName: string;
   format: string;
   isImage: boolean;
   previewUrl: string | null;
   progress: number;
-  status: "uploading" | "failed";
+  /** "uploading": bytes in flight (proxied or direct PUT).
+   *  "processing": bytes uploaded; server is verifying and registering the file.
+   *  "failed": surfaced for retry/dismiss.
+   *  Note: "complete" entries are removed from the list immediately on success. */
+  status: "uploading" | "processing" | "failed";
+  /** Set during direct uploads so the user can cancel an in-flight session. */
+  sessionId?: string;
   error?: string;
 }
 
@@ -41,9 +68,29 @@ interface LifecycleStagesListProps {
   onReorderNode?: (draggedNodeId: number, targetNodeId: number) => void;
   onUpload?: (node: CommissionNode, files: File[]) => void;
   onDismissUpload?: (id: string) => void;
+  /** Edit-mode-only: cross-stage drag for a pending upload tile. Drops on the
+   * destination stage; the editor records the new intent and the deferred-move
+   * step at the end of the upload honors it. */
+  onMoveUpload?: (uploadId: string, targetNodeId: number) => void;
+  /** Edit-mode-only: click-to-retry on a failed upload tile. The editor resets
+   * the preview and re-runs the same transport path. */
+  onRetryUpload?: (uploadId: string) => void;
   onSetCover?: (file: CommissionFile) => void;
   onDeleteFile?: (file: CommissionFile) => void;
   onEditDate?: (node: CommissionNode) => void;
+  /** Edit-mode-only: when supplied, every stage header gains an inline
+   * Public/Private/Inherit toggle. Reads effective_visibility for the
+   * fallback label and node.visibility for the current override state. */
+  onNodeVisibilityChange?: (node: CommissionNode, next: Visibility | null) => void;
+  /** Edit-mode-only: when supplied, every file tile gains an inline
+   * Public/Private/Inherit toggle. */
+  onFileVisibilityChange?: (file: CommissionFile, next: Visibility | null) => void;
+  /** Edit-mode-only: live override maps that win over the snapshot in
+   * `nodes[i].visibility` / `files[i].visibility`. The edit page buffers
+   * unsaved toggle changes here so clicks reflect immediately without
+   * waiting for a server round-trip. */
+  nodeVisibilityOverrides?: Map<number, Visibility | null>;
+  fileVisibilityOverrides?: Map<number, Visibility | null>;
   renderStageActions?: (node: CommissionNode, index: number) => ReactNode;
 }
 
@@ -73,9 +120,15 @@ export function LifecycleStagesList({
   onReorderNode,
   onUpload,
   onDismissUpload,
+  onMoveUpload,
+  onRetryUpload,
   onSetCover,
   onDeleteFile,
   onEditDate,
+  onNodeVisibilityChange,
+  onFileVisibilityChange,
+  nodeVisibilityOverrides,
+  fileVisibilityOverrides,
   renderStageActions,
 }: LifecycleStagesListProps) {
   const [viewer, setViewer] = useState<{ nodeId: number; fileId: number } | null>(null);
@@ -105,9 +158,15 @@ export function LifecycleStagesList({
             onReorderNode={onReorderNode}
             onUpload={onUpload}
             onDismissUpload={onDismissUpload}
+            onMoveUpload={onMoveUpload}
+            onRetryUpload={onRetryUpload}
             onSetCover={onSetCover}
             onDeleteFile={onDeleteFile}
             onEditDate={onEditDate}
+            onNodeVisibilityChange={onNodeVisibilityChange}
+            onFileVisibilityChange={onFileVisibilityChange}
+            nodeVisibilityOverrides={nodeVisibilityOverrides}
+            fileVisibilityOverrides={fileVisibilityOverrides}
             onOpenImage={(fileId) => setViewer({ nodeId: node.id, fileId })}
             stageActions={renderStageActions?.(node, index)}
           />
@@ -157,9 +216,15 @@ function LifecycleStage({
   onReorderNode,
   onUpload,
   onDismissUpload,
+  onMoveUpload,
+  onRetryUpload,
   onSetCover,
   onDeleteFile,
   onEditDate,
+  onNodeVisibilityChange,
+  onFileVisibilityChange,
+  nodeVisibilityOverrides,
+  fileVisibilityOverrides,
   onOpenImage,
   stageActions,
 }: {
@@ -173,9 +238,15 @@ function LifecycleStage({
   onReorderNode?: (draggedNodeId: number, targetNodeId: number) => void;
   onUpload?: (node: CommissionNode, files: File[]) => void;
   onDismissUpload?: (id: string) => void;
+  onMoveUpload?: (uploadId: string, targetNodeId: number) => void;
+  onRetryUpload?: (uploadId: string) => void;
   onSetCover?: (file: CommissionFile) => void;
   onDeleteFile?: (file: CommissionFile) => void;
   onEditDate?: (node: CommissionNode) => void;
+  onNodeVisibilityChange?: (node: CommissionNode, next: Visibility | null) => void;
+  onFileVisibilityChange?: (file: CommissionFile, next: Visibility | null) => void;
+  nodeVisibilityOverrides?: Map<number, Visibility | null>;
+  fileVisibilityOverrides?: Map<number, Visibility | null>;
   onOpenImage: (fileId: number) => void;
   stageActions?: ReactNode;
 }) {
@@ -185,7 +256,13 @@ function LifecycleStage({
   const canReorderFiles = Boolean(onReorderFile);
   const canUpload = Boolean(onUpload && !node.is_detached && !busy);
   const canReorder = Boolean(onReorderNode && !node.is_detached);
-  const uploadingCount = uploads.filter((upload) => upload.status === "uploading").length;
+  // Pending uploads can be re-targeted across stages while bytes are in
+  // flight or after failure, but never into Detached (mirrors the file-move
+  // and cover/visibility lockouts on the detached node).
+  const canMoveUploads = Boolean(onMoveUpload && !node.is_detached);
+  const uploadingCount = uploads.filter(
+    (upload) => upload.status === "uploading" || upload.status === "processing",
+  ).length;
   const failedCount = uploads.length - uploadingCount;
 
   function drop(e: DragEvent<HTMLDivElement>) {
@@ -199,6 +276,11 @@ function LifecycleStage({
     const draggedNodeId = Number(e.dataTransfer.getData(NODE_DRAG_TYPE));
     if (draggedNodeId && canReorder) {
       onReorderNode?.(draggedNodeId, node.id);
+      return;
+    }
+    const draggedUploadId = e.dataTransfer.getData(UPLOAD_DRAG_TYPE);
+    if (draggedUploadId && canMoveUploads) {
+      onMoveUpload?.(draggedUploadId, node.id);
       return;
     }
     const fileId = Number(
@@ -216,20 +298,27 @@ function LifecycleStage({
         const types = Array.from(e.dataTransfer.types);
         const draggingNode = types.includes(NODE_DRAG_TYPE);
         const draggingFile = types.includes(FILE_DRAG_TYPE);
+        const draggingUpload = types.includes(UPLOAD_DRAG_TYPE);
         const droppingFiles =
           types.includes("Files") ||
           Array.from(e.dataTransfer.items).some((item) => item.kind === "file");
         const canHandle =
           (draggingNode && canReorder) ||
           (draggingFile && (canMove || canReorderFiles)) ||
+          (draggingUpload && canMoveUploads) ||
           (droppingFiles && canUpload);
         if (!canHandle) return;
         e.preventDefault();
-        e.dataTransfer.dropEffect = draggingNode || draggingFile ? "move" : "copy";
+        e.dataTransfer.dropEffect =
+          draggingNode || draggingFile || draggingUpload ? "move" : "copy";
         setDropActive(true);
       }}
       onDragLeave={() => setDropActive(false)}
-      onDrop={canMove || canReorderFiles || canReorder || canUpload ? drop : undefined}
+      onDrop={
+        canMove || canReorderFiles || canReorder || canUpload || canMoveUploads
+          ? drop
+          : undefined
+      }
     >
       <div className="lifecycle-stage-head">
         {canReorder && (
@@ -294,6 +383,24 @@ function LifecycleStage({
             />
           </>
         )}
+        {onNodeVisibilityChange && node.effective_visibility && (
+          <VisibilityToggle
+            value={
+              nodeVisibilityOverrides?.has(node.id)
+                ? (nodeVisibilityOverrides.get(node.id) ?? null)
+                : node.visibility
+            }
+            effective={node.effective_visibility}
+            disabled={busy}
+            lockedReason={
+              node.is_detached
+                ? "Detached content is always private"
+                : undefined
+            }
+            onChange={(next) => onNodeVisibilityChange(node, next)}
+            ariaLabel={`Visibility for ${node.name}`}
+          />
+        )}
         {stageActions}
       </div>
       {node.files.length === 0 && uploads.length === 0 ? (
@@ -309,11 +416,14 @@ function LifecycleStage({
               isCover={file.id === coverFileId}
               busy={busy}
               nodeId={node.id}
+              isDetached={node.is_detached}
               filesById={filesById}
               onMoveFile={onMoveFile}
               onReorderFile={onReorderFile}
               onSetCover={onSetCover}
               onDeleteFile={onDeleteFile}
+              onFileVisibilityChange={onFileVisibilityChange}
+              fileVisibilityOverrides={fileVisibilityOverrides}
               onOpenImage={onOpenImage}
             />
           ))}
@@ -321,7 +431,9 @@ function LifecycleStage({
             <LifecycleUploadTile
               key={upload.id}
               upload={upload}
+              draggable={canMoveUploads}
               onDismiss={onDismissUpload}
+              onRetry={onRetryUpload}
             />
           ))}
         </div>
@@ -332,45 +444,112 @@ function LifecycleStage({
 
 function LifecycleUploadTile({
   upload,
+  draggable,
   onDismiss,
+  onRetry,
 }: {
   upload: FileUploadPreview;
+  /** True when the parent stage supplied `onMoveUpload` — the tile is draggable
+   * across stages while bytes are in flight or after a failure. */
+  draggable: boolean;
   onDismiss?: (id: string) => void;
+  /** Optional click-to-retry handler. When supplied and the tile is in the
+   * failed state, the tile becomes a clickable surface that triggers a retry. */
+  onRetry?: (id: string) => void;
 }) {
   const failed = upload.status === "failed";
-  const statusLabel = failed ? "Upload failed" : `${upload.progress}% uploaded`;
+  const processing = upload.status === "processing";
+  const statusLabel = failed
+    ? "Upload failed — click to retry"
+    : processing
+      ? "Processing…"
+      : `${upload.progress}% uploaded`;
+  // Progress only reaches 100% after the server has confirmed and registered
+  // the file; during the direct-upload finalize step we hold at "Processing…"
+  // so users don't read 100% as "done" before metadata is written.
+  const headline = failed
+    ? "Retry"
+    : processing
+      ? "Processing"
+      : `${upload.progress}%`;
 
-  return (
-    <div className={`lifecycle-file lifecycle-upload ${failed ? "failed" : ""}`}>
-      <div className="lifecycle-file-cover lifecycle-upload-cover">
-        <div className="imgph" style={{ aspectRatio: "1" }}>
-          {upload.isImage && upload.previewUrl ? (
-            <img src={upload.previewUrl} alt="" />
-          ) : (
-            upload.format
-          )}
-        </div>
-        <div
-          className="lifecycle-upload-overlay"
-          role={failed ? "alert" : "status"}
-          aria-label={`${upload.fileName}: ${statusLabel}`}
-          title={upload.error}
-        >
-          <strong>{failed ? "Failed" : `${upload.progress}%`}</strong>
-          {failed && <span>Upload failed</span>}
-        </div>
-        {failed && onDismiss && (
-          <button
-            type="button"
-            className="lifecycle-upload-dismiss"
-            onClick={() => onDismiss(upload.id)}
-            title="Dismiss failed upload"
-            aria-label={`Dismiss failed upload for ${upload.fileName}`}
-          >
-            <X size={15} strokeWidth={2.5} />
-          </button>
+  const canRetry = failed && Boolean(onRetry);
+
+  // Common drag handlers — used on both the failed (button) and in-progress
+  // (div) variants so the user can move either across stages.
+  const dragProps = {
+    draggable,
+    onDragStart: (e: DragEvent<HTMLElement>) => {
+      e.dataTransfer.setData(UPLOAD_DRAG_TYPE, upload.id);
+      e.dataTransfer.setData("text/plain", `upload:${upload.id}`);
+      e.dataTransfer.effectAllowed = "move";
+    },
+  };
+
+  // The dismiss X stops propagation so it never doubles as a retry click.
+  const dismissButton =
+    failed && onDismiss ? (
+      <button
+        type="button"
+        className="lifecycle-upload-dismiss"
+        onClick={(e) => {
+          e.stopPropagation();
+          onDismiss(upload.id);
+        }}
+        title="Dismiss failed upload"
+        aria-label={`Dismiss failed upload for ${upload.fileName}`}
+      >
+        <X size={15} strokeWidth={2.5} />
+      </button>
+    ) : null;
+
+  const cover = (
+    <div className="lifecycle-file-cover lifecycle-upload-cover">
+      <div className="imgph" style={{ aspectRatio: "1" }}>
+        {upload.isImage && upload.previewUrl ? (
+          <img src={upload.previewUrl} alt="" />
+        ) : (
+          upload.format
         )}
       </div>
+      <div
+        className="lifecycle-upload-overlay"
+        role={failed ? "alert" : "status"}
+        aria-label={`${upload.fileName}: ${statusLabel}`}
+        title={upload.error}
+      >
+        <strong>{headline}</strong>
+        {failed && <span>Upload failed</span>}
+        {processing && <span>Registering file…</span>}
+      </div>
+      {dismissButton}
+    </div>
+  );
+
+  // Failed tile: render as a button so click anywhere on the tile retries.
+  // The Dismiss X above is wrapped in stopPropagation so it doesn't trigger
+  // a retry when the user actually wants to give up.
+  if (canRetry) {
+    return (
+      <button
+        type="button"
+        className={`lifecycle-file lifecycle-upload failed lifecycle-upload-retry`}
+        title={upload.error ? `Retry: ${upload.error}` : "Retry upload"}
+        onClick={() => onRetry?.(upload.id)}
+        {...dragProps}
+      >
+        {cover}
+        <div className="lifecycle-file-label">{upload.fileName}</div>
+      </button>
+    );
+  }
+
+  return (
+    <div
+      className={`lifecycle-file lifecycle-upload ${failed ? "failed" : ""}`}
+      {...dragProps}
+    >
+      {cover}
       <div className="lifecycle-file-label">{upload.fileName}</div>
     </div>
   );
@@ -393,25 +572,31 @@ function LifecycleFileTile({
   isCover,
   busy,
   nodeId,
+  isDetached,
   filesById,
   onMoveFile,
   onReorderFile,
   onSetCover,
   onDeleteFile,
+  onFileVisibilityChange,
+  fileVisibilityOverrides,
   onOpenImage,
 }: {
   file: CommissionFile;
   isCover: boolean;
   busy: boolean;
   nodeId: number;
+  isDetached: boolean;
   filesById: Map<number, CommissionFile>;
   onMoveFile?: (file: CommissionFile, targetNodeId: number) => void;
   onReorderFile?: (nodeId: number, draggedFileId: number, targetFileId: number) => void;
   onSetCover?: (file: CommissionFile) => void;
   onDeleteFile?: (file: CommissionFile) => void;
+  onFileVisibilityChange?: (file: CommissionFile, next: Visibility | null) => void;
+  fileVisibilityOverrides?: Map<number, Visibility | null>;
   onOpenImage: (fileId: number) => void;
 }) {
-  const editable = Boolean(onSetCover || onDeleteFile);
+  const editable = Boolean(onSetCover || onDeleteFile || onFileVisibilityChange);
   const [reorderTarget, setReorderTarget] = useState(false);
   const draggable = Boolean(!busy && (onMoveFile || onReorderFile));
   return (
@@ -484,6 +669,23 @@ function LifecycleFileTile({
       </div>
       {editable && (
         <div className="lifecycle-file-actions">
+          {onFileVisibilityChange && file.effective_visibility && (
+            <VisibilityToggle
+              value={
+                fileVisibilityOverrides?.has(file.id)
+                  ? (fileVisibilityOverrides.get(file.id) ?? null)
+                  : file.visibility
+              }
+              effective={file.effective_visibility}
+              disabled={busy}
+              lockedReason={
+                isDetached ? "Detached content is always private" : undefined
+              }
+              compact
+              onChange={(next) => onFileVisibilityChange(file, next)}
+              ariaLabel={`Visibility for file ${file.label || file.format}`}
+            />
+          )}
           {file.is_image && onSetCover && (
             <button
               type="button"

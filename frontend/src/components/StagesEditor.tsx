@@ -1,8 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 
-import { api } from "../api/client";
-import type { CommissionDetail, CommissionFile, CommissionNode } from "../api/types";
+import { api, ApiError, directPutWithProgress } from "../api/client";
+import type {
+  CommissionDetail,
+  CommissionFile,
+  CommissionNode,
+  StorageCapabilities,
+  Visibility,
+} from "../api/types";
 import { LifecycleStagesList, type FileUploadPreview } from "./LifecycleStagesList";
 import { NodeDateModal } from "./NodeDateModal";
 
@@ -19,9 +25,32 @@ import { NodeDateModal } from "./NodeDateModal";
 export function StagesEditor({
   commissionId,
   onChange,
+  visibilityOverrides,
+  onNodeVisibilityChange,
+  onFileVisibilityChange,
+  onPendingUploadsChange,
 }: {
   commissionId: number;
   onChange?: () => void;
+  /** Edit-mode-only: live override maps the parent (edit page) is buffering
+   * between Save round-trips. When supplied, the per-stage and per-file
+   * toggles read from these instead of the snapshot in `detail.nodes` so
+   * clicks reflect immediately even though the server data hasn't reloaded.
+   * Without this the toggles look broken — the change is staged but the
+   * tile keeps showing the old value. */
+  visibilityOverrides?: {
+    nodes: Map<number, Visibility | null>;
+    files: Map<number, Visibility | null>;
+  };
+  /** Optional: forwarded to `LifecycleStagesList` so the edit page can hoist
+   * per-stage visibility changes into its pending-changes buffer. When omitted
+   * the toggles are simply not rendered (read-only contexts). */
+  onNodeVisibilityChange?: (node: CommissionNode, next: Visibility | null) => void;
+  onFileVisibilityChange?: (file: CommissionFile, next: Visibility | null) => void;
+  /** Optional: fires whenever the upload tile set changes (success, failure,
+   * retry, dismiss). The edit page reads this to gate Save while bytes are
+   * in flight or a tile is waiting on retry/dismiss. */
+  onPendingUploadsChange?: (counts: { uploading: number; failed: number }) => void;
 }) {
   const [detail, setDetail] = useState<CommissionDetail | null>(null);
   const [newStage, setNewStage] = useState("");
@@ -29,8 +58,13 @@ export function StagesEditor({
   const [error, setError] = useState<string | null>(null);
   const [dateNode, setDateNode] = useState<CommissionNode | null>(null);
   const [uploads, setUploads] = useState<FileUploadPreview[]>([]);
+  const [capabilities, setCapabilities] = useState<StorageCapabilities | null>(null);
   const uploadSequence = useRef(0);
   const previewUrls = useRef(new Map<string, string>());
+  // Mirrors `uploads` so async callbacks (deferred-move, retry) can read the
+  // current drag-aware nodeId without depending on a stale closure.
+  const uploadsRef = useRef<FileUploadPreview[]>([]);
+  uploadsRef.current = uploads;
 
   const reload = useCallback(async () => {
     try {
@@ -44,6 +78,17 @@ export function StagesEditor({
     void reload();
   }, [reload]);
 
+  useEffect(() => {
+    // Capabilities are sampled once per editor mount. New uploads pick up
+    // toggle changes on the next reload; in-flight uploads keep the path
+    // they started with, so a mid-upload toggle change never leaves bytes
+    // stranded in S3 with no session to finalize.
+    api
+      .getStorageCapabilities()
+      .then(setCapabilities)
+      .catch(() => setCapabilities(null));
+  }, []);
+
   useEffect(
     () => () => {
       for (const url of previewUrls.current.values()) URL.revokeObjectURL(url);
@@ -51,6 +96,17 @@ export function StagesEditor({
     },
     [],
   );
+
+  // Surface upload counts to the parent (edit page) so it can disable Save
+  // while bytes are in flight or a tile is awaiting retry/dismiss.
+  useEffect(() => {
+    if (!onPendingUploadsChange) return;
+    const uploading = uploads.filter(
+      (u) => u.status === "uploading" || u.status === "processing",
+    ).length;
+    const failed = uploads.filter((u) => u.status === "failed").length;
+    onPendingUploadsChange({ uploading, failed });
+  }, [uploads, onPendingUploadsChange]);
 
   /**
    * Execute an async operation while managing busy and error state, reload the commission data on success, and invoke the optional `onChange` callback.
@@ -137,71 +193,139 @@ export function StagesEditor({
     }
   }
 
+  function updateUpload(id: string, patch: Partial<FileUploadPreview>) {
+    setUploads((current) =>
+      current.map((entry) => (entry.id === id ? { ...entry, ...patch } : entry)),
+    );
+  }
+
+  // Direct path: server mints a presigned PUT; the browser ships bytes straight
+  // to the bucket; we finalize via the app once they land. Reads
+  // `preview.originalNodeId` as the upload destination so retry honors any
+  // pre-retry drag (which sets originalNodeId := nodeId before re-running).
+  async function runDirectUpload(preview: FileUploadPreview): Promise<CommissionFile> {
+    const session = await api.createUploadSession(preview.originalNodeId, {
+      filename: preview.file.name,
+      content_type: preview.file.type || "application/octet-stream",
+      size_bytes: preview.file.size,
+    });
+    updateUpload(preview.id, { sessionId: session.session_id });
+
+    try {
+      await directPutWithProgress(session.upload_url, preview.file, {
+        headers: session.upload_headers,
+        onProgress: (progress) => updateUpload(preview.id, { progress }),
+      });
+    } catch (putError) {
+      // Don't silently fall back to the proxied endpoint — bytes may already
+      // be in S3 under the same key; that would risk a duplicate file. Cancel
+      // the pending session so the orphaned object gets cleaned up.
+      try {
+        await api.cancelUpload(session.session_id);
+      } catch {
+        /* best-effort cleanup */
+      }
+      throw putError;
+    }
+
+    updateUpload(preview.id, { status: "processing", progress: 100 });
+    return api.finalizeUpload(session.session_id);
+  }
+
+  async function runProxiedUpload(preview: FileUploadPreview): Promise<CommissionFile> {
+    return api.uploadFile(preview.originalNodeId, preview.file, {
+      onProgress: (progress) => updateUpload(preview.id, { progress }),
+    });
+  }
+
+  // Full upload lifecycle: run the transport, deferred-move if the user
+  // dragged the tile during upload, then reload + drop the preview. Failures
+  // surface as `status: "failed"` for the user to retry or dismiss.
+  async function completeUpload(preview: FileUploadPreview): Promise<void> {
+    try {
+      const file = await (preview.directPath
+        ? runDirectUpload(preview)
+        : runProxiedUpload(preview));
+
+      // Re-read the current nodeId so a drag that happened *during* the
+      // upload is honored. The closure's `preview.nodeId` is stale; the
+      // ref carries the live state.
+      const live = uploadsRef.current.find((u) => u.id === preview.id);
+      const finalNodeId = live?.nodeId ?? preview.nodeId;
+      if (finalNodeId !== preview.originalNodeId) {
+        await api.moveFile(file.id, finalNodeId);
+      }
+
+      await reload();
+      removeUpload(preview.id);
+      onChange?.();
+    } catch (uploadError) {
+      const message =
+        uploadError instanceof ApiError
+          ? uploadError.message
+          : String(uploadError);
+      updateUpload(preview.id, { status: "failed", error: message });
+    }
+  }
+
   function upload(node: CommissionNode, files: File[]) {
-    const pending = files.map((file) => {
+    // Snapshot capability state at the moment of upload so a mid-batch toggle
+    // change doesn't half-route the same selection. Each preview carries its
+    // own `directPath` so retries keep the transport they started with.
+    const useDirect = capabilities?.direct_upload_available === true;
+
+    const previews: FileUploadPreview[] = files.map((file) => {
       const id = `${node.id}-${Date.now()}-${uploadSequence.current++}`;
       const isImage = file.type.startsWith("image/");
       const previewUrl = isImage ? URL.createObjectURL(file) : null;
       if (previewUrl) previewUrls.current.set(id, previewUrl);
       return {
+        id,
+        nodeId: node.id,
+        originalNodeId: node.id,
         file,
-        preview: {
-          id,
-          nodeId: node.id,
-          fileName: file.name,
-          format: file.name.split(".").pop()?.toLowerCase() || "file",
-          isImage,
-          previewUrl,
-          progress: 0,
-          status: "uploading" as const,
-        },
+        directPath: useDirect,
+        fileName: file.name,
+        format: file.name.split(".").pop()?.toLowerCase() || "file",
+        isImage,
+        previewUrl,
+        progress: 0,
+        status: "uploading" as const,
       };
     });
 
-    setUploads((current) => [...current, ...pending.map(({ preview }) => preview)]);
-    setBusy(true);
+    setUploads((current) => [...current, ...previews]);
+    // Uploads run in the background — the per-tile preview communicates progress.
+    // We deliberately don't flip `busy`: the user should still be able to rename
+    // stages, reorder, edit dates, and start more uploads while bytes are in flight.
     setError(null);
 
-    void Promise.allSettled(
-      pending.map(async ({ file, preview }) => {
-        try {
-          await api.uploadFile(node.id, file, {
-            onProgress: (progress) => {
-              setUploads((current) =>
-                current.map((upload) =>
-                  upload.id === preview.id ? { ...upload, progress } : upload,
-                ),
-              );
-            },
-          });
-          return preview.id;
-        } catch (uploadError) {
-          setUploads((current) =>
-            current.map((upload) =>
-              upload.id === preview.id
-                ? { ...upload, status: "failed", error: String(uploadError) }
-                : upload,
-            ),
-          );
-          throw uploadError;
-        }
-      }),
-    )
-      .then(async (results) => {
-        const succeededIds = results.flatMap((result) =>
-          result.status === "fulfilled" ? [result.value] : [],
-        );
-        const failed = results.length - succeededIds.length;
-        if (succeededIds.length > 0) {
-          await reload();
-          for (const id of succeededIds) removeUpload(id);
-          onChange?.();
-        }
-        if (failed > 0) {
-          setError(`${failed} ${failed === 1 ? "file" : "files"} failed to upload.`);
-        }
-      })
-      .finally(() => setBusy(false));
+    for (const preview of previews) void completeUpload(preview);
+  }
+
+  function retryUpload(id: string) {
+    const preview = uploadsRef.current.find((u) => u.id === id);
+    if (!preview || preview.status === "uploading" || preview.status === "processing") return;
+    // The user may have dragged the failed tile before clicking retry — treat
+    // the current nodeId as the new "where the user wants this" by syncing
+    // originalNodeId to it. After the retry succeeds, the deferred-move check
+    // is a no-op because originalNodeId === nodeId.
+    const reset: FileUploadPreview = {
+      ...preview,
+      originalNodeId: preview.nodeId,
+      progress: 0,
+      status: "uploading",
+      error: undefined,
+      sessionId: undefined,
+    };
+    setUploads((current) => current.map((u) => (u.id === id ? reset : u)));
+    void completeUpload(reset);
+  }
+
+  function moveUpload(id: string, targetNodeId: number) {
+    setUploads((current) =>
+      current.map((u) => (u.id === id ? { ...u, nodeId: targetNodeId } : u)),
+    );
   }
 
   /**
@@ -277,6 +401,12 @@ export function StagesEditor({
           }
         }}
         onEditDate={setDateNode}
+        onMoveUpload={moveUpload}
+        onRetryUpload={retryUpload}
+        nodeVisibilityOverrides={visibilityOverrides?.nodes}
+        fileVisibilityOverrides={visibilityOverrides?.files}
+        onNodeVisibilityChange={onNodeVisibilityChange}
+        onFileVisibilityChange={onFileVisibilityChange}
         renderStageActions={(node) => {
           if (node.is_detached) return null;
           return (

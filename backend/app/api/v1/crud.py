@@ -21,10 +21,12 @@ from app.models import (
     Label,
     LabelAlias,
     LabelType,
+    UploadSession,
     Visibility,
     VisibilityPreset,
     VisibilityStageDefault,
 )
+from app.storage import StorageBackendDriver
 from app.schemas import (
     CommissionCreate,
     CommissionDetail,
@@ -440,6 +442,9 @@ def site_settings_out(settings: AppSettings | None) -> SiteSettingsOut:
         allow_public_original_download=(
             settings.allow_public_original_download if settings is not None else True
         ),
+        allow_direct_upload=(
+            settings.allow_direct_upload if settings is not None else False
+        ),
         updated_at=settings.updated_at if settings is not None else None,
     )
 
@@ -447,6 +452,41 @@ def site_settings_out(settings: AppSettings | None) -> SiteSettingsOut:
 def public_originals_allowed(db: Session) -> bool:
     settings = db.get(AppSettings, SETTINGS_ID)
     return settings.allow_public_original_download if settings is not None else True
+
+
+def direct_upload_enabled(db: Session) -> bool:
+    """Per-request DB read so toggle changes are observed across workers without
+    invalidating any process-local cache."""
+    settings = db.get(AppSettings, SETTINGS_ID)
+    return settings.allow_direct_upload if settings is not None else False
+
+
+def cleanup_expired_upload_sessions(
+    db: Session, storage: StorageBackendDriver
+) -> int:
+    """Delete unfinalized upload sessions past their TTL, removing any orphaned
+    bytes that may have been uploaded but never registered as commission files.
+    Finalized sessions are kept as an audit trail."""
+    now = datetime.now(timezone.utc)
+    expired = list(
+        db.scalars(
+            select(UploadSession).where(
+                UploadSession.finalized_at.is_(None),
+                UploadSession.expires_at < now,
+            )
+        )
+    )
+    for session in expired:
+        try:
+            storage.delete(session.storage_key, bucket=session.storage_bucket)
+        except (OSError, Exception):  # noqa: BLE001 — best-effort cleanup
+            # If the provider call fails we still drop the session row; the
+            # operator can run cleanup again later, and a real S3 outage will
+            # surface on the next call anyway.
+            pass
+        db.delete(session)
+    db.commit()
+    return len(expired)
 
 
 def ensure_visibility_settings(db: Session) -> tuple[AppSettings, list[VisibilityStageDefault]]:

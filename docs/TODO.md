@@ -197,6 +197,57 @@
     cumulative (Mature ⊇ General, Adult ⊇ all), persisted in localStorage; popover rating
     filters are pruned/disabled above the gate
   - Search & filter popover gains Tags, Characters, and Artists chip groups
+- [x] Live-togglable direct-to-S3 uploads (issue #26)
+  - `app_settings.allow_direct_upload` (Settings → Storage toggle, default off);
+    when on and the configured backend is `s3`, browsers `PUT` file bytes straight
+    to the bucket via a short-lived presigned URL (15-min TTL by default,
+    `CMGR_STORAGE_UPLOAD_URL_TTL`) instead of routing them through the app
+  - `POST /nodes/{id}/uploads` mints the session + presigned PUT;
+    `POST /uploads/{sid}/finalize` verifies the object via `HeadObject`, probes
+    image metadata, and creates the `storage_objects` + `commission_files` rows
+    transactionally (idempotent on retry);
+    `DELETE /uploads/{sid}` cancels and cleans up the orphan bytes;
+    `POST /uploads/cleanup` sweeps expired-unfinalized sessions (also runs
+    opportunistically on session create)
+  - Storage abstraction grew `presign_upload` + `head_object` —
+    `LocalStorage.presign_upload` returns `None` so the proxied path keeps
+    working; `S3Storage` signs Content-Type so the browser must declare it,
+    and Etag-driven verification fills in for a checksum during finalize
+  - `GET /settings/storage/capabilities` drives the frontend path choice;
+    the upload session toggle remains read per-request from the DB so a
+    multi-worker deployment observes flips without restarts. The
+    `CMGR_STORAGE_DIRECT_UPLOAD_ALLOWED` env kill switch blocks the toggle
+    from being enabled in deployments where bucket CORS isn't configured
+  - Frontend `StagesEditor` branches on capabilities: direct path is
+    presign → XHR PUT (progress) → finalize; failures during PUT cancel the
+    session instead of silently falling back to proxied uploads (bytes may
+    already be in S3 under the same key). New `processing` upload status
+    holds the tile at "Processing…" until finalize confirms registration
+  - Provider CORS configuration (Cloudflare R2 / AWS S3 / MinIO) is
+    documented in `docs/direct-upload-cors.md`
+  - Pending-upload tiles are first-class on the lifecycle grid:
+    cross-stage drag (deferred `moveFile` after the file lands),
+    click-to-retry on failure (resets the preview and re-runs the same
+    transport), and Save gated until every tile drains. Still locked out
+    of viewer, set-cover, and file-delete because `LifecycleUploadTile` is a
+    distinct component from `LifecycleFileTile`
+  - Agent-facing API: `GET /nodes/{id}/uploads` lists pending sessions
+    (admin-only, finalized rows excluded) and `GET /uploads/{sid}` returns
+    a single session with server-derived `is_expired` / `is_finalized` so
+    callers never parse timestamps. `delete_node` best-effort drops bytes
+    for the node's pending sessions before the FK cascade so the keys
+    never become permanent orphans
+- [x] Edit-page UX overhaul (companion to #26)
+  - Uploads no longer flip the shared `busy` flag — the rest of the editor
+    stays interactive (rename, reorder, more uploads) while bytes are in
+    flight; per-tile preview state communicates progress
+  - Admins clicking a commission card land directly on `/edit` (the edit
+    view is a strict superset of the read-only detail view); the catch-all
+    `/visibility` redirect preserves existing bookmarks
+  - **Breaking:** standalone `/commissions/{id}/visibility` page removed;
+    every visibility override is now an inline Public/Private/Inherit
+    toggle next to its component (commission, fields, stages, files). One
+    Save commits metadata + focal + visibility together
 
 ## Phase 3 — Optional / advanced (deferred)
 - [ ] MCP server wrapping the REST API (tools: create_commission, upload_file, search, set_focal_point)

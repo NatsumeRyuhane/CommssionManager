@@ -468,6 +468,7 @@ class SiteSettingsOut(BaseModel):
     site_title: str
     default_stage_names: list[str]
     allow_public_original_download: bool
+    allow_direct_upload: bool
     updated_at: datetime | None = None
 
 
@@ -475,6 +476,7 @@ class SiteSettingsUpdate(BaseModel):
     site_title: str | None = Field(default=None, max_length=120)
     default_stage_names: list[str] | None = None
     allow_public_original_download: bool | None = None
+    allow_direct_upload: bool | None = None
 
     @field_validator("site_title")
     @classmethod
@@ -548,6 +550,68 @@ class StorageSettingsOut(BaseModel):
     s3_endpoint: str | None = None
     cdn_base_url: str | None = None
     configurable_via: str = "environment"
+
+
+class StorageCapabilitiesOut(BaseModel):
+    """Runtime storage capabilities — drives whether the frontend uses the proxied
+    multipart endpoint or the browser-direct upload flow."""
+
+    backend: str
+    # Whether browsers may begin direct uploads right now: requires the backend to
+    # support it, the env-level kill switch to be on, and the admin toggle to be on.
+    direct_upload_available: bool
+    # Reflects the admin toggle alone — distinguishes "operator turned it off" from
+    # "this backend can't support it" so the settings UI shows the right hint.
+    direct_upload_enabled: bool
+    # True when the runtime backend supports direct uploads at all (s3, with the
+    # env kill switch on). Lets the settings UI explain why the toggle is disabled.
+    direct_upload_supported: bool
+
+
+class UploadSessionCreate(BaseModel):
+    filename: str = Field(min_length=1, max_length=512)
+    content_type: str = Field(min_length=1, max_length=255)
+    size_bytes: int = Field(gt=0)
+    label: str | None = Field(default=None, max_length=255)
+
+    @field_validator("filename")
+    @classmethod
+    def _strip_filename(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("filename must not be empty")
+        # The filename becomes the trailing segment of the object key; '/'
+        # would let the client point at a different directory than the
+        # server-generated key prefix expects.
+        if "/" in value or "\\" in value:
+            raise ValueError("filename must not contain path separators")
+        return value
+
+
+class UploadSessionOut(BaseModel):
+    session_id: str
+    upload_url: str
+    upload_method: str
+    upload_headers: dict[str, str]
+    expires_at: datetime
+
+
+class UploadSessionStatusOut(BaseModel):
+    """Agent-facing view of a pending or finalized upload session. The derived
+    `is_expired` / `is_finalized` flags keep callers from having to compare
+    timestamps client-side."""
+
+    session_id: str
+    node_id: int
+    filename: str
+    content_type: str
+    expected_size_bytes: int
+    created_at: datetime
+    expires_at: datetime
+    finalized_at: datetime | None
+    commission_file_id: int | None
+    is_expired: bool
+    is_finalized: bool
 
 
 class WebhookCreate(BaseModel):

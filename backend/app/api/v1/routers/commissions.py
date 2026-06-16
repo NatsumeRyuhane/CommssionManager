@@ -324,7 +324,25 @@ def update_commission_visibility(
     if "visibility" in body.model_fields_set and commission.meta is not None:
         commission.meta.visibility_override = body.visibility
     if body.fields is not None and commission.meta is not None:
-        for field, value in body.fields.model_dump(exclude_unset=True).items():
+        provided = body.fields.model_dump(exclude_unset=True)
+        # Per-commission overrides don't make sense for these fields: title
+        # and description live tightly with the commission's overall public/
+        # private state, so configuring them independently per-record only
+        # creates inconsistent surfaces (a "public" commission with a hidden
+        # title looks broken to readers). The site-wide default still applies;
+        # only the per-record override is locked. `null` is allowed because
+        # the frontend sends the full field map on Save and inherit-as-null
+        # is the legitimate value here.
+        for immutable in ("title", "description"):
+            if immutable in provided and provided[immutable] is not None:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=(
+                        f"Per-commission visibility override for '{immutable}' "
+                        "is not configurable; the site-wide default applies."
+                    ),
+                )
+        for field, value in provided.items():
             setattr(commission.meta, crud.FIELD_OVERRIDE_ATTRS[field], value)
 
     nodes_by_id = {node.id: node for node in commission.nodes}
