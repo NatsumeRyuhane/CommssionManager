@@ -189,6 +189,45 @@ def test_detached_node_and_files_cannot_be_public(admin_client: TestClient):
     assert admin_client.get(f"/api/v1/commissions/{commission['id']}").status_code == 404
 
 
+def test_per_commission_title_description_visibility_overrides_are_locked(
+    admin_client: TestClient,
+):
+    """Title and description per-commission overrides aren't configurable —
+    the site-wide default applies. A hidden title on an otherwise-public
+    commission would look broken to a reader, and the tighter coupling
+    between commission visibility and these fields means the override knob
+    just generates UX inconsistencies. `null` is still accepted (that's the
+    "inherit" value the frontend round-trips on every save); only non-null
+    overrides are rejected so an agent (or stale frontend) can't bypass."""
+    created = admin_client.post(
+        "/api/v1/commissions", json={"title": "Locked-field test"}
+    )
+    assert created.status_code == 201, created.text
+    cid = created.json()["id"]
+
+    for field in ("title", "description"):
+        for value in (True, False):
+            res = admin_client.patch(
+                f"/api/v1/commissions/{cid}/visibility",
+                json={"fields": {field: value}},
+            )
+            assert res.status_code == 422, (field, value, res.text)
+            assert field in res.json()["detail"]
+            assert "not configurable" in res.json()["detail"]
+
+    # null/inherit (the legitimate state) round-trips cleanly so the frontend's
+    # full-field-map save flow keeps working
+    res = admin_client.patch(
+        f"/api/v1/commissions/{cid}/visibility",
+        json={"fields": {"title": None, "description": None, "labels": True}},
+    )
+    assert res.status_code == 200, res.text
+    fields = {f["field"]: f for f in res.json()["fields"]}
+    assert fields["title"]["public"] is None
+    assert fields["description"]["public"] is None
+    assert fields["labels"]["public"] is True
+
+
 def test_public_detail_redacts_fields_marked_private(admin_client: TestClient):
     created = admin_client.post(
         "/api/v1/commissions",
@@ -211,12 +250,18 @@ def test_public_detail_redacts_fields_marked_private(admin_client: TestClient):
     delivered = _node(commission, "Delivered")
     image = _upload_image(admin_client, delivered["id"], "delivered.png", "#111111")
 
+    # Title and description aren't configurable per-commission anymore — flip
+    # them at the site level so the redaction check still has something to
+    # assert against.
+    site = admin_client.patch(
+        "/api/v1/settings/visibility",
+        json={"fields": {"title": False, "description": False}},
+    )
+    assert site.status_code == 200, site.text
     patched = admin_client.patch(
         f"/api/v1/commissions/{commission['id']}/visibility",
         json={
             "fields": {
-                "title": False,
-                "description": False,
                 "labels": False,
                 "rating": False,
                 "characters": False,
