@@ -11,6 +11,7 @@ from collections.abc import Sequence
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 
 revision: str = "e4a1c9b2f7d8"
@@ -41,7 +42,18 @@ def upgrade() -> None:
         ),
         sa.Column(
             "storage_backend",
-            sa.Enum("local", "s3", "gcs", name="storage_backend", create_type=False),
+            # The `storage_backend` enum type was created by the initial
+            # migration when `storage_objects` was first defined; reuse it
+            # rather than re-emitting CREATE TYPE. `create_type=False` is
+            # honored by the Postgres-specific ENUM, not the generic
+            # `sa.Enum`, hence the dialect-direct import.
+            postgresql.ENUM(
+                "local",
+                "s3",
+                "gcs",
+                name="storage_backend",
+                create_type=False,
+            ),
             nullable=False,
         ),
         sa.Column("storage_bucket", sa.String(), nullable=True),
