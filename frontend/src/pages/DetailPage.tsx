@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Braces, Check, Download, Globe, Lock, Pencil, Trash2 } from "lucide-react";
+import { Download, Globe, Lock, Pencil, Trash2 } from "lucide-react";
 // `Globe` / `Lock` are kept for the per-field public/private hint in MetaRow
 // (admin/write-scope only) — they're not used for the commission-level chip
 // any longer; that chip was redundant because the detail view itself is the
@@ -9,25 +9,10 @@ import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import type { Character, CommissionDetail } from "../api/types";
 import { Chip } from "../components/Chip";
+import { CopyJsonButton } from "../components/CopyJsonButton";
 import { LifecycleStagesList } from "../components/LifecycleStagesList";
 import { TopBar } from "../components/TopBar";
 import { useAuth } from "../hooks/useAuth";
-
-function CopyJsonButton({ id }: { id: number }) {
-  const [copied, setCopied] = useState(false);
-  async function copy() {
-    const payload = await api.copyJson(id);
-    await navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }
-  return (
-    <button className="btn sm mono" onClick={() => void copy()} title="Copy commission JSON for agents">
-      {copied ? <Check /> : <Braces />}
-      {copied ? "copied!" : "Copy API JSON"}
-    </button>
-  );
-}
 
 /**
  * Render the read-only commission detail page. Admins are bounced to /edit on
