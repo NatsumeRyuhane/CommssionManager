@@ -648,6 +648,7 @@ function LifecycleFileTile({
               value={file.visibility}
               effective={file.effective_visibility}
               disabled={busy || isDetached}
+              compact
               onChange={(next) => onFileVisibilityChange(file, next)}
               ariaLabel={`Visibility for file ${file.label || file.format}`}
             />
