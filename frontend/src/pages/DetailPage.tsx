@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Braces, Check, Download, Globe, Lock, Pencil, Trash2 } from "lucide-react";
+// `Globe` / `Lock` are kept for the per-field public/private hint in MetaRow
+// (admin/write-scope only) — they're not used for the commission-level chip
+// any longer; that chip was redundant because the detail view itself is the
+// "public" view of the commission.
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 
 import { api } from "../api/client";
@@ -93,8 +97,6 @@ export function DetailPage() {
   const detached = data.nodes.filter((n) => n.is_detached && n.files.length > 0);
   const lifecycle = [...detached, ...regular];
   const paddedId = String(data.id).padStart(3, "0");
-
-  const isPublic = data.effective_visibility !== "private";
   // no dimensions, file types, or dates here: those are per-file/per-stage
   // facts that vary across the lifecycle, so the stage tiles carry them
   const subBits = [`commission #${paddedId}`];
@@ -134,14 +136,10 @@ export function DetailPage() {
           {data.title || "Untitled Commission"}
         </strong>
         <span className="mono-sm muted">#{paddedId}</span>
-        <span className="spacer" />
-        <span
-          className="mono-sm detail-visibility inline-ic"
-          style={{ color: isPublic ? "var(--accent)" : "var(--warn)" }}
-        >
-          {isPublic ? <Globe size={12} /> : <Lock size={12} />}
-          {isPublic ? "public" : "private"}
-        </span>
+        {/* Commission-level visibility chip removed — by construction
+            anything reaching this page is publicly visible (admins are
+            redirected to /edit, and non-admins only ever see public
+            commissions thanks to the gallery / detail gating). */}
       </div>
 
       {/* scrolling content + sticky side rail; images open in the viewer from the stage list */}
@@ -192,13 +190,8 @@ export function DetailPage() {
 
         <aside className="detail-rail">
           <div className="detail-rail-inner">
-            <div className="detail-rail-visibility">
-              <span className="mono-sm">visibility:</span>
-              <span className="inline-ic" style={{ color: isPublic ? "var(--accent)" : "var(--warn)" }}>
-                {isPublic ? <Globe size={12} /> : <Lock size={12} />}
-                {isPublic ? "public" : "private"}
-              </span>
-            </div>
+            {/* Rail visibility row removed for the same reason as the crumb
+                chip — anything on this page is public by construction. */}
 
             {canWrite && data.confirmed_at && (
               <MetaRow label="Confirmed" value={data.confirmed_at.slice(0, 10)} pub={false} />

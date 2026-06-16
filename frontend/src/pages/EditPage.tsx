@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Check } from "lucide-react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { api } from "../api/client";
 import type {
@@ -320,6 +320,22 @@ export function EditPage() {
           {busy ? "Saving…" : "Save"}
         </button>
       </TopBar>
+
+      {/* Breadcrumb mirrors DetailPage so navigation reads the same on both
+          pages — the title reflects the *current* draft (local input state),
+          not the server snapshot, so the user can see what they're naming the
+          commission as they type. */}
+      <div className="detail-crumb">
+        <Link to="/" className="mono-sm muted">← gallery</Link>
+        <span className="mono-sm muted">/</span>
+        <strong
+          className="detail-crumb-title"
+          style={title.trim() ? undefined : { color: "var(--mute)", fontWeight: 400 }}
+        >
+          {title.trim() || "Untitled Commission"}
+        </strong>
+        <span className="mono-sm muted">#{String(commissionId).padStart(3, "0")}</span>
+      </div>
 
       <form id="commission-edit-form" onSubmit={submit} className="edit-page">
         <div className="edit-main">
