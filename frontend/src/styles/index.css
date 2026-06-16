@@ -1034,10 +1034,10 @@ a { color: inherit; text-decoration: none; }
 }
 
 /* Compact (icon-only) variant for file tile action rows — the button shrinks
- * to a square the same size as the existing icon buttons in that row. */
+ * to a square the same size as the existing .icon-btn (26x26) it sits beside. */
 .visibility-cycle.compact {
-  height: 24px;
-  width: 24px;
+  height: 26px;
+  width: 26px;
   padding: 0;
   justify-content: center;
   gap: 0;

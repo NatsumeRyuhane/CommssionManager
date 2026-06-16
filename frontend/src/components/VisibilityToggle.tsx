@@ -49,6 +49,7 @@ export function VisibilityToggle({
   compact?: boolean;
   ariaLabel?: string;
 }) {
+  const locked = Boolean(lockedReason);
   const view = describeVisibility(value, effective);
   const next = cycleVisibility(value);
   const tooltip = lockedReason
@@ -61,8 +62,8 @@ export function VisibilityToggle({
       label={view.label}
       tooltip={tooltip}
       compact={compact}
-      disabled={disabled || Boolean(lockedReason)}
-      locked={Boolean(lockedReason)}
+      disabled={disabled}
+      locked={locked}
       ariaLabel={ariaLabel ?? `Visibility: ${view.label}`}
       onClick={() => onChange(next)}
     />
@@ -92,6 +93,7 @@ export function FieldVisibilityToggle({
   const asVis: Visibility | null =
     value === null ? null : value ? "public" : "private";
   const effectiveVis: Visibility = effective ? "public" : "private";
+  const locked = Boolean(lockedReason);
   const view = describeVisibility(asVis, effectiveVis);
   const nextVis = cycleVisibility(asVis);
   const nextBool: boolean | null =
@@ -106,8 +108,8 @@ export function FieldVisibilityToggle({
       label={view.label}
       tooltip={tooltip}
       compact={compact}
-      disabled={disabled || Boolean(lockedReason)}
-      locked={Boolean(lockedReason)}
+      disabled={disabled}
+      locked={locked}
       ariaLabel={ariaLabel ?? `Visibility: ${view.label}`}
       onClick={() => onChange(nextBool)}
     />
@@ -193,8 +195,18 @@ function CycleButton({
     <button
       type="button"
       className={cls}
-      disabled={disabled}
-      onClick={onClick}
+      // A locked button stays focusable (no native `disabled`) so its tooltip
+      // — which explains *why* it's locked — is reachable by hover and keyboard
+      // focus; native `disabled` removes it from the tab order and suppresses
+      // the title tooltip in several browsers. `aria-disabled` conveys the
+      // non-interactive state to assistive tech, and the click is gated below.
+      // Transient `disabled` (e.g. busy mid-op) still uses the native attribute
+      // since the reason isn't worth surfacing.
+      disabled={disabled && !locked}
+      aria-disabled={locked || disabled || undefined}
+      onClick={() => {
+        if (!disabled && !locked) onClick();
+      }}
       title={tooltip}
       aria-label={ariaLabel}
     >

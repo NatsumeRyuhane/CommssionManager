@@ -121,12 +121,21 @@ export function EditPage() {
     let cancelled = false;
     setInitialLoading(true);
     setInitialError(null);
-    Promise.all([
+    // The two fetches are decoupled: the commission load gates the editor (its
+    // failure is fatal — there's nothing to edit), but a visibility-fetch
+    // failure only costs the inline visibility toggles. Coupling them under
+    // Promise.all would block the whole editor on a non-essential request.
+    Promise.allSettled([
       api.getCommission(commissionId),
       api.getCommissionVisibility(commissionId),
     ])
-      .then(([d, v]) => {
+      .then(([commissionResult, visibilityResult]) => {
         if (cancelled) return;
+        if (commissionResult.status === "rejected") {
+          setInitialError(String(commissionResult.reason));
+          return;
+        }
+        const d = commissionResult.value;
         setTitle(d.title ?? "");
         setDescription(d.description ?? "");
         setConfirmedAt(d.confirmed_at ? d.confirmed_at.slice(0, 10) : "");
@@ -137,9 +146,12 @@ export function EditPage() {
         setTags(d.tags);
         setCharacters(d.characters);
         setArtists(d.artists);
-        setVisibility(v);
+        // Visibility is best-effort: on failure the toggles just don't render
+        // (visibility stays null), the rest of the editor works normally.
+        setVisibility(
+          visibilityResult.status === "fulfilled" ? visibilityResult.value : null,
+        );
       })
-      .catch((e) => !cancelled && setInitialError(String(e)))
       .finally(() => !cancelled && setInitialLoading(false));
     return () => {
       cancelled = true;
