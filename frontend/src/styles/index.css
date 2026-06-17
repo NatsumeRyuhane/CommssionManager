@@ -14,6 +14,7 @@
   --rate-bg: #f1e3df;   --rate-fg: #9b3b2b;
   --char-bg: #e6ecf3;   --char-fg: #36567a;
   --artist-bg: #ece5f2; --artist-fg: #5b3a78;
+  --status-bg: #e9ece9; --status-fg: #4a564f;
   --accent: #2f6a55;
   --warn: #b6552a;
   --rating-mature: #c9a227;
@@ -125,6 +126,7 @@ a { color: inherit; text-decoration: none; }
 .chip.rating { background: var(--rate-bg); color: var(--rate-fg); }
 .chip.char { background: var(--char-bg); color: var(--char-fg); }
 .chip.artist { background: var(--artist-bg); color: var(--artist-fg); }
+.chip.status { background: var(--status-bg); color: var(--status-fg); }
 .chip.ghost { background: transparent; border: 1px dashed var(--rule-2); color: var(--mute); }
 .chip .x {
   display: inline-flex;

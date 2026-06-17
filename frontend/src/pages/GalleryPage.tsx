@@ -3,7 +3,7 @@ import { ArrowDown, ArrowUp, ChevronDown, ChevronUp, Loader2, Plus, Search, User
 import { Link, useNavigate } from "react-router-dom";
 
 import { api } from "../api/client";
-import type { CommissionListItem, Rating } from "../api/types";
+import type { CommissionListItem, CommissionStatus, Rating } from "../api/types";
 import { Chip } from "../components/Chip";
 import { FaGallery } from "../components/FaGallery";
 import { TopBar } from "../components/TopBar";
@@ -14,7 +14,12 @@ const PAGE_SIZE = 24;
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 const RATING_ORDER: Rating[] = ["general", "mature", "adult"];
+const STATUS_ORDER: CommissionStatus[] = ["ongoing", "completed"];
 const MAX_RATING_KEY = "cmgr:max-rating";
+
+/** Sentinel the API recognizes in a list filter to mean "nothing set" for that
+ * field. Mirrors NONE_SENTINEL in the backend crud layer. */
+const NONE_SENTINEL = "__none__";
 
 /** The site starts SFW: only the stored gate can raise it past General. */
 function readMaxRating(): Rating {
@@ -40,11 +45,24 @@ function FilterChips({
   selected: string[];
   onToggle: (value: string) => void;
 }) {
+  const noneSelected = selected.includes(NONE_SENTINEL);
   return (
     <>
       <div className="label">{label}</div>
       <div className="row wrap gap-4" style={{ marginBottom: 12 }}>
-        {options.length === 0 && <span className="mono-sm muted">none yet</span>}
+        {/* special filter: match commissions with nothing set for this field */}
+        <button
+          type="button"
+          className="chip-button"
+          aria-pressed={noneSelected}
+          onClick={() => onToggle(NONE_SENTINEL)}
+          title={`Show commissions with no ${label.toLowerCase()}`}
+        >
+          <Chip kind={kind} ghost={!noneSelected}>
+            {noneSelected ? "✓ " : ""}
+            (none)
+          </Chip>
+        </button>
         {options.map((value) => (
           <button
             key={value}
@@ -89,6 +107,7 @@ export function GalleryPage() {
   const [chars, setChars] = useState<string[]>([]);
   const [artists, setArtists] = useState<string[]>([]);
   const [ratings, setRatings] = useState<string[]>([]);
+  const [statuses, setStatuses] = useState<string[]>([]);
   const [maxRating, setMaxRating] = useState<Rating>(readMaxRating);
   const [sort, setSort] = useState<"date" | "title">("date");
   const [order, setOrder] = useState<"asc" | "desc">("desc");
@@ -135,7 +154,7 @@ export function GalleryPage() {
   // reset to the first page whenever the query changes
   useEffect(() => {
     setLimit(PAGE_SIZE);
-  }, [q, cats, tags, chars, artists, ratings, maxRating, sort, order]);
+  }, [q, cats, tags, chars, artists, ratings, statuses, maxRating, sort, order]);
 
   useEffect(() => {
     let cancelled = false;
@@ -147,6 +166,7 @@ export function GalleryPage() {
         tags,
         characters: chars,
         artists,
+        status: statuses,
         // explicit picks are already gate-pruned; otherwise the gate itself
         // filters (an all-open gate needs no param)
         rating: ratings.length
@@ -171,10 +191,16 @@ export function GalleryPage() {
     };
     // allowedRatings is derived from maxRating
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, cats, tags, chars, artists, ratings, maxRating, sort, order, limit]);
+  }, [q, cats, tags, chars, artists, ratings, statuses, maxRating, sort, order, limit]);
 
   const activeCount =
-    cats.length + tags.length + chars.length + artists.length + ratings.length + (q ? 1 : 0);
+    cats.length +
+    tags.length +
+    chars.length +
+    artists.length +
+    ratings.length +
+    statuses.length +
+    (q ? 1 : 0);
 
   function toggle(list: string[], set: (v: string[]) => void, value: string) {
     set(list.includes(value) ? list.filter((v) => v !== value) : [...list, value]);
@@ -295,6 +321,23 @@ export function GalleryPage() {
                   );
                 })}
               </div>
+              <div className="label">Status</div>
+              <div className="row wrap gap-4" style={{ marginBottom: 12 }}>
+                {STATUS_ORDER.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    className="chip-button"
+                    aria-pressed={statuses.includes(s)}
+                    onClick={() => toggle(statuses, setStatuses, s)}
+                  >
+                    <Chip kind="status" ghost={!statuses.includes(s)}>
+                      {statuses.includes(s) ? "✓ " : ""}
+                      {capitalize(s)}
+                    </Chip>
+                  </button>
+                ))}
+              </div>
               <div className="row" style={{ justifyContent: "space-between" }}>
                 <button
                   className="btn sm ghost"
@@ -305,6 +348,7 @@ export function GalleryPage() {
                     setChars([]);
                     setArtists([]);
                     setRatings([]);
+                    setStatuses([]);
                   }}
                 >
                   Reset all
