@@ -25,6 +25,11 @@ Enum rating {
   adult
 }
 
+Enum commission_status {
+  ongoing
+  completed
+}
+
 Enum visibility {
   public
   private
@@ -206,6 +211,7 @@ Table commission_metadata {
   title           varchar        [Note: 'Nullable; null means untitled and the UI hides it']
   description     text
   rating          rating         [not null, default: 'general']
+  status          commission_status [not null, default: 'ongoing', Note: 'Commission lifecycle status. New rows default to ongoing; rows predating the column were backfilled to completed.']
   cover_file_id   integer        [ref: - commission_files.id, Note: 'Nullable; must point to a commission_file where is_image = true']
   confirmed_at    timestamp      [Note: 'When the commission was accepted/confirmed by the admin']
   price_amount    numeric(12, 2) [Note: 'Agreed commission price']

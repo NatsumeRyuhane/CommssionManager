@@ -85,6 +85,73 @@ def test_list_filters_can_be_combined_across_metadata_and_files(admin_client: Te
     assert title_only.json() == []
 
 
+def test_new_commission_defaults_to_ongoing(admin_client: TestClient):
+    created = _make(admin_client)
+    assert created["status"] == "ongoing"
+
+
+def test_status_filter(admin_client: TestClient):
+    _make(admin_client, title="Still going")  # defaults to ongoing
+    done = _make(admin_client, title="Wrapped up", status="completed")
+    assert done["status"] == "completed"
+
+    ongoing = admin_client.get("/api/v1/commissions", params={"status": "ongoing"})
+    assert [item["title"] for item in ongoing.json()] == ["Still going"]
+
+    completed = admin_client.get("/api/v1/commissions", params={"status": "completed"})
+    assert [item["title"] for item in completed.json()] == ["Wrapped up"]
+
+    # both states selected behaves like no status filter
+    both = admin_client.get(
+        "/api/v1/commissions", params=[("status", "ongoing"), ("status", "completed")]
+    )
+    assert {item["title"] for item in both.json()} == {"Still going", "Wrapped up"}
+
+
+def test_status_round_trips_on_update(admin_client: TestClient):
+    created = _make(admin_client, status="ongoing")
+    patched = admin_client.patch(
+        f"/api/v1/commissions/{created['id']}", json={"status": "completed"}
+    )
+    assert patched.status_code == 200
+    assert patched.json()["status"] == "completed"
+    # omitting status leaves it unchanged
+    untouched = admin_client.patch(
+        f"/api/v1/commissions/{created['id']}", json={"title": "renamed"}
+    )
+    assert untouched.json()["status"] == "completed"
+
+
+def test_none_filter_matches_records_with_nothing_set(admin_client: TestClient):
+    _make(admin_client, title="Has a category", category_names=["Chibi"])
+    _make(admin_client, title="No category")
+
+    only_none = admin_client.get(
+        "/api/v1/commissions", params={"categories": "__none__"}
+    )
+    assert [item["title"] for item in only_none.json()] == ["No category"]
+
+    # the sentinel ORs with concrete values: unset OR Chibi keeps both
+    none_or_chibi = admin_client.get(
+        "/api/v1/commissions",
+        params=[("categories", "__none__"), ("categories", "Chibi")],
+    )
+    assert {item["title"] for item in none_or_chibi.json()} == {
+        "Has a category",
+        "No category",
+    }
+
+    # the sentinel works for the other taxonomy filters too — neither
+    # commission has characters, so both match
+    none_chars = admin_client.get(
+        "/api/v1/commissions", params={"characters": "__none__"}
+    )
+    assert {item["title"] for item in none_chars.json()} == {
+        "Has a category",
+        "No category",
+    }
+
+
 def test_list_sorting_by_title_and_date(admin_client: TestClient):
     # "date" sorts by the topmost stage's start date
     _set_stage_date(admin_client, _make(admin_client, title="Charlie"), "2024-01-01T00:00:00Z")
