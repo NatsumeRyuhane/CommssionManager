@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, ChevronDown, ChevronUp, Loader2, Plus, Search, Users } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 
@@ -16,6 +16,7 @@ const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 const RATING_ORDER: Rating[] = ["general", "mature", "adult"];
 const STATUS_ORDER: CommissionStatus[] = ["ongoing", "completed"];
 const MAX_RATING_KEY = "cmgr:max-rating";
+const FILTERS_KEY = "cmgr:gallery-filters";
 
 /** Sentinel the API recognizes in a list filter to mean "nothing set" for that
  * field. Mirrors NONE_SENTINEL in the backend crud layer. */
@@ -30,6 +31,51 @@ function readMaxRating(): Rating {
     /* storage unavailable */
   }
   return "general";
+}
+
+/** Filter selections persisted across sessions so reopening the gallery keeps
+ * whatever the user last narrowed to. The rating gate has its own key
+ * (MAX_RATING_KEY) and is intentionally excluded. */
+interface StoredFilters {
+  q: string;
+  cats: string[];
+  tags: string[];
+  chars: string[];
+  artists: string[];
+  ratings: string[];
+  statuses: string[];
+  sort: "date" | "title";
+  order: "asc" | "desc";
+}
+
+const onlyStrings = (v: unknown): string[] =>
+  Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+
+function readStoredFilters(): Partial<StoredFilters> {
+  try {
+    const raw = window.localStorage.getItem(FILTERS_KEY);
+    if (!raw) return {};
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return {};
+    // Corrupt or hand-edited storage can carry wrong types; validate every
+    // field so the returned shape actually honors StoredFilters (array fields
+    // go through onlyStrings; scalars are coerced to a valid value or dropped).
+    const p = parsed as Record<string, unknown>;
+    return {
+      q: typeof p.q === "string" ? p.q : undefined,
+      cats: onlyStrings(p.cats),
+      tags: onlyStrings(p.tags),
+      chars: onlyStrings(p.chars),
+      artists: onlyStrings(p.artists),
+      ratings: onlyStrings(p.ratings),
+      statuses: onlyStrings(p.statuses),
+      sort: p.sort === "title" || p.sort === "date" ? p.sort : undefined,
+      order: p.order === "asc" || p.order === "desc" ? p.order : undefined,
+    };
+  } catch {
+    /* storage unavailable or corrupt */
+  }
+  return {};
 }
 
 function FilterChips({
@@ -101,16 +147,27 @@ export function GalleryPage() {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [q, setQ] = useState("");
-  const [cats, setCats] = useState<string[]>([]);
-  const [tags, setTags] = useState<string[]>([]);
-  const [chars, setChars] = useState<string[]>([]);
-  const [artists, setArtists] = useState<string[]>([]);
-  const [ratings, setRatings] = useState<string[]>([]);
-  const [statuses, setStatuses] = useState<string[]>([]);
+  // Hydrate filters from the previous session once on mount; the rating gate is
+  // read separately so persisted rating picks can be pruned against it below.
+  const stored = useMemo(readStoredFilters, []);
+  const [q, setQ] = useState(() => stored.q ?? "");
+  const [cats, setCats] = useState<string[]>(() => onlyStrings(stored.cats));
+  const [tags, setTags] = useState<string[]>(() => onlyStrings(stored.tags));
+  const [chars, setChars] = useState<string[]>(() => onlyStrings(stored.chars));
+  const [artists, setArtists] = useState<string[]>(() => onlyStrings(stored.artists));
+  const [ratings, setRatings] = useState<string[]>(() => {
+    // a stored pick above the current gate is dropped — the gate is the ceiling
+    const allowed = RATING_ORDER.slice(0, RATING_ORDER.indexOf(readMaxRating()) + 1);
+    return onlyStrings(stored.ratings).filter((r) => allowed.includes(r as Rating));
+  });
+  const [statuses, setStatuses] = useState<string[]>(() => onlyStrings(stored.statuses));
   const [maxRating, setMaxRating] = useState<Rating>(readMaxRating);
-  const [sort, setSort] = useState<"date" | "title">("date");
-  const [order, setOrder] = useState<"asc" | "desc">("desc");
+  const [sort, setSort] = useState<"date" | "title">(() =>
+    stored.sort === "title" ? "title" : "date",
+  );
+  const [order, setOrder] = useState<"asc" | "desc">(() =>
+    stored.order === "asc" ? "asc" : "desc",
+  );
   const [filterOpen, setFilterOpen] = useState(false);
   const [allCats, setAllCats] = useState<string[]>([]);
   const [allTags, setAllTags] = useState<string[]>([]);
@@ -155,6 +212,26 @@ export function GalleryPage() {
   useEffect(() => {
     setLimit(PAGE_SIZE);
   }, [q, cats, tags, chars, artists, ratings, statuses, maxRating, sort, order]);
+
+  // persist the active filter set so it survives reloads and revisits
+  useEffect(() => {
+    try {
+      const payload: StoredFilters = {
+        q,
+        cats,
+        tags,
+        chars,
+        artists,
+        ratings,
+        statuses,
+        sort,
+        order,
+      };
+      window.localStorage.setItem(FILTERS_KEY, JSON.stringify(payload));
+    } catch {
+      /* storage unavailable */
+    }
+  }, [q, cats, tags, chars, artists, ratings, statuses, sort, order]);
 
   useEffect(() => {
     let cancelled = false;
