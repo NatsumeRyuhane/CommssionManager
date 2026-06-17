@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import type { CommissionListItem } from "../api/types";
 import { Chip } from "./Chip";
 import { Cover } from "./Cover";
+import { Skeleton } from "./Skeleton";
 
 /** Columns that fit the current viewport, capped at `max`. */
 function useViewportColumns(max: number) {
@@ -24,20 +25,28 @@ function useViewportColumns(max: number) {
   return columns;
 }
 
+/** Aspect ratios (w/h) cycled through skeleton tiles so the loading state mimics
+ *  a real, varied waterfall instead of a grid of identical squares. */
+const SKELETON_RATIOS = [0.8, 1, 1.3, 0.7, 1.1, 0.9, 1.2, 0.75];
+
 /** FurAffinity-style column layout: items flow into N height-balanced columns,
  *  preserving left-to-right, top-to-bottom order within the balancing.
- *  `columns` is an upper bound; narrow viewports drop to 3 then 2. */
+ *  `columns` is an upper bound; narrow viewports drop to 3 then 2.
+ *  `skeletonCount` appends that many shimmer placeholders after the real items,
+ *  balanced into the same columns (used while the next page is loading). */
 export function FaGallery({
   items,
   columns: maxColumns = 4,
+  skeletonCount = 0,
 }: {
   items: CommissionListItem[];
   columns?: number;
+  skeletonCount?: number;
 }) {
   const columns = useViewportColumns(maxColumns);
-  const cols: { h: number; items: CommissionListItem[] }[] = Array.from(
+  const cols: { h: number; items: CommissionListItem[]; skeletons: number[] }[] = Array.from(
     { length: columns },
-    () => ({ h: 0, items: [] })
+    () => ({ h: 0, items: [], skeletons: [] })
   );
   for (const it of items) {
     const target = cols.reduce((a, b) => (a.h <= b.h ? a : b));
@@ -47,9 +56,21 @@ export function FaGallery({
     target.items.push(it);
     target.h += 1 / ratio + 0.1;
   }
+  // continue the same shortest-column balancing for the placeholders so they
+  // pick up where the real tiles left off
+  for (let i = 0; i < skeletonCount; i++) {
+    const target = cols.reduce((a, b) => (a.h <= b.h ? a : b));
+    const ratio = SKELETON_RATIOS[i % SKELETON_RATIOS.length];
+    target.skeletons.push(ratio);
+    target.h += 1 / ratio + 0.1;
+  }
 
   return (
-    <div className="fa-grid" style={{ gridTemplateColumns: `repeat(${columns}, 1fr)` }}>
+    <div
+      className="fa-grid"
+      style={{ gridTemplateColumns: `repeat(${columns}, 1fr)` }}
+      aria-busy={skeletonCount > 0 || undefined}
+    >
       {cols.map((col, i) => (
         <div className="fa-col" key={i}>
           {col.items.map((it) => {
@@ -100,6 +121,11 @@ export function FaGallery({
               </Link>
             );
           })}
+          {col.skeletons.map((ratio, j) => (
+            <div className="fa-tile is-skeleton" key={`sk-${j}`} aria-hidden="true">
+              <Skeleton style={{ aspectRatio: String(ratio), borderRadius: 0 }} />
+            </div>
+          ))}
         </div>
       ))}
     </div>

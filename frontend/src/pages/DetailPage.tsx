@@ -11,6 +11,7 @@ import type { Character, CommissionDetail } from "../api/types";
 import { Chip } from "../components/Chip";
 import { CopyJsonButton } from "../components/CopyJsonButton";
 import { LifecycleStagesList } from "../components/LifecycleStagesList";
+import { Skeleton } from "../components/Skeleton";
 import { TopBar } from "../components/TopBar";
 import { useAuth } from "../hooks/useAuth";
 
@@ -76,7 +77,7 @@ export function DetailPage() {
   }
 
   if (error) return <div className="app"><TopBar /><div style={{ padding: 24 }} className="error-text">{error}</div></div>;
-  if (!data) return <div className="app"><TopBar /><div style={{ padding: 24 }} className="mono-sm">Loading…</div></div>;
+  if (!data) return <DetailSkeleton />;
 
   const regular = data.nodes.filter((n) => !n.is_detached);
   const detached = data.nodes.filter((n) => n.is_detached && n.files.length > 0);
@@ -213,6 +214,61 @@ export function DetailPage() {
                 {data.artists.map((a) => <Chip key={a} kind="artist">{a}</Chip>)}
               </MetaBlock>
             )}
+          </div>
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Loading placeholder that mirrors the detail layout (crumb, title block,
+ * description, lifecycle, side rail) so the page doesn't reflow when the real
+ * data arrives.
+ */
+function DetailSkeleton() {
+  return (
+    <div className="app">
+      <TopBar />
+      <div className="detail-crumb">
+        <Skeleton w={56} h={12} />
+        <Skeleton w={200} h={14} />
+      </div>
+      <div className="detail-layout" aria-busy="true">
+        <div className="detail-main">
+          <div className="page-title">
+            <div className="row gap-8 wrap" style={{ marginBottom: 10 }}>
+              <Skeleton w={72} h={22} radius={999} />
+              <Skeleton w={58} h={22} radius={999} />
+              <Skeleton w={88} h={22} radius={999} />
+            </div>
+            <Skeleton w="55%" h={34} style={{ marginBottom: 10 }} />
+            <Skeleton w={150} h={12} />
+          </div>
+          <div className="detail-description">
+            <Skeleton w="100%" h={13} style={{ marginBottom: 8 }} />
+            <Skeleton w="94%" h={13} style={{ marginBottom: 8 }} />
+            <Skeleton w="72%" h={13} />
+          </div>
+          <div className="detail-lifecycle">
+            <Skeleton w={160} h={16} style={{ marginBottom: 16 }} />
+            <div className="col gap-12">
+              <Skeleton w="100%" h={120} />
+              <Skeleton w="100%" h={120} />
+            </div>
+          </div>
+        </div>
+        <aside className="detail-rail">
+          <div className="detail-rail-inner">
+            {[64, 80].map((labelW) => (
+              <div className="detail-meta-block" key={labelW}>
+                <Skeleton w={labelW} h={12} />
+                <div className="row wrap gap-4">
+                  <Skeleton w={70} h={22} radius={999} />
+                  <Skeleton w={56} h={22} radius={999} />
+                </div>
+              </div>
+            ))}
           </div>
         </aside>
       </div>
