@@ -55,8 +55,23 @@ function readStoredFilters(): Partial<StoredFilters> {
   try {
     const raw = window.localStorage.getItem(FILTERS_KEY);
     if (!raw) return {};
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === "object") return parsed as Partial<StoredFilters>;
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return {};
+    // Corrupt or hand-edited storage can carry wrong types; validate every
+    // field so the returned shape actually honors StoredFilters (array fields
+    // go through onlyStrings; scalars are coerced to a valid value or dropped).
+    const p = parsed as Record<string, unknown>;
+    return {
+      q: typeof p.q === "string" ? p.q : undefined,
+      cats: onlyStrings(p.cats),
+      tags: onlyStrings(p.tags),
+      chars: onlyStrings(p.chars),
+      artists: onlyStrings(p.artists),
+      ratings: onlyStrings(p.ratings),
+      statuses: onlyStrings(p.statuses),
+      sort: p.sort === "title" || p.sort === "date" ? p.sort : undefined,
+      order: p.order === "asc" || p.order === "desc" ? p.order : undefined,
+    };
   } catch {
     /* storage unavailable or corrupt */
   }

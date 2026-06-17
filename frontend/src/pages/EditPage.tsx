@@ -195,9 +195,10 @@ export function EditPage() {
   // debounce timer reads the live set without re-subscribing.
   const dirtyRef = useRef<Set<SaveUnit>>(new Set());
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Guards against overlapping flushes; a flush requested mid-save is picked up
-  // by the post-save "more dirty?" check instead of running concurrently.
-  const savingRef = useRef(false);
+  // Holds the in-flight flush so concurrent callers (Done, unmount, stages
+  // reload) coalesce onto it and await the same settle, instead of racing or
+  // getting a premature result.
+  const activeFlushRef = useRef<Promise<boolean> | null>(null);
   // Always points at the latest flush closure so the stale timer callback still
   // sees current form/visibility state.
   const flushRef = useRef<() => Promise<boolean>>(() => Promise.resolve(true));
@@ -255,21 +256,26 @@ export function EditPage() {
     const seq = ++loadSeqRef.current;
     setInitialLoading(true);
     setInitialError(null);
-    // The two fetches are decoupled: the commission load gates the editor (its
-    // failure is fatal — there's nothing to edit), but a visibility-fetch
-    // failure only costs the inline visibility toggles. Coupling them under
-    // Promise.all would block the whole editor on a non-essential request.
-    const [commissionResult, visibilityResult] = await Promise.allSettled([
-      api.getCommission(commissionId),
-      api.getCommissionVisibility(commissionId),
-    ]);
-    if (seq !== loadSeqRef.current) return; // superseded
-    if (commissionResult.status === "rejected") {
-      setInitialError(String(commissionResult.reason));
-      setInitialLoading(false);
+    // Visibility is non-essential — only the inline toggles need it — so fetch
+    // it in the background and apply it when it lands (or null it on failure).
+    // Awaiting it here would needlessly gate the whole editor on a slow request.
+    api
+      .getCommissionVisibility(commissionId)
+      .then((v) => seq === loadSeqRef.current && setVisibility(v))
+      .catch(() => seq === loadSeqRef.current && setVisibility(null));
+    // The commission load gates the editor: its failure is fatal (nothing to edit).
+    let commission: CommissionDetail;
+    try {
+      commission = await api.getCommission(commissionId);
+    } catch (err) {
+      if (seq === loadSeqRef.current) {
+        setInitialError(String(err));
+        setInitialLoading(false);
+      }
       return;
     }
-    const f = fieldsFromDetail(commissionResult.value);
+    if (seq !== loadSeqRef.current) return; // superseded
+    const f = fieldsFromDetail(commission);
     setTitle(f.title);
     setDescription(f.description);
     setConfirmedAt(f.confirmedAt);
@@ -281,9 +287,7 @@ export function EditPage() {
     setTags(f.tags);
     setCharacters(f.characters);
     setArtists(f.artists);
-    // Visibility is best-effort: on failure the toggles just don't render
-    // (visibility stays null), the rest of the editor works normally.
-    setVisibility(visibilityResult.status === "fulfilled" ? visibilityResult.value : null);
+    // (Visibility is owned by the background fetch above, not set here.)
     // Re-baseline the auto-save bookkeeping against the freshly loaded snapshot.
     // This doubles as the discard path (refresh-from-server), so any buffered or
     // out-of-sync edits are dropped right here.
@@ -466,23 +470,11 @@ export function EditPage() {
     }
   }
 
-  // Flush the buffered edits one unit at a time. Returns true when nothing is
-  // left unsaved (safe to navigate away). A unit that fails is NOT re-queued —
-  // it stays visible but out of sync until the user edits again or discards via
-  // refresh-from-server.
-  async function runFlush(): Promise<boolean> {
-    if (savingRef.current) return false; // a flush is already in flight
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-    if (initialLoading || !validId || dirtyRef.current.size === 0) {
-      setSaveStatus((s) => (s === "dirty" ? "saved" : s));
-      return saveStatus !== "error";
-    }
+  // One persistence pass, applying the buffered units one at a time. Never run
+  // concurrently — runFlush() serializes callers onto a single in-flight pass.
+  async function doFlush(): Promise<boolean> {
     const units = dirtyRef.current;
     dirtyRef.current = new Set();
-    savingRef.current = true;
     setSaveStatus("saving");
     setSaveError(null);
 
@@ -523,7 +515,6 @@ export function EditPage() {
       }
     }
 
-    savingRef.current = false;
     if (failed.length > 0) {
       setSaveError(`Couldn't save ${failed.join("; ")}.`);
       setSaveStatus("error");
@@ -536,6 +527,30 @@ export function EditPage() {
     }
     setSaveStatus("saved");
     return true;
+  }
+
+  // Flush the buffered edits one unit at a time. Returns true when nothing is
+  // left unsaved (safe to navigate away). A unit that fails is NOT re-queued —
+  // it stays visible but out of sync until the user edits again or discards via
+  // refresh-from-server. Concurrent callers await the in-flight pass rather than
+  // getting an immediate, premature result.
+  async function runFlush(): Promise<boolean> {
+    if (activeFlushRef.current) return activeFlushRef.current;
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    if (initialLoading || !validId || dirtyRef.current.size === 0) {
+      setSaveStatus((s) => (s === "dirty" ? "saved" : s));
+      return saveStatus !== "error";
+    }
+    const pass = doFlush();
+    activeFlushRef.current = pass;
+    try {
+      return await pass;
+    } finally {
+      activeFlushRef.current = null;
+    }
   }
   // Keep the timer callback pointed at the latest closure.
   flushRef.current = runFlush;
