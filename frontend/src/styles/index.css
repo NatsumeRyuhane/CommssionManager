@@ -231,6 +231,28 @@ a { color: inherit; text-decoration: none; }
   transform: scale(var(--focal-zoom, 1));
 }
 
+/* ---- skeleton / shimmer placeholders ----
+   A soft band sweeping across the paper tint. The global reduced-motion rule
+   (top of file) freezes the sweep; the static tint still reads as a placeholder.
+   Reused both as a standalone <Skeleton> block and, on .imgph, as the backdrop
+   shown until a cover image finishes loading. */
+@keyframes skeleton-shimmer {
+  from { background-position: 150% 0; }
+  to { background-position: -150% 0; }
+}
+.skeleton {
+  background-color: var(--paper-2);
+  background-image: linear-gradient(
+    90deg,
+    var(--paper-2) 0%,
+    var(--rule-2) 50%,
+    var(--paper-2) 100%
+  );
+  background-size: 200% 100%;
+  background-repeat: no-repeat;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+
 /* ---- FurAffinity-style gallery ---- */
 .fa-grid {
   display: grid;
@@ -306,6 +328,21 @@ a { color: inherit; text-decoration: none; }
 .fa-tile .caption .caption-text {
   flex: 1;
   min-width: 0;
+}
+/* placeholder tiles shown while the next page (or first page) is loading */
+.fa-tile.is-skeleton {
+  cursor: default;
+  pointer-events: none;
+}
+.fa-tile.is-skeleton:hover {
+  transform: none;
+  box-shadow: none;
+  border-color: var(--rule);
+}
+/* zero-height marker the gallery observes to auto-load before the real bottom */
+.fa-sentinel {
+  height: 1px;
+  width: 100%;
 }
 
 /* file-type pill pinned to a cover's bottom-right corner */

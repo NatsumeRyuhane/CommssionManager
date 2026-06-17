@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, ChevronDown, ChevronUp, Loader2, Plus, Search, Users } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 
@@ -146,6 +146,8 @@ export function GalleryPage() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // observed to auto-load the next page before the real bottom comes into view
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   // Hydrate filters from the previous session once on mount; the rating gate is
   // read separately so persisted rating picks can be pruned against it below.
@@ -269,6 +271,27 @@ export function GalleryPage() {
     // allowedRatings is derived from maxRating
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q, cats, tags, chars, artists, ratings, statuses, maxRating, sort, order, limit]);
+
+  const hasMore = items.length < total;
+
+  // Auto-load the next page as the sentinel nears the viewport. We only attach
+  // the observer while idle (no in-flight request) and more pages remain; the
+  // 800px rootMargin starts the fetch before the user hits the bottom. When the
+  // fetch finishes the effect re-runs, and if the sentinel is still in view it
+  // simply loads again — chaining pages while the user lingers at the bottom.
+  useEffect(() => {
+    if (loading || !hasMore) return;
+    const el = sentinelRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) setLimit((l) => l + PAGE_SIZE);
+      },
+      { rootMargin: "800px 0px" },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [loading, hasMore]);
 
   const activeCount =
     cats.length +
@@ -457,11 +480,10 @@ export function GalleryPage() {
         )}
       </TopBar>
 
-      {loading && items.length === 0 && (
-        <div style={{ padding: 24 }} className="mono-sm inline-ic">
-          <Loader2 size={14} className="spin" />
-          Loading…
-        </div>
+      {/* First load (or a filter change that emptied the grid): fill a screen
+          with placeholders instead of a bare spinner. */}
+      {loading && items.length === 0 && !error && (
+        <FaGallery items={[]} columns={4} skeletonCount={PAGE_SIZE} />
       )}
       {error && <div style={{ padding: 24 }} className="error-text">{error}</div>}
       {!loading && !error && items.length === 0 && (
@@ -470,19 +492,19 @@ export function GalleryPage() {
           {canWrite && " Click “+ New” to add one."}
         </div>
       )}
-      {items.length > 0 && <FaGallery items={items} columns={4} />}
-      {items.length < total && (
-        <div style={{ textAlign: "center", padding: "8px 0 32px" }}>
-          <button
-            className="btn"
-            disabled={loading}
-            onClick={() => setLimit((l) => l + PAGE_SIZE)}
-          >
-            {loading && <Loader2 className="spin" />}
-            {loading ? "Loading…" : `Load more (${items.length} of ${total})`}
-          </button>
-        </div>
+      {items.length > 0 && (
+        <FaGallery
+          items={items}
+          columns={4}
+          // while a "load more" is in flight, tail the grid with placeholders for
+          // the page being fetched (clamped to however many actually remain)
+          skeletonCount={
+            loading && hasMore ? Math.min(PAGE_SIZE, total - items.length) : 0
+          }
+        />
       )}
+      {/* drives auto-load; sized to nothing, positioned at the list's end */}
+      {hasMore && <div ref={sentinelRef} className="fa-sentinel" aria-hidden="true" />}
     </div>
   );
 }

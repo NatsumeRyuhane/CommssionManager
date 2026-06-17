@@ -18,6 +18,7 @@ import type {
 import { Chip } from "../components/Chip";
 import { CopyJsonButton } from "../components/CopyJsonButton";
 import { CoverFocalEditor, type StagedFocal } from "../components/CoverFocalEditor";
+import { Skeleton } from "../components/Skeleton";
 import { StagesEditor } from "../components/StagesEditor";
 import { TaxonomyPicker } from "../components/TaxonomyPicker";
 import { TopBar } from "../components/TopBar";
@@ -654,6 +655,10 @@ export function EditPage() {
         onSubmit={(e) => e.preventDefault()}
         className="edit-page"
       >
+        {initialLoading ? (
+          <EditSkeleton />
+        ) : (
+          <>
         <div className="edit-main">
           {/* Title and description don't carry a per-commission visibility
               toggle — the override doesn't make sense at the record level
@@ -898,8 +903,43 @@ export function EditPage() {
             <TaxonomyPicker kind="artist" values={artists} onChange={setArtists} />
           </FieldGroup>
         </aside>
+          </>
+        )}
       </form>
     </div>
+  );
+}
+
+/**
+ * Loading placeholder for the editor: mirrors the two-column edit-page grid
+ * (main content + side rail) so the form doesn't jump in once the commission
+ * loads, replacing the old flash of empty inputs.
+ */
+function EditSkeleton() {
+  return (
+    <>
+      <div className="edit-main" aria-busy="true">
+        <Skeleton w={48} h={12} style={{ marginBottom: 8 }} />
+        <Skeleton w="60%" h={34} style={{ marginBottom: 20 }} />
+        <Skeleton w={88} h={12} style={{ marginBottom: 8 }} />
+        <Skeleton w="100%" h={60} style={{ marginBottom: 24 }} />
+        <Skeleton w={120} h={16} style={{ marginBottom: 12 }} />
+        <div className="col gap-12">
+          <Skeleton w="100%" h={140} />
+          <Skeleton w="100%" h={140} />
+        </div>
+      </div>
+      <aside className="edit-rail" aria-busy="true">
+        <Skeleton w="100%" h={52} />
+        <Skeleton w="100%" h={180} />
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i}>
+            <Skeleton w={90} h={12} style={{ marginBottom: 6 }} />
+            <Skeleton w="100%" h={36} />
+          </div>
+        ))}
+      </aside>
+    </>
   );
 }
 

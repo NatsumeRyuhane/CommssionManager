@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+
 import type { Cover as CoverType, ImagePreset } from "../api/types";
 import { DerivedImg, presetSrcSet, presetUrl } from "./DerivedImg";
 
@@ -15,6 +17,11 @@ export function Cover({
   size?: ImagePreset; // derivative preset for this surface; originals never load here
   sizes?: string; // when set, expose the derivative srcset and let the browser pick
 }) {
+  // shimmer the placeholder until the derivative actually paints, so a slow
+  // network reads as "loading" rather than an empty hatched box
+  const [loaded, setLoaded] = useState(false);
+  useEffect(() => setLoaded(false), [cover?.url]);
+
   const ar =
     ratio ??
     (cover?.width && cover?.height ? cover.width / cover.height : 4 / 5);
@@ -43,7 +50,7 @@ export function Cover({
   }
   const srcSet = sizes ? presetSrcSet(cover.image_urls, cover.width, cover.height) : undefined;
   return (
-    <div className="imgph" style={style}>
+    <div className={`imgph${loaded ? "" : " skeleton"}`} style={style}>
       <DerivedImg
         src={presetUrl(cover.image_urls, size, cover.url)}
         srcSet={srcSet}
@@ -52,6 +59,7 @@ export function Cover({
         alt=""
         style={imgStyle}
         loading="lazy"
+        onLoad={() => setLoaded(true)}
       />
     </div>
   );
