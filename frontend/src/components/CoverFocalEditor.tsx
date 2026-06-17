@@ -5,7 +5,7 @@ import { api } from "../api/client";
 import type { Cover } from "../api/types";
 import { DerivedImg, presetUrl } from "./DerivedImg";
 
-/** A pending focal edit the parent form commits alongside the rest of its fields. */
+/** A pending focal edit the parent auto-saves alongside the rest of its fields. */
 export interface StagedFocal {
   fileId: number;
   x: number;
@@ -208,7 +208,7 @@ export function CoverFocalEditor({ commissionId, version = 0, onStage }: CoverFo
       </div>
       <div className="mono-sm muted" style={{ textAlign: "center", marginTop: 2 }}>
         focal ({value.x.toFixed(2)}, {value.y.toFixed(2)})
-        {dirty && <span className="focal-pending"> · saves with the form</span>}
+        {dirty && <span className="focal-pending"> · saves automatically</span>}
       </div>
       <div className="cover-focal-previews">
         {RATIOS.map((r) => (

@@ -259,6 +259,23 @@
     filters matches commissions with nothing set for that field; ORs with any
     concrete values supplied alongside it. Surfaced as a `(none)` chip in each
     of those popover groups (`crud.matches_multi_filter`)
+- [x] UX pass: persistent gallery filters + edit-page auto-save
+  - Gallery search/filter selections (query, category/tag/character/artist
+    chips, rating + status picks, sort/order) persist to `localStorage`
+    (`cmgr:gallery-filters`) so reopening the gallery restores the last view.
+    The rating gate keeps its own key and persisted rating picks above the
+    current ceiling are pruned on hydrate
+  - **Breaking (UX):** the edit page has no manual Save. Metadata, the staged
+    cover focal, and visibility edits are buffered and flushed 5 s after the
+    last change, applied to the backend one unit at a time. A passive status
+    indicator (Saved / Unsaved / Saving / failed) replaces the Save button;
+    "Done" flushes then returns to the read-only view. A unit that fails to
+    apply is shown as an out-of-sync warning and left on the page (continuing
+    to edit retries it); "Discard & refresh" reloads authoritative server state
+    and drops the buffered/out-of-sync edits. `beforeunload` and an unmount
+    flush guard against losing edits to a tab close or in-app navigation inside
+    the idle window. The stages editor keeps persisting its structural edits
+    immediately, independent of this buffer
 
 ## Phase 3 — Optional / advanced (deferred)
 - [ ] MCP server wrapping the REST API (tools: create_commission, upload_file, search, set_focal_point)
