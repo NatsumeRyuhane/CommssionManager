@@ -6,6 +6,7 @@ import { api } from "../api/client";
 import type {
   CommissionFile,
   CommissionNode,
+  CommissionStatus,
   CommissionUpdate,
   CommissionVisibility,
   Rating,
@@ -25,6 +26,11 @@ const RATINGS: { value: Rating; label: string }[] = [
   { value: "general", label: "General" },
   { value: "mature", label: "Mature" },
   { value: "adult", label: "Adult" },
+];
+
+const STATUSES: { value: CommissionStatus; label: string }[] = [
+  { value: "ongoing", label: "Ongoing" },
+  { value: "completed", label: "Completed" },
 ];
 
 /** Field keys whose visibility override is editable inline next to its
@@ -61,6 +67,7 @@ export function EditPage() {
   const [priceAmount, setPriceAmount] = useState("");
   const [priceCurrency, setPriceCurrency] = useState("USD");
   const [rating, setRating] = useState<Rating>("general");
+  const [status, setStatus] = useState<CommissionStatus>("ongoing");
   const [categories, setCategories] = useState<string[]>([]);
   const [tags, setTags] = useState<string[]>([]);
   const [characters, setCharacters] = useState<string[]>([]);
@@ -143,6 +150,7 @@ export function EditPage() {
         setPriceAmount(d.price_amount ?? "");
         setPriceCurrency(d.price_currency ?? "USD");
         setRating(d.rating ?? "general");
+        setStatus(d.status ?? "ongoing");
         setCategories(d.categories);
         setTags(d.tags);
         setCharacters(d.characters);
@@ -259,6 +267,7 @@ export function EditPage() {
       price_amount: priceAmount || null,
       price_currency: priceAmount ? priceCurrency : null,
       rating,
+      status,
       category_names: categories,
       tag_names: tags,
       character_names: characters,
@@ -534,6 +543,26 @@ export function EditPage() {
                   <Chip kind="rating" ghost={rating !== r.value}>
                     {rating === r.value ? "✓ " : ""}
                     {r.label}
+                  </Chip>
+                </button>
+              ))}
+            </div>
+          </FieldGroup>
+
+          {/* Status has no inline visibility toggle: it isn't gated per-field
+              (it's shown to everyone), unlike rating/labels/etc. */}
+          <FieldGroup label="Status · pick one">
+            <div className="row gap-4 wrap">
+              {STATUSES.map((s) => (
+                <button
+                  key={s.value}
+                  type="button"
+                  onClick={() => setStatus(s.value)}
+                  className="chip-button"
+                >
+                  <Chip kind="status" ghost={status !== s.value}>
+                    {status === s.value ? "✓ " : ""}
+                    {s.label}
                   </Chip>
                 </button>
               ))}

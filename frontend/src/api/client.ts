@@ -71,7 +71,7 @@ function toQuery(params: ListParams): string {
   if (params.order) sp.set("order", params.order);
   if (params.limit != null) sp.set("limit", String(params.limit));
   if (params.offset != null) sp.set("offset", String(params.offset));
-  for (const key of ["categories", "tags", "rating", "characters", "artists", "formats"] as const) {
+  for (const key of ["categories", "tags", "rating", "status", "characters", "artists", "formats"] as const) {
     for (const v of params[key] ?? []) sp.append(key, v);
   }
   const s = sp.toString();

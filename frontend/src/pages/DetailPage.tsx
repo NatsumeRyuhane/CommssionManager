@@ -140,6 +140,11 @@ export function DetailPage() {
                   {data.rating.charAt(0).toUpperCase() + data.rating.slice(1)}
                 </Chip>
               )}
+              {data.status && (
+                <Chip kind="status">
+                  {data.status.charAt(0).toUpperCase() + data.status.slice(1)}
+                </Chip>
+              )}
               {data.tags.map((t) => (
                 <Chip key={t} kind="tag">{t}</Chip>
               ))}

@@ -1,4 +1,5 @@
 export type Rating = "general" | "mature" | "adult";
+export type CommissionStatus = "ongoing" | "completed";
 export type LabelType = "category" | "tag" | "rating";
 export type Visibility = "public" | "private";
 export type VisibilityPreset = "public_by_default" | "private_by_default" | "custom";
@@ -33,6 +34,7 @@ export interface CommissionListItem {
   /** Null means untitled; surfaces hide it instead of showing a placeholder. */
   title: string | null;
   rating: Rating | null;
+  status: CommissionStatus | null;
   visibility: Visibility | null;
   effective_visibility: Visibility | null;
   categories: string[];
@@ -88,6 +90,7 @@ export interface CommissionCreate {
   title?: string | null;
   description?: string | null;
   rating?: Rating;
+  status?: CommissionStatus;
   confirmed_at?: string | null;
   price_amount?: string | null;
   price_currency?: string | null;
@@ -114,6 +117,7 @@ export interface ListParams {
   categories?: string[];
   tags?: string[];
   rating?: string[];
+  status?: string[];
   characters?: string[];
   artists?: string[];
   formats?: string[];
