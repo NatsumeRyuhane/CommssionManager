@@ -248,6 +248,17 @@
     every visibility override is now an inline Public/Private/Inherit
     toggle next to its component (commission, fields, stages, files). One
     Save commits metadata + focal + visibility together
+- [x] Commission ongoing/completed status + "none" search filter
+  - `commission_metadata.status` enum (`ongoing` / `completed`): commission-
+    level lifecycle state, returned on list/detail, editable via create/update.
+    New commissions default to `ongoing`; the migration backfilled pre-existing
+    rows to `completed` (assumed delivered). No per-field visibility plumbing —
+    status is shown to everyone. Edit-rail picker + detail chip + a Status group
+    in the gallery search popover; `GET /commissions?status=` filters by membership
+  - Generic `__none__` sentinel on the categories/tags/characters/artists list
+    filters matches commissions with nothing set for that field; ORs with any
+    concrete values supplied alongside it. Surfaced as a `(none)` chip in each
+    of those popover groups (`crud.matches_multi_filter`)
 
 ## Phase 3 — Optional / advanced (deferred)
 - [ ] MCP server wrapping the REST API (tools: create_commission, upload_file, search, set_focal_point)
