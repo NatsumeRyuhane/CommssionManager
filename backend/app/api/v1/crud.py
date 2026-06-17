@@ -51,6 +51,27 @@ DEFAULT_SITE_TITLE = "Commissions"
 # listed in display order: first name gets position 0 and renders topmost
 DEFAULT_STAGE_NAMES = "Delivered, Color, Lineart, Sketching"
 
+# Sentinel token a multi-select list filter may carry to match records that have
+# *nothing* set for that field (e.g. no categories). Kept namespaced enough that
+# it can't collide with a real label/character/artist name.
+NONE_SENTINEL = "__none__"
+
+
+def matches_multi_filter(selected: list[str], values: list[str]) -> bool:
+    """Whether `values` satisfies a multi-select filter `selected`.
+
+    An empty `selected` is no filter at all (everything matches). The
+    NONE_SENTINEL matches when `values` is empty ("not set"); any other token
+    matches by intersection. The two combine with OR, so selecting
+    `[NONE_SENTINEL, "Chibi"]` keeps records that have no value *or* "Chibi".
+    """
+    if not selected:
+        return True
+    if NONE_SENTINEL in selected and not values:
+        return True
+    concrete = [token for token in selected if token != NONE_SENTINEL]
+    return bool(set(concrete) & set(values))
+
 
 def split_stage_names(raw: str) -> list[str]:
     return [name.strip() for name in raw.split(",") if name.strip()]
@@ -274,6 +295,7 @@ def create_commission(db: Session, data: CommissionCreate) -> Commission:
         title=data.title,
         description=data.description,
         rating=data.rating,
+        status=data.status,
         confirmed_at=data.confirmed_at,
         price_amount=data.price_amount,
         price_currency=data.price_currency,
@@ -326,6 +348,7 @@ def update_commission(db: Session, commission: Commission, data: CommissionUpdat
     for field in (
         "description",
         "rating",
+        "status",
         "confirmed_at",
         "price_amount",
         "price_currency",
@@ -703,6 +726,9 @@ def serialize_list_item(
             if meta and (include_private or _effective_field_public(commission, "rating", visibility_context))
             else None
         ),
+        # status has no per-field visibility plumbing — it's benign lifecycle
+        # info shown to everyone, so it isn't gated like rating/title/etc.
+        status=meta.status if meta else None,
         visibility=meta.visibility_override if meta else None,
         effective_visibility=effective_commission_visibility(commission, visibility_context),
         categories=categories_of(commission) if labels_public else [],

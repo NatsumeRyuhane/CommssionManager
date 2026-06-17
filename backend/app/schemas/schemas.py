@@ -5,7 +5,14 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.models import LabelType, Rating, Visibility, VisibilityPreset, WebhookEvent
+from app.models import (
+    CommissionStatus,
+    LabelType,
+    Rating,
+    Visibility,
+    VisibilityPreset,
+    WebhookEvent,
+)
 
 
 # ---------------------------------------------------------------- auth
@@ -311,6 +318,7 @@ class CommissionListItem(BaseModel):
     id: int
     title: str | None = None
     rating: Rating | None = None
+    status: CommissionStatus | None = None
     visibility: Visibility | None = None
     effective_visibility: Visibility | None = None
     categories: list[str] = []
@@ -336,6 +344,7 @@ class CommissionCreate(BaseModel):
     title: str | None = None
     description: str | None = None
     rating: Rating = Rating.general
+    status: CommissionStatus = CommissionStatus.ongoing
     confirmed_at: datetime | None = None
     price_amount: Decimal | None = None
     price_currency: str | None = None
@@ -358,6 +367,7 @@ class CommissionUpdate(BaseModel):
     title: str | None = None
     description: str | None = None
     rating: Rating | None = None
+    status: CommissionStatus | None = None
     confirmed_at: datetime | None = None
     price_amount: Decimal | None = None
     price_currency: str | None = None

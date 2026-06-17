@@ -36,6 +36,11 @@ class Rating(str, enum.Enum):
     adult = "adult"
 
 
+class CommissionStatus(str, enum.Enum):
+    ongoing = "ongoing"
+    completed = "completed"
+
+
 class StorageBackend(str, enum.Enum):
     local = "local"
     s3 = "s3"
@@ -311,6 +316,14 @@ class CommissionMetadata(Base):
     description: Mapped[str | None] = mapped_column(Text)
     rating: Mapped[Rating] = mapped_column(
         Enum(Rating, name="rating"), nullable=False, default=Rating.general
+    )
+    # commission-level lifecycle status. New commissions start `ongoing`; the
+    # migration backfilled pre-existing rows to `completed` (they predate the
+    # field and are assumed delivered).
+    status: Mapped[CommissionStatus] = mapped_column(
+        Enum(CommissionStatus, name="commission_status"),
+        nullable=False,
+        default=CommissionStatus.ongoing,
     )
     cover_file_id: Mapped[int | None] = mapped_column(
         ForeignKey("commission_files.id", use_alter=True, name="fk_meta_cover_file")

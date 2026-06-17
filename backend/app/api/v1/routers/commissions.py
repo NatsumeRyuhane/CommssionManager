@@ -81,6 +81,7 @@ def list_commissions(
     categories: list[str] = Query(default=[]),
     tags: list[str] = Query(default=[]),
     rating: list[str] = Query(default=[]),
+    status: list[str] = Query(default=[]),
     characters: list[str] = Query(default=[]),
     artists: list[str] = Query(default=[]),
     formats: list[str] = Query(default=[]),
@@ -108,17 +109,20 @@ def list_commissions(
                 haystack.append(meta.description or "")
             if needle not in " \n".join(haystack).lower():
                 return False
-        cats = crud.categories_of(c)
-        tgs = crud.tags_of(c)
-        if categories and not set(categories) & set(cats):
+        # taxonomy filters support the "(none)" sentinel (match records with
+        # nothing set) alongside concrete values, combined with OR
+        if not crud.matches_multi_filter(categories, crud.categories_of(c)):
             return False
-        if tags and not set(tags) & set(tgs):
+        if not crud.matches_multi_filter(tags, crud.tags_of(c)):
+            return False
+        if not crud.matches_multi_filter(characters, [ch.name for ch in c.characters]):
+            return False
+        if not crud.matches_multi_filter(artists, [a.name for a in c.artists]):
             return False
         if rating and (not meta or meta.rating.value not in rating):
             return False
-        if characters and not set(characters) & {ch.name for ch in c.characters}:
-            return False
-        if artists and not set(artists) & {a.name for a in c.artists}:
+        # status is always set, so it has no "(none)" option — plain membership
+        if status and (not meta or meta.status.value not in status):
             return False
         if formats and not set(formats) & set(crud.formats_of(c)):
             return False
