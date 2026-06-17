@@ -238,6 +238,9 @@ export function GalleryPage() {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    // clear any prior failure so a recovered fetch doesn't keep showing a stale
+    // error (and so the auto-load guard below can re-arm on success)
+    setError(null);
     api
       .listCommissionsPaged({
         q: q || undefined,
@@ -275,12 +278,14 @@ export function GalleryPage() {
   const hasMore = items.length < total;
 
   // Auto-load the next page as the sentinel nears the viewport. We only attach
-  // the observer while idle (no in-flight request) and more pages remain; the
-  // 800px rootMargin starts the fetch before the user hits the bottom. When the
-  // fetch finishes the effect re-runs, and if the sentinel is still in view it
-  // simply loads again — chaining pages while the user lingers at the bottom.
+  // the observer while idle (no in-flight request or error) and more pages
+  // remain; the 800px rootMargin starts the fetch before the user hits the
+  // bottom. When the fetch finishes the effect re-runs, and if the sentinel is
+  // still in view it simply loads again — chaining pages while the user lingers
+  // at the bottom. Skipping on `error` stops a failed fetch from hammering the
+  // API in a tight retry loop (items/total are unchanged, so hasMore stays true).
   useEffect(() => {
-    if (loading || !hasMore) return;
+    if (loading || error || !hasMore) return;
     const el = sentinelRef.current;
     if (!el) return;
     const io = new IntersectionObserver(
@@ -291,7 +296,7 @@ export function GalleryPage() {
     );
     io.observe(el);
     return () => io.disconnect();
-  }, [loading, hasMore]);
+  }, [loading, error, hasMore]);
 
   const activeCount =
     cats.length +

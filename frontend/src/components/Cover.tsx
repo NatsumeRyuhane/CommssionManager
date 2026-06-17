@@ -20,7 +20,9 @@ export function Cover({
   // shimmer the placeholder until the derivative actually paints, so a slow
   // network reads as "loading" rather than an empty hatched box
   const [loaded, setLoaded] = useState(false);
-  useEffect(() => setLoaded(false), [cover?.url]);
+  // re-arm the shimmer whenever the displayed source can change: a new cover or
+  // a different derivative preset both swap the underlying <img src>
+  useEffect(() => setLoaded(false), [cover?.url, size]);
 
   const ar =
     ratio ??
